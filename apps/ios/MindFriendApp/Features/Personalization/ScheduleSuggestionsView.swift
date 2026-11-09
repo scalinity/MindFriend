@@ -14,21 +14,21 @@ struct ScheduleSuggestionsView: View {
         List {
             if personalizationService.scheduleSuggestions.isEmpty {
                 Section {
-                    VStack(spacing: 16) {
+                    VStack(spacing: SupportTheme.Spacing.m) {
                         Image(systemName: "clock.badge.questionmark")
-                            .font(.system(size: 40))
-                            .foregroundStyle(.secondary)
+                            .font(.system(.largeTitle))
+                            .foregroundStyle(SupportTheme.textSecondary)
 
                         Text("No Schedule Suggestions")
                             .font(.headline)
 
                         Text("Keep using the app and we'll learn your patterns to suggest optimal times for activities.")
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                             .multilineTextAlignment(.center)
                     }
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 32)
+                    .padding(.vertical, SupportTheme.Spacing.xl)
                 }
             } else {
                 Section {
@@ -41,6 +41,7 @@ struct ScheduleSuggestionsView: View {
                 }
             }
         }
+        .supportScreen()
         .navigationTitle("Schedule Suggestions")
         .navigationBarTitleDisplayMode(.inline)
         .task {
@@ -65,36 +66,36 @@ struct ScheduleSuggestionRow: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             HStack {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     Text(suggestion.suggestedTime)
                         .font(.title2)
                         .fontWeight(.bold)
 
                     Text(suggestion.formattedDays)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
 
                 Spacer()
 
-                VStack(alignment: .trailing, spacing: 4) {
+                VStack(alignment: .trailing, spacing: SupportTheme.Spacing.xxs) {
                     Text("\(Int(suggestion.confidenceScore * 100))%")
                         .font(.headline)
                         .foregroundStyle(confidenceColor)
 
                     Text("confidence")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
             }
 
             Text(suggestion.reasoning)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
 
-            HStack(spacing: 12) {
+            HStack(spacing: SupportTheme.Spacing.s) {
                 Button {
                     acceptSuggestion()
                 } label: {
@@ -106,7 +107,7 @@ struct ScheduleSuggestionRow: View {
                             .frame(maxWidth: .infinity)
                     }
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.supportPrimary)
                 .disabled(isProcessing)
 
                 Button {
@@ -115,19 +116,19 @@ struct ScheduleSuggestionRow: View {
                     Text("Dismiss")
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.supportSecondary)
                 .disabled(isProcessing)
             }
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, SupportTheme.Spacing.xs)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Suggestion: \(suggestion.activityType) at \(suggestion.suggestedTime) on \(suggestion.formattedDays). \(suggestion.reasoning)")
     }
 
     private var confidenceColor: Color {
-        if suggestion.confidenceScore >= 0.8 { return .green }
-        if suggestion.confidenceScore >= 0.5 { return .yellow }
-        return .orange
+        if suggestion.confidenceScore >= 0.8 { return SupportTheme.accent }
+        if suggestion.confidenceScore >= 0.5 { return SupportTheme.accent }
+        return SupportTheme.accent
     }
 
     private func acceptSuggestion() {

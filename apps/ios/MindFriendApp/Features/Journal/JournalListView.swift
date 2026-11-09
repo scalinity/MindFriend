@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct JournalListView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var container: DependencyContainer
 
@@ -49,6 +50,7 @@ struct JournalListView: View {
                     journalListContent
                 }
             }
+            .supportScreen()
             .navigationTitle("Journal")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -56,6 +58,8 @@ struct JournalListView: View {
                         showingSettings = true
                     } label: {
                         Image(systemName: "gear")
+                        .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                        .accessibilityLabel("Journal settings")
                     }
                 }
 
@@ -64,6 +68,8 @@ struct JournalListView: View {
                         showingPrompts = true
                     } label: {
                         Image(systemName: "lightbulb")
+                        .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                        .accessibilityLabel("Journal prompts")
                     }
 
                     Button {
@@ -71,6 +77,8 @@ struct JournalListView: View {
                         showingNewEntry = true
                     } label: {
                         Image(systemName: "plus")
+                        .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                        .accessibilityLabel("New journal entry")
                     }
                 }
             }
@@ -115,37 +123,33 @@ struct JournalListView: View {
         } description: {
             Text("Start writing to track your thoughts and emotions. Your journal is completely private.")
         } actions: {
-            VStack(spacing: 12) {
+            VStack(spacing: SupportTheme.Spacing.s) {
                 Button {
                     selectedPrompt = nil
                     showingNewEntry = true
                 } label: {
                     Label("Write Now", systemImage: "pencil")
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.supportPrimary)
 
                 Button {
                     showingPrompts = true
                 } label: {
                     Label("Get a Prompt", systemImage: "lightbulb")
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.supportSecondary)
             }
         }
     }
 
     private var journalListContent: some View {
         ScrollView {
-            LazyVStack(spacing: 16) {
-                // Streak card
-                if let streak = streak {
-                    StreakCardView(streak: streak)
-                        .padding(.horizontal)
-                }
+            LazyVStack(spacing: SupportTheme.Spacing.m) {
+
 
                 // Quick stats
                 quickStatsView
-                    .padding(.horizontal)
+                    .padding(.horizontal, SupportTheme.Spacing.m)
 
                 // Entries list
                 ForEach(filteredEntries) { entryWithAnalysis in
@@ -160,14 +164,14 @@ struct JournalListView: View {
                     }
                     .buttonStyle(.plain)
                 }
-                .padding(.horizontal)
+                .padding(.horizontal, SupportTheme.Spacing.m)
             }
-            .padding(.vertical)
+            .padding(.vertical, SupportTheme.Spacing.m)
         }
     }
 
     private var quickStatsView: some View {
-        HStack(spacing: 16) {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: dynamicTypeSize.isAccessibilitySize ? 1 : 3), spacing: SupportTheme.Spacing.m) {
             StatBox(
                 title: "This Week",
                 value: "\(entries.filter { Calendar.current.isDate($0.entry.createdAt, equalTo: Date(), toGranularity: .weekOfYear) }.count)",
@@ -220,38 +224,7 @@ struct JournalListView: View {
 
 // MARK: - Supporting Views
 
-struct StreakCardView: View {
-    let streak: JournalStreak
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Image(systemName: "flame.fill")
-                    .foregroundStyle(.orange)
-                Text("Journal Streak")
-                    .fontWeight(.semibold)
-                Spacer()
-                Text("\(streak.currentStreak) days")
-                    .font(.title3)
-                    .fontWeight(.bold)
-                    .foregroundStyle(.orange)
-            }
-
-            Text(streak.statusMessage)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-
-            if streak.longestStreak > streak.currentStreak {
-                Text("Best: \(streak.longestStreak) days")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .padding()
-        .background(.orange.opacity(0.1))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-    }
-}
 
 private struct StatBox: View {
     let title: String
@@ -259,21 +232,19 @@ private struct StatBox: View {
     let icon: String
 
     var body: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: SupportTheme.Spacing.xxs) {
             Image(systemName: icon)
                 .font(.title3)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
             Text(value)
                 .font(.title2)
                 .fontWeight(.bold)
             Text(title)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
         .frame(maxWidth: .infinity)
-        .padding()
-        .background(Color(.systemGray6))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .supportCard()
     }
 }
 
@@ -281,56 +252,54 @@ struct JournalEntryCard: View {
     let entry: JournalEntryWithAnalysis
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             HStack {
                 if let mood = entry.moodEmoji {
                     Text(mood)
                         .font(.title2)
                 }
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     Text(entry.entry.title ?? "Untitled")
                         .font(.headline)
-                        .lineLimit(1)
+                        .fixedSize(horizontal: false, vertical: true)
                     Text(entry.formattedDate)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
 
                 Spacer()
 
                 if entry.analysis != nil {
                     Image(systemName: "sparkles")
-                        .foregroundStyle(.purple)
+                        .foregroundStyle(SupportTheme.accent)
                 }
 
                 Image(systemName: "chevron.right")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
 
             Text(entry.previewText)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
+                .foregroundStyle(SupportTheme.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
 
             if let analysis = entry.analysis, !analysis.emotionalThemes.isEmpty {
                 HStack {
                     ForEach(analysis.emotionalThemes.prefix(3), id: \.self) { theme in
                         Text(theme)
                             .font(.caption2)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Color.purple.opacity(0.1))
-                            .foregroundStyle(.purple)
+                            .padding(.horizontal, SupportTheme.Spacing.xs)
+                            .padding(.vertical, SupportTheme.Spacing.xxs)
+                            .background(SupportTheme.surface)
+                            .foregroundStyle(SupportTheme.accent)
                             .clipShape(Capsule())
                     }
                 }
             }
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .shadow(color: .black.opacity(0.05), radius: 2, y: 1)
+        .supportCard()
+        .shadow(color: SupportTheme.canvas.opacity(0.05), radius: 2, y: 1)
     }
 }
 

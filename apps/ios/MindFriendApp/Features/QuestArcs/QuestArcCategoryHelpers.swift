@@ -20,16 +20,16 @@ enum QuestArcCategory {
         default: return "sparkles"
         }
     }
-    
+
     /// Returns the SwiftUI Color for a given category
     static func color(for category: String) -> Color {
         switch category {
-        case "stress": return .green
-        case "sleep": return .indigo
-        case "confidence": return .orange
-        case "focus": return .blue
+        case "stress": return SupportTheme.accent
+        case "sleep": return SupportTheme.accent
+        case "confidence": return SupportTheme.accent
+        case "focus": return SupportTheme.accent
         case "resilience": return .red
-        default: return .accentColor
+        default: return SupportTheme.accent
         }
     }
 }
@@ -41,7 +41,7 @@ extension QuestArc {
     var categoryIconName: String {
         QuestArcCategory.iconName(for: category)
     }
-    
+
     /// Convenience property for category color
     var categoryColorUI: Color {
         QuestArcCategory.color(for: category)

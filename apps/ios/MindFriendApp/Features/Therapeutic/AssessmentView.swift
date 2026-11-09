@@ -2,6 +2,7 @@ import SwiftUI
 
 /// View for completing clinical assessments (PHQ-9 or GAD-7)
 struct AssessmentView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dismiss) private var dismiss
     @StateObject private var viewModel: AssessmentViewModel
 
@@ -45,11 +46,12 @@ struct AssessmentView: View {
                     }
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
-                .animation(.easeInOut, value: viewModel.currentQuestionIndex)
+                .animation(reduceMotion ? nil : .easeInOut, value: viewModel.currentQuestionIndex)
 
                 // Navigation buttons
                 navigationButtons
             }
+            .supportScreen()
             .navigationTitle(assessmentType.displayName)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -59,10 +61,18 @@ struct AssessmentView: View {
                     }
                 }
             }
-            .alert("Error", isPresented: $viewModel.showError) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(viewModel.errorMessage ?? "An error occurred")
+            .safeAreaInset(edge: .bottom) {
+                if viewModel.showError {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
+                        Text(viewModel.errorMessage ?? "An error occurred")
+
+                        Button("OK", role: .cancel) { viewModel.showError = false }
+                    }
+                    .foregroundStyle(SupportTheme.textSecondary)
+                    .buttonStyle(.supportSecondary)
+                    .supportCard()
+                    .padding(SupportTheme.Spacing.m)
+                }
             }
         }
     }
@@ -73,13 +83,13 @@ struct AssessmentView: View {
         GeometryReader { geometry in
             ZStack(alignment: .leading) {
                 Rectangle()
-                    .fill(Color(.systemGray5))
+                    .fill(SupportTheme.separator)
                     .frame(height: 4)
 
                 Rectangle()
-                    .fill(Color.accentColor)
+                    .fill(SupportTheme.accent)
                     .frame(width: geometry.size.width * viewModel.progress, height: 4)
-                    .animation(.spring(), value: viewModel.progress)
+                    .animation(reduceMotion ? nil : .spring(), value: viewModel.progress)
             }
         }
         .frame(height: 4)
@@ -89,37 +99,37 @@ struct AssessmentView: View {
 
     private func questionView(index: Int) -> some View {
         ScrollView {
-            VStack(spacing: 24) {
+            VStack(spacing: SupportTheme.Spacing.l) {
                 // Question number
                 Text("Question \(index + 1) of \(viewModel.questions.count)")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 24)
+                    .foregroundStyle(SupportTheme.textSecondary)
+                    .padding(.top, SupportTheme.Spacing.l)
 
                 // Question text
                 Text(viewModel.questions[index])
                     .font(.title3)
                     .fontWeight(.medium)
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal)
+                    .padding(.horizontal, SupportTheme.Spacing.m)
 
                 // Time frame reminder
                 Text("Over the last 2 weeks, how often have you been bothered by this problem?")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal)
+                    .padding(.horizontal, SupportTheme.Spacing.m)
 
                 // Response options
-                VStack(spacing: 12) {
+                VStack(spacing: SupportTheme.Spacing.s) {
                     ForEach(AssessmentResponseOption.allCases, id: \.rawValue) { option in
                         responseButton(option: option, questionIndex: index)
                     }
                 }
-                .padding(.horizontal)
-                .padding(.top, 16)
+                .padding(.horizontal, SupportTheme.Spacing.m)
+                .padding(.top, SupportTheme.Spacing.m)
 
-                Spacer(minLength: 100)
+                Spacer(minLength: SupportTheme.Spacing.xl)
             }
         }
     }
@@ -138,13 +148,13 @@ struct AssessmentView: View {
 
                 if isSelected {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.white)
+                        .foregroundStyle(SupportTheme.textPrimary)
                 }
             }
-            .padding()
-            .background(isSelected ? Color.accentColor : Color(.systemGray6))
-            .foregroundStyle(isSelected ? .white : .primary)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .padding(SupportTheme.Spacing.m)
+            .background(isSelected ? SupportTheme.accent : SupportTheme.separator)
+            .foregroundStyle(isSelected ? SupportTheme.onAccent : SupportTheme.textPrimary)
+            .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
         }
         .buttonStyle(.plain)
     }
@@ -152,7 +162,7 @@ struct AssessmentView: View {
     // MARK: - Navigation Buttons
 
     private var navigationButtons: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: SupportTheme.Spacing.m) {
             // Previous button
             if viewModel.currentQuestionIndex > 0 {
                 Button(action: viewModel.previousQuestion) {
@@ -161,10 +171,10 @@ struct AssessmentView: View {
                         Text("Previous")
                     }
                     .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color(.systemGray6))
-                    .foregroundStyle(.primary)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .padding(SupportTheme.Spacing.m)
+                    .background(SupportTheme.separator)
+                    .foregroundStyle(SupportTheme.textPrimary)
+                    .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
                 }
             }
 
@@ -176,10 +186,10 @@ struct AssessmentView: View {
                         Image(systemName: "chevron.right")
                     }
                     .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(viewModel.canProceed ? Color.accentColor : Color(.systemGray4))
-                    .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .padding(SupportTheme.Spacing.m)
+                    .background(viewModel.canProceed ? SupportTheme.accent : SupportTheme.separator)
+                    .foregroundStyle(viewModel.canProceed ? SupportTheme.onAccent : SupportTheme.textPrimary)
+                    .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
                 }
                 .disabled(!viewModel.canProceed)
             } else {
@@ -196,23 +206,23 @@ struct AssessmentView: View {
                     HStack {
                         if viewModel.isSubmitting {
                             ProgressView()
-                                .tint(.white)
+                                .tint(SupportTheme.accent)
                         } else {
                             Text("Submit")
                             Image(systemName: "checkmark")
                         }
                     }
                     .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(viewModel.isComplete ? Color.accentColor : Color(.systemGray4))
-                    .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .padding(SupportTheme.Spacing.m)
+                    .background(viewModel.isComplete ? SupportTheme.accent : SupportTheme.separator)
+                    .foregroundStyle(viewModel.isComplete ? SupportTheme.onAccent : SupportTheme.textPrimary)
+                    .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
                 }
                 .disabled(!viewModel.isComplete || viewModel.isSubmitting)
             }
         }
-        .padding()
-        .background(Color(.systemBackground))
+        .padding(SupportTheme.Spacing.m)
+        .background(SupportTheme.canvas)
     }
 }
 
@@ -332,28 +342,28 @@ struct AssessmentResultView: View {
     }
 
     var body: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: SupportTheme.Spacing.l) {
             // Score circle
             ZStack {
                 Circle()
-                    .stroke(severity.color.opacity(0.2), lineWidth: 12)
+                    .stroke(SupportTheme.accent.opacity(0.2), lineWidth: 12)
 
                 Circle()
                     .trim(from: 0, to: Double(result.totalScore) / Double(assessmentType.maxScore))
-                    .stroke(severity.color, style: StrokeStyle(lineWidth: 12, lineCap: .round))
+                    .stroke(SupportTheme.accent, style: StrokeStyle(lineWidth: 12, lineCap: .round))
                     .rotationEffect(.degrees(-90))
 
-                VStack(spacing: 4) {
+                VStack(spacing: SupportTheme.Spacing.xxs) {
                     Text("\(result.totalScore)")
-                        .font(.system(size: 48, weight: .bold, design: .rounded))
+                        .font(.system(.largeTitle, design: .rounded).weight(.bold))
 
                     Text("of \(assessmentType.maxScore)")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
             }
             .frame(width: 160, height: 160)
-            .padding(.top, 32)
+            .padding(.top, SupportTheme.Spacing.xl)
 
             // Severity label
             HStack {
@@ -361,18 +371,18 @@ struct AssessmentResultView: View {
                 Text(severity.displayName)
             }
             .font(.headline)
-            .foregroundStyle(severity.color)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .background(severity.color.opacity(0.1))
+            .foregroundStyle(SupportTheme.accent)
+            .padding(.horizontal, SupportTheme.Spacing.m)
+            .padding(.vertical, SupportTheme.Spacing.xs)
+            .background(SupportTheme.accent.opacity(0.1))
             .clipShape(Capsule())
 
             // Interpretation
             Text(interpretationText)
                 .font(.body)
                 .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 32)
+                .foregroundStyle(SupportTheme.textSecondary)
+                .padding(.horizontal, SupportTheme.Spacing.xl)
 
             Spacer()
 
@@ -381,12 +391,12 @@ struct AssessmentResultView: View {
                 Text("Continue")
                     .font(.headline)
                     .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.accentColor)
-                    .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .padding(SupportTheme.Spacing.m)
+                    .background(SupportTheme.accent)
+                    .foregroundStyle(SupportTheme.onAccent)
+                    .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
             }
-            .padding()
+            .padding(SupportTheme.Spacing.m)
         }
     }
 

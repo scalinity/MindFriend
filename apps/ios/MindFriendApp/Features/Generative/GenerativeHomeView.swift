@@ -3,6 +3,8 @@ import SwiftUI
 /// Main hub for AI-generated wellness content
 /// Provides quick generate buttons, recent history, and favorites access
 struct GenerativeHomeView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var container: DependencyContainer
     @EnvironmentObject var appState: AppState
     @StateObject private var service: GeneratedContentService
@@ -22,7 +24,13 @@ struct GenerativeHomeView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 24) {
+            VStack(spacing: SupportTheme.Spacing.l) {
+                if let error {
+                    SupportUnavailableState(title: "Content unavailable", message: error, actionTitle: "Try again") {
+                        self.error = nil
+                        Task { await loadData() }
+                    }
+                }
                 // Quick Generate Section
                 quickGenerateSection
 
@@ -40,16 +48,19 @@ struct GenerativeHomeView: View {
                     quotaStatusView(quota)
                 }
             }
-            .padding()
+            .padding(SupportTheme.Spacing.m)
         }
-        .navigationTitle("AI Wellness")
+        .supportScreen()
+        .navigationTitle("Made for you")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     showVoicePreferences = true
                 } label: {
                     Image(systemName: "gearshape")
+                    .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                 }
+                .accessibilityLabel("Voice preferences")
             }
         }
         .sheet(isPresented: $showVoicePreferences) {
@@ -76,13 +87,6 @@ struct GenerativeHomeView: View {
                 SoundscapePlayerView(soundscape: soundscape)
             }
         }
-        .alert("Error", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
-            Button("OK") { error = nil }
-        } message: {
-            if let error = error {
-                Text(error)
-            }
-        }
         .task {
             await loadData()
         }
@@ -91,15 +95,12 @@ struct GenerativeHomeView: View {
     // MARK: - Quick Generate Section
 
     private var quickGenerateSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("Quick Generate")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
-            LazyVGrid(columns: [
-                GridItem(.flexible()),
-                GridItem(.flexible()),
-                GridItem(.flexible())
-            ], spacing: 12) {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), alignment: .top), count: dynamicTypeSize.isAccessibilitySize ? 1 : 3), spacing: SupportTheme.Spacing.s) {
                 ForEach(GeneratedContentType.allCases) { type in
                     quickGenerateButton(for: type)
                 }
@@ -113,10 +114,10 @@ struct GenerativeHomeView: View {
                 await generateContent(type: type)
             }
         } label: {
-            VStack(spacing: 8) {
+            VStack(spacing: SupportTheme.Spacing.xs) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(type.backgroundColor.opacity(0.15))
+                    RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                        .fill(SupportTheme.accent.opacity(0.15))
                         .frame(width: 56, height: 56)
 
                     if generatingType == type {
@@ -125,14 +126,14 @@ struct GenerativeHomeView: View {
                     } else {
                         Image(systemName: type.icon)
                             .font(.title2)
-                            .foregroundStyle(type.backgroundColor)
+                            .foregroundStyle(SupportTheme.accent)
                     }
                 }
 
                 Text(type.shortDisplayName)
                     .font(.caption)
-                    .lineLimit(1)
-                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .foregroundStyle(SupportTheme.textPrimary)
             }
         }
         .disabled(isGenerating || (quotaStatus?.isExhausted ?? false))
@@ -142,12 +143,12 @@ struct GenerativeHomeView: View {
     // MARK: - Soundscapes Section
 
     private var soundscapesSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("Ambient Soundscapes")
                 .font(.headline)
 
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
+                HStack(spacing: SupportTheme.Spacing.s) {
                     // Free sounds
                     ForEach(BackgroundSoundType.freeSounds, id: \.self) { sound in
                         soundscapeCard(for: sound, isPremium: false)
@@ -170,24 +171,24 @@ struct GenerativeHomeView: View {
                 selectedSoundscape = sound
             }
         } label: {
-            VStack(spacing: 8) {
+            VStack(spacing: SupportTheme.Spacing.xs) {
                 ZStack(alignment: .topTrailing) {
                     ZStack {
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(sound.themeColor.opacity(0.2))
+                        RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                            .fill(SupportTheme.accent.opacity(0.2))
 
                         Image(systemName: sound.icon)
                             .font(.title)
-                            .foregroundStyle(sound.themeColor)
+                            .foregroundStyle(SupportTheme.accent)
                     }
                     .frame(width: 80, height: 60)
 
                     if isPremium {
                         Image(systemName: "crown.fill")
                             .font(.caption)
-                            .foregroundStyle(.yellow)
-                            .padding(4)
-                            .background(Color.black.opacity(0.6))
+                            .foregroundStyle(SupportTheme.accent)
+                            .padding(SupportTheme.Spacing.xxs)
+                            .background(SupportTheme.canvas.opacity(0.6))
                             .clipShape(Circle())
                             .offset(x: 4, y: -4)
                     }
@@ -195,8 +196,8 @@ struct GenerativeHomeView: View {
 
                 Text(sound.displayName)
                     .font(.caption)
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
+                    .foregroundStyle(SupportTheme.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
                     .frame(width: 80)
             }
         }
@@ -206,10 +207,11 @@ struct GenerativeHomeView: View {
     // MARK: - Recent Section
 
     private var recentSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             HStack {
                 Text("Recent")
                     .font(.headline)
+                .accessibilityAddTraits(.isHeader)
                 Spacer()
                 NavigationLink("See All") {
                     ContentHistoryListView(service: service)
@@ -224,7 +226,7 @@ struct GenerativeHomeView: View {
                     subtitle: "Tap a category above to create personalized wellness content"
                 )
             } else {
-                VStack(spacing: 8) {
+                VStack(spacing: SupportTheme.Spacing.xs) {
                     ForEach(recentContent.prefix(5)) { content in
                         ContentRowView(content: content) {
                             selectedContent = content
@@ -238,7 +240,7 @@ struct GenerativeHomeView: View {
     // MARK: - Favorites Section
 
     private var favoritesSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             HStack {
                 Text("Favorites (\(favorites.count))")
                     .font(.headline)
@@ -259,7 +261,7 @@ struct GenerativeHomeView: View {
                 )
             } else {
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 12) {
+                    HStack(spacing: SupportTheme.Spacing.s) {
                         ForEach(favorites.prefix(5)) { content in
                             FavoriteCardView(content: content) {
                                 selectedContent = content
@@ -274,18 +276,18 @@ struct GenerativeHomeView: View {
     // MARK: - Quota Status
 
     private func quotaStatusView(_ quota: ContentQuotaStatus) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: SupportTheme.Spacing.xs) {
             Image(systemName: quota.isPremium ? "infinity" : "chart.bar")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
 
             if quota.isPremium {
                 Text("Unlimited generations")
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             } else {
                 Text("\(quota.used)/\(quota.limit) generations used this month")
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
 
             Spacer()
@@ -295,33 +297,31 @@ struct GenerativeHomeView: View {
                     appState.showPaywall = true
                 }
                 .font(.footnote.bold())
-                .foregroundStyle(.blue)
+                .foregroundStyle(SupportTheme.accent)
             }
         }
-        .padding()
-        .background(Color(uiColor: .secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .supportCard()
     }
 
     // MARK: - Empty State
 
     private func emptyStateView(icon: String, title: String, subtitle: String) -> some View {
-        VStack(spacing: 8) {
+        VStack(spacing: SupportTheme.Spacing.xs) {
             Image(systemName: icon)
                 .font(.largeTitle)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(SupportTheme.textSecondary)
 
             Text(title)
                 .font(.subheadline.bold())
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
 
             Text(subtitle)
                 .font(.caption)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 24)
+        .padding(.vertical, SupportTheme.Spacing.l)
     }
 
     // MARK: - Data Loading
@@ -456,23 +456,23 @@ private struct ContentRowView: View {
 
     var body: some View {
         Button(action: onTap) {
-            HStack(spacing: 12) {
+            HStack(spacing: SupportTheme.Spacing.s) {
                 Image(systemName: content.contentType.icon)
                     .font(.title3)
-                    .foregroundStyle(content.contentType.backgroundColor)
+                    .foregroundStyle(SupportTheme.accent)
                     .frame(width: 40, height: 40)
-                    .background(content.contentType.backgroundColor.opacity(0.15))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .background(SupportTheme.surface)
+                    .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     Text(content.title)
                         .font(.subheadline)
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
+                        .foregroundStyle(SupportTheme.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
 
                     Text(content.createdAt.timeAgoDisplay())
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
 
                 Spacer()
@@ -480,10 +480,10 @@ private struct ContentRowView: View {
                 if content.hasAudio {
                     Image(systemName: "play.circle.fill")
                         .font(.title2)
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(SupportTheme.accent)
                 }
             }
-            .padding(.vertical, 8)
+            .padding(.vertical, SupportTheme.Spacing.xs)
         }
         .buttonStyle(.plain)
     }
@@ -497,21 +497,21 @@ private struct FavoriteCardView: View {
 
     var body: some View {
         Button(action: onTap) {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(content.contentType.backgroundColor.opacity(0.2))
+                    RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                        .fill(SupportTheme.accent.opacity(0.2))
 
                     Image(systemName: content.contentType.icon)
                         .font(.title)
-                        .foregroundStyle(content.contentType.backgroundColor)
+                        .foregroundStyle(SupportTheme.accent)
                 }
                 .frame(width: 100, height: 80)
 
                 Text(content.title)
                     .font(.caption)
-                    .foregroundStyle(.primary)
-                    .lineLimit(2)
+                    .foregroundStyle(SupportTheme.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
                     .frame(width: 100, alignment: .leading)
             }
         }
@@ -535,6 +535,7 @@ private struct ContentHistoryListView: View {
             }
             .buttonStyle(.plain)
         }
+        .supportScreen()
         .navigationTitle("History")
         .sheet(item: $selectedContent, onDismiss: {
             Task { await refreshContent() }
@@ -577,6 +578,7 @@ private struct FavoritesListView: View {
             }
             .buttonStyle(.plain)
         }
+        .supportScreen()
         .navigationTitle("Favorites")
         .sheet(item: $selectedContent, onDismiss: {
             Task { await refreshFavorites() }
@@ -608,13 +610,13 @@ private struct FavoritesListView: View {
 extension GeneratedContentType {
     var backgroundColor: Color {
         switch self {
-        case .meditation, .mindfulness: return .purple
-        case .sleepStory: return .indigo
-        case .breathing: return .cyan
-        case .affirmation: return .pink
-        case .grounding: return .green
-        case .cbt: return .orange
-        case .journaling: return .brown
+        case .meditation, .mindfulness: return SupportTheme.accent
+        case .sleepStory: return SupportTheme.accent
+        case .breathing: return SupportTheme.accent
+        case .affirmation: return SupportTheme.accent
+        case .grounding: return SupportTheme.accent
+        case .cbt: return SupportTheme.accent
+        case .journaling: return SupportTheme.accent
         }
     }
 

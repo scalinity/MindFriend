@@ -8,6 +8,7 @@
 import SwiftUI
 
 struct PathwayCompletionView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let userPathway: UserPathway
     @Environment(\.dismiss) var dismiss
     @State private var showConfetti = false
@@ -15,40 +16,38 @@ struct PathwayCompletionView: View {
     var body: some View {
         ZStack {
             // Background
-            Color(.systemGroupedBackground)
+            SupportTheme.canvas
                 .ignoresSafeArea()
 
             // Confetti overlay
             if showConfetti {
-                ConfettiView()
+                CelebrationParticles()
                     .ignoresSafeArea()
             }
 
             ScrollView {
-                VStack(spacing: 32) {
-                    Spacer(minLength: 60)
+                VStack(spacing: SupportTheme.Spacing.xl) {
+                    Spacer(minLength: SupportTheme.Spacing.xl)
 
                     // Success icon
-                    Image(systemName: "checkmark.seal.fill")
-                        .font(.system(size: 100))
-                        .foregroundColor(.green)
-                        .shadow(color: Color.green.opacity(0.3), radius: 20, x: 0, y: 10)
+                    CelebrationEmblem(.symbol("checkmark.seal.fill"))
+                        .celebrationReveal()
 
                     // Title
-                    VStack(spacing: 12) {
-                        Text("Journey Complete!")
+                    VStack(spacing: SupportTheme.Spacing.s) {
+                        Text("Journey complete")
                             .font(.largeTitle)
                             .fontWeight(.bold)
                             .multilineTextAlignment(.center)
 
                         Text("You completed the \(userPathway.pathway?.name ?? "pathway")")
                             .font(.title3)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(SupportTheme.textSecondary)
                             .multilineTextAlignment(.center)
                     }
 
                     // Summary stats
-                    VStack(spacing: 16) {
+                    VStack(spacing: SupportTheme.Spacing.m) {
                         StatRow(label: "Total Days", value: "\(userPathway.currentDay)")
                         StatRow(label: "Phases Completed", value: "4")
                         StatRow(label: "Started", value: userPathway.startedAt.formatted(date: .abbreviated, time: .omitted))
@@ -56,43 +55,32 @@ struct PathwayCompletionView: View {
                             StatRow(label: "Completed", value: completedAt.formatted(date: .abbreviated, time: .omitted))
                         }
                     }
-                    .padding()
-                    .background(
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(Color(.secondarySystemGroupedBackground))
-                    )
-                    .padding(.horizontal)
+                    .supportCard()
+                    .padding(.horizontal, SupportTheme.Spacing.m)
 
                     // Motivational message
-                    VStack(spacing: 12) {
+                    VStack(spacing: SupportTheme.Spacing.s) {
                         Text("You've Grown")
                             .font(.headline)
 
-                        Text("This transition has shaped you into someone stronger and wiser. The courage you've shown throughout this journey is remarkable.")
+                        Text("Your pathway is complete. You can revisit what helped and choose what to carry forward.")
                             .font(.body)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(SupportTheme.textSecondary)
                             .multilineTextAlignment(.center)
                     }
-                    .padding()
-                    .background(
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(Color(.secondarySystemGroupedBackground))
-                    )
-                    .padding(.horizontal)
+                    .supportCard()
+                    .padding(.horizontal, SupportTheme.Spacing.m)
 
                     // Actions
-                    VStack(spacing: 12) {
+                    VStack(spacing: SupportTheme.Spacing.s) {
                         Button {
                             dismiss()
                         } label: {
                             Text("Done")
                                 .font(.headline)
                                 .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(Color.blue)
-                                .foregroundColor(.white)
-                                .cornerRadius(12)
                         }
+                        .buttonStyle(.supportPrimary)
                         .accessibilityLabel("Done")
                         .accessibilityHint("Return to home screen")
 
@@ -103,29 +91,29 @@ struct PathwayCompletionView: View {
                             Text("Start Another Pathway")
                                 .font(.headline)
                                 .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(Color(.secondarySystemGroupedBackground))
-                                .foregroundColor(.blue)
-                                .cornerRadius(12)
+                                .padding(SupportTheme.Spacing.m)
+                                .background(SupportTheme.surface)
+                                .foregroundColor(SupportTheme.accent)
+                                .cornerRadius(SupportTheme.controlRadius)
                         }
                         .accessibilityLabel("Start another pathway")
                         .accessibilityHint("Begin a new transition journey")
                     }
-                    .padding(.horizontal)
+                    .padding(.horizontal, SupportTheme.Spacing.m)
 
-                    Spacer(minLength: 60)
+                    Spacer(minLength: SupportTheme.Spacing.xl)
                 }
             }
         }
         .onAppear {
             // Trigger confetti animation
-            withAnimation {
+            withAnimation(.easeInOut(duration: 0.2)) {
                 showConfetti = true
             }
 
             // Hide confetti after 3 seconds
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                withAnimation {
+                withAnimation(.easeInOut(duration: 0.2)) {
                     showConfetti = false
                 }
             }
@@ -141,14 +129,14 @@ struct StatRow: View {
         HStack {
             Text(label)
                 .font(.subheadline)
-                .foregroundColor(.secondary)
+                .foregroundColor(SupportTheme.textSecondary)
 
             Spacer()
 
             Text(value)
                 .font(.subheadline)
                 .fontWeight(.semibold)
-                .foregroundColor(.primary)
+                .foregroundColor(SupportTheme.textPrimary)
         }
     }
 }

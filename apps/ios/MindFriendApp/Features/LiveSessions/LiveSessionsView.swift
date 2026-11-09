@@ -8,6 +8,7 @@ struct LiveSessionsView: View {
     @EnvironmentObject var container: DependencyContainer
 
     @State private var isLoading = true
+    @State private var loadError: String?
     @State private var selectedSession: LiveSession?
     @State private var activeSession: LiveSession?
     @State private var showActiveSession = false
@@ -26,18 +27,24 @@ struct LiveSessionsView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 24) {
+            VStack(spacing: SupportTheme.Spacing.l) {
                 if isLoading {
                     loadingView
+                } else if let loadError {
+                    SupportUnavailableState(title: "Sessions unavailable", message: loadError, actionTitle: "Try again") {
+                        Task { await loadSessions() }
+                    }
+                    .padding(.horizontal, SupportTheme.Spacing.m)
                 } else if liveService.liveSessions.isEmpty {
                     emptyStateView
                 } else {
                     contentView
                 }
             }
-            .padding(.vertical)
+            .padding(.vertical, SupportTheme.Spacing.m)
         }
-        .navigationTitle("Live Sessions")
+        .supportScreen()
+        .navigationTitle(SupportDestination.liveSessions.title)
         .navigationBarTitleDisplayMode(.large)
         .refreshable {
             await loadSessions()
@@ -70,37 +77,37 @@ struct LiveSessionsView: View {
     // MARK: - Subviews
 
     private var loadingView: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             ProgressView()
             Text("Loading sessions...")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
         .frame(maxWidth: .infinity)
-        .padding(.top, 60)
+        .padding(.top, SupportTheme.Spacing.xl)
     }
 
     private var emptyStateView: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             Image(systemName: "person.3.sequence.fill")
-                .font(.system(size: 48))
-                .foregroundStyle(.secondary)
+                .font(.system(.largeTitle))
+                .foregroundStyle(SupportTheme.textSecondary)
 
             Text("No Live Sessions")
                 .font(.headline)
 
             Text("Check back later for scheduled group sessions")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
-        .padding(.top, 60)
-        .padding(.horizontal)
+        .padding(.top, SupportTheme.Spacing.xl)
+        .padding(.horizontal, SupportTheme.Spacing.m)
     }
 
     private var contentView: some View {
-        VStack(alignment: .leading, spacing: 24) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.l) {
             // Live Now Section
             if !liveSessions.isEmpty {
                 liveNowSection
@@ -114,7 +121,7 @@ struct LiveSessionsView: View {
     }
 
     private var liveNowSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             HStack {
                 Circle()
                     .fill(Color.red)
@@ -122,10 +129,10 @@ struct LiveSessionsView: View {
                 Text("Live Now")
                     .font(.headline)
             }
-            .padding(.horizontal)
+            .padding(.horizontal, SupportTheme.Spacing.m)
 
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 16) {
+                HStack(spacing: SupportTheme.Spacing.m) {
                     ForEach(liveSessions) { session in
                         LiveSessionCard(
                             session: session,
@@ -134,18 +141,18 @@ struct LiveSessionsView: View {
                         )
                     }
                 }
-                .padding(.horizontal)
+                .padding(.horizontal, SupportTheme.Spacing.m)
             }
         }
     }
 
     private var upcomingSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("Upcoming")
                 .font(.headline)
-                .padding(.horizontal)
+                .padding(.horizontal, SupportTheme.Spacing.m)
 
-            LazyVStack(spacing: 12) {
+            LazyVStack(spacing: SupportTheme.Spacing.s) {
                 ForEach(upcomingSessions) { session in
                     UpcomingSessionRow(
                         session: session,
@@ -153,7 +160,7 @@ struct LiveSessionsView: View {
                     )
                 }
             }
-            .padding(.horizontal)
+            .padding(.horizontal, SupportTheme.Spacing.m)
         }
     }
 
@@ -161,12 +168,13 @@ struct LiveSessionsView: View {
 
     private func loadSessions() async {
         isLoading = true
+        loadError = nil
         defer { isLoading = false }
 
         do {
             try await liveService.fetchLiveSessionsWithCounts()
         } catch {
-            appState.showError(.apiError(error.localizedDescription))
+            loadError = error.localizedDescription
         }
     }
 }
@@ -180,14 +188,14 @@ struct LiveSessionCard: View {
 
     var body: some View {
         Button(action: onTap) {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                 // Header
                 HStack {
                     Image(systemName: session.sessionType.icon)
                         .font(.title2)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(SupportTheme.textPrimary)
                         .frame(width: 44, height: 44)
-                        .background(typeColor.opacity(0.8))
+                        .background(SupportTheme.surface)
                         .clipShape(Circle())
 
                     Spacer()
@@ -198,45 +206,45 @@ struct LiveSessionCard: View {
                 }
 
                 // Content
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     Text(session.title)
                         .font(.headline)
-                        .foregroundStyle(.primary)
-                        .lineLimit(2)
+                        .foregroundStyle(SupportTheme.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
 
                     Text(session.sessionType.displayName)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
 
                 // Footer
                 HStack {
                     Label("\(session.durationMinutes) min", systemImage: "clock")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
 
                     Spacer()
 
                     if let count = session.participantCount {
                         Label("\(count)", systemImage: "person.2.fill")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                 }
             }
-            .padding()
+            .padding(SupportTheme.Spacing.m)
             .frame(width: 200)
-            .background(Color(.secondarySystemBackground))
-            .cornerRadius(16)
+            .background(SupportTheme.surface)
+            .cornerRadius(SupportTheme.cardRadius)
         }
         .buttonStyle(.plain)
     }
 
     private var typeColor: Color {
         switch session.sessionType {
-        case .breathing: return .blue
-        case .meditation: return .purple
-        case .bodyScan: return .green
+        case .breathing: return SupportTheme.accent
+        case .meditation: return SupportTheme.accent
+        case .bodyScan: return SupportTheme.accent
         }
     }
 }
@@ -244,15 +252,16 @@ struct LiveSessionCard: View {
 // MARK: - Live Badge
 
 struct LiveBadge: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isPulsing = false
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: SupportTheme.Spacing.xxs) {
             Circle()
                 .fill(Color.red)
                 .frame(width: 6, height: 6)
-                .scaleEffect(isPulsing ? 1.2 : 1.0)
-                .animation(
+                .scaleEffect(reduceMotion ? 1 : (isPulsing ? 1.2 : 1.0))
+                .animation(reduceMotion ? nil :
                     .easeInOut(duration: 1).repeatForever(autoreverses: true),
                     value: isPulsing
                 )
@@ -261,10 +270,10 @@ struct LiveBadge: View {
                 .font(.caption2.bold())
                 .foregroundStyle(.red)
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
+        .padding(.horizontal, SupportTheme.Spacing.xs)
+        .padding(.vertical, SupportTheme.Spacing.xxs)
         .background(Color.red.opacity(0.15))
-        .cornerRadius(8)
+        .cornerRadius(SupportTheme.controlRadius)
         .onAppear { isPulsing = true }
     }
 }
@@ -277,31 +286,31 @@ struct UpcomingSessionRow: View {
 
     var body: some View {
         Button(action: onTap) {
-            HStack(spacing: 12) {
+            HStack(spacing: SupportTheme.Spacing.s) {
                 // Icon
                 Image(systemName: session.sessionType.icon)
                     .font(.title3)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(SupportTheme.textPrimary)
                     .frame(width: 44, height: 44)
-                    .background(typeColor.opacity(0.8))
+                    .background(SupportTheme.surface)
                     .clipShape(Circle())
 
                 // Content
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     Text(session.title)
                         .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(SupportTheme.textPrimary)
 
-                    HStack(spacing: 8) {
+                    HStack(spacing: SupportTheme.Spacing.xs) {
                         if let startsIn = session.startsIn {
                             Text(startsIn)
                                 .font(.caption)
-                                .foregroundStyle(.orange)
+                                .foregroundStyle(SupportTheme.accent)
                         }
 
                         Text("\(session.durationMinutes) min")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                 }
 
@@ -309,30 +318,28 @@ struct UpcomingSessionRow: View {
 
                 // Participant count
                 if let count = session.participantCount, count > 0 {
-                    HStack(spacing: 4) {
+                    HStack(spacing: SupportTheme.Spacing.xxs) {
                         Image(systemName: "person.2.fill")
                         Text("\(count)")
                     }
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                 }
 
                 Image(systemName: "chevron.right")
                     .font(.caption)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
-            .padding()
-            .background(Color(.secondarySystemBackground))
-            .cornerRadius(12)
+            .supportCard()
         }
         .buttonStyle(.plain)
     }
 
     private var typeColor: Color {
         switch session.sessionType {
-        case .breathing: return .blue
-        case .meditation: return .purple
-        case .bodyScan: return .green
+        case .breathing: return SupportTheme.accent
+        case .meditation: return SupportTheme.accent
+        case .bodyScan: return SupportTheme.accent
         }
     }
 }
@@ -351,11 +358,11 @@ struct LiveSessionDetailSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: SupportTheme.Spacing.l) {
                     // Hero
-                    VStack(spacing: 16) {
+                    VStack(spacing: SupportTheme.Spacing.m) {
                         Image(systemName: session.sessionType.icon)
-                            .font(.system(size: 60))
+                            .font(.system(.largeTitle))
                             .foregroundStyle(typeColor)
 
                         Text(session.title)
@@ -365,14 +372,14 @@ struct LiveSessionDetailSheet: View {
                         if let description = session.description {
                             Text(description)
                                 .font(.body)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                                 .multilineTextAlignment(.center)
                         }
                     }
-                    .padding(.top, 24)
+                    .padding(.top, SupportTheme.Spacing.l)
 
                     // Details
-                    VStack(spacing: 12) {
+                    VStack(spacing: SupportTheme.Spacing.s) {
                         DetailRow(icon: "clock", label: "Duration", value: "\(session.durationMinutes) min")
                         DetailRow(icon: "sparkles", label: "Type", value: session.sessionType.displayName)
 
@@ -381,21 +388,19 @@ struct LiveSessionDetailSheet: View {
                         }
 
                         if session.isLive {
-                            DetailRow(icon: "circle.fill", label: "Status", value: "Live Now", valueColor: .green)
+                            DetailRow(icon: "circle.fill", label: "Status", value: "Live Now", valueColor: SupportTheme.accent)
                         } else if let startsIn = session.startsIn {
-                            DetailRow(icon: "clock.arrow.circlepath", label: "Starts", value: startsIn, valueColor: .orange)
+                            DetailRow(icon: "clock.arrow.circlepath", label: "Starts", value: startsIn, valueColor: SupportTheme.accent)
                         }
                     }
-                    .padding()
-                    .background(Color(.secondarySystemBackground))
-                    .cornerRadius(16)
+                    .supportCard()
 
                     // What to expect
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                         Text("What to Expect")
                             .font(.headline)
 
-                        VStack(alignment: .leading, spacing: 8) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                             ExpectationRow(icon: "headphones", text: "Guided audio session")
                             ExpectationRow(icon: "person.3.fill", text: "Practice with others in real-time")
                             ExpectationRow(icon: "heart.fill", text: "Send reactions to encourage others")
@@ -403,9 +408,7 @@ struct LiveSessionDetailSheet: View {
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding()
-                    .background(Color(.secondarySystemBackground))
-                    .cornerRadius(16)
+                    .supportCard()
 
                     // Error message
                     if let error = errorMessage {
@@ -422,21 +425,16 @@ struct LiveSessionDetailSheet: View {
                         HStack {
                             if isJoining {
                                 ProgressView()
-                                    .tint(.white)
+                                    .tint(SupportTheme.onAccent)
                             } else {
                                 Text(session.isLive ? "Join Now" : "Notify Me")
                             }
                         }
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(session.isLive ? Color.accentColor : Color.secondary)
-                        .foregroundStyle(.white)
-                        .cornerRadius(12)
                     }
+                    .buttonStyle(.supportPrimary)
                     .disabled(isJoining || !session.isLive)
                 }
-                .padding()
+                .padding(SupportTheme.Spacing.m)
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -449,9 +447,9 @@ struct LiveSessionDetailSheet: View {
 
     private var typeColor: Color {
         switch session.sessionType {
-        case .breathing: return .blue
-        case .meditation: return .purple
-        case .bodyScan: return .green
+        case .breathing: return SupportTheme.accent
+        case .meditation: return SupportTheme.accent
+        case .bodyScan: return SupportTheme.accent
         }
     }
 
@@ -484,7 +482,7 @@ private struct DetailRow: View {
         HStack {
             Label(label, systemImage: icon)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
 
             Spacer()
 
@@ -500,14 +498,14 @@ private struct ExpectationRow: View {
     let text: String
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: SupportTheme.Spacing.s) {
             Image(systemName: icon)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .frame(width: 20)
 
             Text(text)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
     }
 }

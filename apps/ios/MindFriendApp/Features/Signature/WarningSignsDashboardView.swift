@@ -11,7 +11,7 @@ struct WarningSignsDashboardView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 20) {
+            VStack(spacing: SupportTheme.Spacing.m) {
                 if let signature = engine.currentSignature {
                     // Confidence card
                     confidenceCard(signature: signature)
@@ -40,9 +40,10 @@ struct WarningSignsDashboardView: View {
                     noSignatureView
                 }
             }
-            .padding()
+            .padding(SupportTheme.Spacing.m)
         }
-        .navigationTitle("Warning Signs")
+        .supportScreen()
+        .navigationTitle(SupportDestination.warningSigns.title)
         .navigationBarTitleDisplayMode(.large)
         .refreshable {
             await refreshData()
@@ -68,14 +69,15 @@ struct WarningSignsDashboardView: View {
     // MARK: - Confidence Card
 
     private func confidenceCard(signature: WarningSignature) -> some View {
-        VStack(spacing: 12) {
+        VStack(spacing: SupportTheme.Spacing.s) {
             HStack {
                 VStack(alignment: .leading) {
                     Text("Pattern Confidence")
                         .font(.headline)
+                .accessibilityAddTraits(.isHeader)
                     Text("How well your signature predicts crises")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
                 Spacer()
                 confidenceBadge(confidence: signature.confidence)
@@ -84,11 +86,11 @@ struct WarningSignsDashboardView: View {
             // Confidence gauge
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(Color(.systemGray5))
+                    RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                        .fill(SupportTheme.separator)
 
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(confidenceColor(signature.confidence).gradient)
+                    RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                        .fill(confidenceColor(signature.confidence))
                         .frame(width: geometry.size.width * signature.confidence)
                 }
             }
@@ -97,18 +99,16 @@ struct WarningSignsDashboardView: View {
             HStack {
                 Text("Source: \(signature.source.displayName)")
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                 Spacer()
                 if let lastLearned = signature.lastLearnedAt {
                     Text("Updated \(lastLearned, style: .relative)")
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
             }
         }
-        .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(12)
+        .supportCard()
     }
 
     private func confidenceBadge(confidence: Double) -> some View {
@@ -120,8 +120,8 @@ struct WarningSignsDashboardView: View {
 
     private func confidenceColor(_ confidence: Double) -> Color {
         switch confidence {
-        case 0.7...: return .green
-        case 0.5...: return .orange
+        case 0.7...: return SupportTheme.accent
+        case 0.5...: return SupportTheme.accent
         default: return .red
         }
     }
@@ -129,10 +129,10 @@ struct WarningSignsDashboardView: View {
     // MARK: - Active Signals Card
 
     private func activeSignalsCard(result: PatternEmergenceResult) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             HStack {
                 Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(SupportTheme.accent)
                 Text("Currently Active (\(result.activeComponents.count))")
                     .font(.headline)
                 Spacer()
@@ -141,11 +141,11 @@ struct WarningSignsDashboardView: View {
                     Text("Pattern Emerging")
                         .font(.caption)
                         .fontWeight(.semibold)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color.orange.opacity(0.2))
-                        .foregroundStyle(.orange)
-                        .cornerRadius(8)
+                        .padding(.horizontal, SupportTheme.Spacing.xs)
+                        .padding(.vertical, SupportTheme.Spacing.xxs)
+                        .background(SupportTheme.surface)
+                        .foregroundStyle(SupportTheme.accent)
+                        .cornerRadius(SupportTheme.controlRadius)
                 }
             }
 
@@ -163,40 +163,38 @@ struct WarningSignsDashboardView: View {
 
                         Text("\(Int(active.detectedValue * 100))%")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
 
                         if active.daysActive > 1 {
                             Text("\(active.daysActive)d")
                                 .font(.caption2)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(Color(.systemGray5))
-                                .cornerRadius(4)
+                                .padding(.horizontal, SupportTheme.Spacing.xxs)
+                                .padding(.vertical, SupportTheme.Spacing.xxs)
+                                .background(SupportTheme.separator)
+                                .cornerRadius(SupportTheme.controlRadius)
                         }
                     }
                 }
             }
         }
-        .padding()
-        .background(Color.orange.opacity(0.1))
-        .cornerRadius(12)
+        .supportCard()
     }
 
     private func signalStrengthColor(_ value: Double) -> Color {
         switch value {
         case 0.8...: return .red
-        case 0.6...: return .orange
-        default: return .yellow
+        case 0.6...: return SupportTheme.accent
+        default: return SupportTheme.accent
         }
     }
 
     // MARK: - Signature Card
 
     private func signatureCard(signature: WarningSignature) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             HStack {
                 Image(systemName: "list.clipboard.fill")
-                    .foregroundStyle(.purple)
+                    .foregroundStyle(SupportTheme.accent)
                 Text("Your Signature (\(signature.components.count))")
                     .font(.headline)
                 Spacer()
@@ -208,11 +206,11 @@ struct WarningSignsDashboardView: View {
                 }
 
                 if !categoryComponents.isEmpty {
-                    VStack(alignment: .leading, spacing: 6) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                         Label(category.displayName, systemImage: category.icon)
                             .font(.caption)
                             .fontWeight(.semibold)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
 
                         ForEach(categoryComponents, id: \.componentId) { weighted in
                             if let component = SignatureComponent.component(for: weighted.signal) {
@@ -223,9 +221,7 @@ struct WarningSignsDashboardView: View {
                 }
             }
         }
-        .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(12)
+        .supportCard()
     }
 
     private func signatureRow(component: SignatureComponent, weighted: WeightedComponent) -> some View {
@@ -242,59 +238,57 @@ struct WarningSignsDashboardView: View {
             // Weight indicator
             Text("×\(String(format: "%.1f", weighted.weight))")
                 .font(.caption2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
     }
 
     private func weightColor(_ weight: Double) -> Color {
         switch weight {
-        case 0.7...: return .purple
-        case 0.4...: return .blue
-        default: return .gray
+        case 0.7...: return SupportTheme.accent
+        case 0.4...: return SupportTheme.accent
+        default: return SupportTheme.accent
         }
     }
 
     // MARK: - Accuracy Card
 
     private func accuracyCard(stats: SignatureAccuracyStats) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             HStack {
                 Image(systemName: "chart.pie.fill")
-                    .foregroundStyle(.green)
+                    .foregroundStyle(SupportTheme.accent)
                 Text("Prediction Accuracy")
                     .font(.headline)
                 Spacer()
                 Text("\(stats.accuracyPercentage)%")
                     .font(.title2)
                     .fontWeight(.bold)
-                    .foregroundStyle(.green)
+                    .foregroundStyle(SupportTheme.accent)
             }
 
-            HStack(spacing: 16) {
+            HStack(spacing: SupportTheme.Spacing.m) {
                 statPill(
                     value: stats.accuratePredictions,
                     label: "Accurate",
-                    color: .green
+                    color: SupportTheme.accent
                 )
                 statPill(
                     value: stats.helpedPrevent,
                     label: "Prevented",
-                    color: .blue
+                    color: SupportTheme.accent
                 )
                 statPill(
                     value: stats.falseAlarms,
                     label: "False",
-                    color: .orange
+                    color: SupportTheme.accent
                 )
             }
 
             Text("Based on \(stats.totalAlerts) alerts with feedback")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
-        .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(12)
+        .supportCard()
     }
 
     private func statPill(value: Int, label: String, color: Color) -> some View {
@@ -305,7 +299,7 @@ struct WarningSignsDashboardView: View {
                 .foregroundStyle(color)
             Text(label)
                 .font(.caption2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
         .frame(maxWidth: .infinity)
     }
@@ -313,10 +307,10 @@ struct WarningSignsDashboardView: View {
     // MARK: - Recent Alerts Card
 
     private var recentAlertsCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             HStack {
                 Image(systemName: "bell.badge.fill")
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(SupportTheme.accent)
                 Text("Recent Alerts")
                     .font(.headline)
                 Spacer()
@@ -328,9 +322,7 @@ struct WarningSignsDashboardView: View {
                 }
             }
         }
-        .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(12)
+        .supportCard()
     }
 
     private func alertRow(_ alert: PatternAlert) -> some View {
@@ -345,25 +337,25 @@ struct WarningSignsDashboardView: View {
                     .fontWeight(.medium)
                 Text(alert.detectedAt, style: .relative)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
 
             Spacer()
 
             if alert.userFeedback != nil {
                 Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
+                    .foregroundStyle(SupportTheme.accent)
             } else {
                 Image(systemName: "chevron.right")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
         }
     }
 
     private func severityColor(_ severity: AlertSeverity) -> Color {
         switch severity {
-        case .mild: return .yellow
-        case .moderate: return .orange
+        case .mild: return SupportTheme.accent
+        case .moderate: return SupportTheme.accent
         case .severe: return .red
         }
     }
@@ -371,14 +363,14 @@ struct WarningSignsDashboardView: View {
     // MARK: - Actions Card
 
     private var actionsCard: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: SupportTheme.Spacing.s) {
             Button {
                 showingRelearn = true
             } label: {
                 Label("Re-Learn from History", systemImage: "arrow.trianglehead.2.counterclockwise.rotate.90")
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.supportSecondary)
 
             Button {
                 showingOnboarding = true
@@ -386,28 +378,27 @@ struct WarningSignsDashboardView: View {
                 Label("Edit Warning Signs", systemImage: "pencil")
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.supportSecondary)
         }
-        .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(12)
+        .supportCard()
     }
 
     // MARK: - No Signature View
 
     private var noSignatureView: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: SupportTheme.Spacing.l) {
             Image(systemName: "shield.checkered")
-                .font(.system(size: 60))
-                .foregroundStyle(.purple.gradient)
+                .font(.system(.largeTitle))
+                .foregroundStyle(SupportTheme.accent)
 
             Text("Set Up Your Warning Signs")
                 .font(.title2)
+                .accessibilityAddTraits(.isHeader)
                 .fontWeight(.bold)
 
             Text("Learn your unique patterns that appear before stress overwhelms you. This helps MindFriend alert you 24-72 hours before a crisis.")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .multilineTextAlignment(.center)
 
             Button {
@@ -416,13 +407,10 @@ struct WarningSignsDashboardView: View {
                 Text("Get Started")
                     .fontWeight(.semibold)
                     .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.purple)
-                    .foregroundStyle(.white)
-                    .cornerRadius(12)
             }
+            .buttonStyle(.supportPrimary)
         }
-        .padding()
+        .padding(SupportTheme.Spacing.m)
     }
 
     // MARK: - Helpers

@@ -9,12 +9,11 @@
 import SwiftUI
 
 struct SessionView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @StateObject private var viewModel: SessionViewModel
     @ObservedObject private var visualService: VisualAnimationService
     @Environment(\.dismiss) private var dismiss
-    @State private var showErrorAlert = false
     @State private var isLoading = true
-    @State private var shouldDismissOnError = false
 
     private let modality: SensoryModality
     private let patternName: String
@@ -47,26 +46,33 @@ struct SessionView: View {
     var body: some View {
         ZStack {
             // Background gradient
-            LinearGradient(
-                colors: [Color.blue.opacity(0.3), Color.black],
-                startPoint: .top,
-                endPoint: .bottom
-            )
+            SupportTheme.canvas
             .ignoresSafeArea()
 
-            if isLoading {
+            if let error = viewModel.errorMessage {
+                SupportUnavailableState(title: "Session unavailable", message: error, actionTitle: "Close") {
+                    // A time-limit error leaves the shared service's session active; end it so the
+                    // next session can start and this one is recorded.
+                    Task {
+                        if viewModel.isPlaying { await viewModel.endSession() }
+                        viewModel.errorMessage = nil
+                        dismiss()
+                    }
+                }
+                .padding(SupportTheme.Spacing.m)
+            } else if isLoading {
                 // Loading state
-                VStack(spacing: 20) {
+                VStack(spacing: SupportTheme.Spacing.m) {
                     ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        .progressViewStyle(CircularProgressViewStyle(tint: SupportTheme.textPrimary))
                         .scaleEffect(1.5)
-                    
+
                     Text("Starting \(patternName)...")
                         .font(.headline)
-                        .foregroundColor(.white)
+                        .foregroundColor(SupportTheme.textPrimary)
                 }
             } else {
-                VStack(spacing: 32) {
+                VStack(spacing: SupportTheme.Spacing.xl) {
                     // Header
                     HStack {
                         Button {
@@ -77,55 +83,69 @@ struct SessionView: View {
                         } label: {
                             Image(systemName: "xmark.circle.fill")
                                 .font(.title2)
-                                .foregroundColor(.white.opacity(0.8))
+                                .foregroundColor(SupportTheme.textPrimary.opacity(0.8))
+                                .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                                .accessibilityLabel("Close")
                         }
+
+                        .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                        .accessibilityLabel("Close session")
 
                         Spacer()
 
-                        VStack(alignment: .trailing, spacing: 4) {
+                        VStack(alignment: .trailing, spacing: SupportTheme.Spacing.xxs) {
                             Text(patternName)
                                 .font(.headline)
-                                .foregroundColor(.white)
+                                .foregroundColor(SupportTheme.textPrimary)
 
                             Text(modality.displayName)
                                 .font(.caption)
-                                .foregroundColor(.white.opacity(0.7))
+                                .foregroundColor(SupportTheme.textPrimary.opacity(0.7))
                         }
                     }
-                    .padding(.horizontal)
-                    .padding(.top, 20)
+                    .padding(.horizontal, SupportTheme.Spacing.m)
+                    .padding(.top, SupportTheme.Spacing.m)
 
                     Spacer()
 
                     // Main content area - visual animation or timer
                     if modality.rawValue == "visual" {
                         // Visual animation display
-                        VisualAnimationDisplay(
-                            frame: visualService.currentFrame,
-                            animationType: animationType,
-                            colors: animationColors
-                        )
-                        .frame(maxWidth: .infinity, maxHeight: 300)
-                        
+                        if reduceMotion {
+                            Image(systemName: "circle.circle")
+                                .font(.largeTitle)
+                                .foregroundStyle(SupportTheme.accent)
+                                .opacity(viewModel.isPlaying ? 1 : 0.6)
+                                .animation(.easeInOut(duration: 0.2), value: viewModel.isPlaying)
+                                .frame(maxWidth: .infinity, maxHeight: 300)
+                        } else {
+                            VisualAnimationDisplay(
+                                frame: visualService.currentFrame,
+                                animationType: animationType,
+                                colors: animationColors
+                            )
+                            .frame(maxWidth: .infinity, maxHeight: 300)
+                        }
+
                         // Timer below animation
-                        VStack(spacing: 8) {
+                        VStack(spacing: SupportTheme.Spacing.xs) {
                             Text(viewModel.elapsedTime)
-                                .font(.system(size: 32, weight: .semibold, design: .rounded))
-                                .foregroundColor(.white.opacity(0.8))
+                                .font(.system(.largeTitle, design: .rounded).weight(.semibold))
+                                .foregroundColor(SupportTheme.textPrimary.opacity(0.8))
 
                             ProgressView(value: viewModel.progressPercentage)
-                                .tint(.white.opacity(0.6))
+                                .tint(SupportTheme.accent.opacity(0.6))
                                 .frame(width: 150)
                         }
                     } else {
                         // Timer display for tactile/audio
-                        VStack(spacing: 8) {
+                        VStack(spacing: SupportTheme.Spacing.xs) {
                             Text(viewModel.elapsedTime)
-                                .font(.system(size: 48, weight: .bold, design: .rounded))
-                                .foregroundColor(.white)
+                                .font(.system(.largeTitle, design: .rounded).weight(.bold))
+                                .foregroundColor(SupportTheme.textPrimary)
 
                             ProgressView(value: viewModel.progressPercentage)
-                                .tint(.white)
+                                .tint(SupportTheme.accent)
                                 .frame(width: 200)
                         }
                     }
@@ -133,7 +153,7 @@ struct SessionView: View {
                     Spacer()
 
                     // Controls
-                    HStack(spacing: 40) {
+                    HStack(spacing: SupportTheme.Spacing.xl) {
                         // Play/Pause button
                         Button {
                             Task {
@@ -142,14 +162,18 @@ struct SessionView: View {
                         } label: {
                             ZStack {
                                 Circle()
-                                    .fill(.white)
+                                    .fill(SupportTheme.surface)
                                     .frame(width: 80, height: 80)
 
                                 Image(systemName: viewModel.isPlaying ? "pause.fill" : "play.fill")
                                     .font(.title)
-                                    .foregroundColor(.black)
+                                    .foregroundColor(SupportTheme.textPrimary)
                             }
+                            .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                            .accessibilityLabel(viewModel.isPlaying ? "Pause" : "Play")
                         }
+
+                        .accessibilityLabel(viewModel.isPlaying ? "Pause" : "Play")
 
                         // Stop button
                         Button {
@@ -158,16 +182,16 @@ struct SessionView: View {
                                 dismiss()
                             }
                         } label: {
-                            VStack(spacing: 4) {
+                            VStack(spacing: SupportTheme.Spacing.xxs) {
                                 Image(systemName: "stop.fill")
                                     .font(.title2)
                                 Text("End")
                                     .font(.caption)
                             }
-                            .foregroundColor(.white.opacity(0.8))
+                            .foregroundColor(SupportTheme.textPrimary.opacity(0.8))
                         }
                     }
-                    .padding(.bottom, 40)
+                    .padding(.bottom, SupportTheme.Spacing.xl)
                 }
             }
         }
@@ -175,39 +199,20 @@ struct SessionView: View {
         .task {
             await viewModel.startSession()
             isLoading = false
-            
-            // If there was an error during startup, mark for dismiss
-            if viewModel.errorMessage != nil {
-                shouldDismissOnError = true
-            }
+
         }
-        .onChange(of: viewModel.errorMessage) { _, newValue in
-            showErrorAlert = newValue != nil
-        }
-        .alert("Error", isPresented: $showErrorAlert) {
-            Button("OK") {
-                viewModel.errorMessage = nil
-                // Dismiss if this was a startup error
-                if shouldDismissOnError {
-                    dismiss()
-                }
-            }
-        } message: {
-            if let error = viewModel.errorMessage {
-                Text(error)
-            }
-        }
+
     }
-    
+
     // MARK: - Computed Properties
-    
+
     private var animationType: VisualAnimation.AnimationType {
         VisualAnimation.library.first(where: { $0.id == patternId })?.type ?? .expandingCircle
     }
-    
+
     private var animationColors: [Color] {
         guard let animation = VisualAnimation.library.first(where: { $0.id == patternId }) else {
-            return [.blue, .purple]
+            return [SupportTheme.accent, SupportTheme.accent]
         }
         return animation.colors.compactMap { Color(hex: $0) }
     }
@@ -219,13 +224,13 @@ struct VisualAnimationDisplay: View {
     let frame: VisualAnimationService.AnimationFrame
     let animationType: VisualAnimation.AnimationType
     let colors: [Color]
-    
+
     var body: some View {
         GeometryReader { geometry in
             let centerX = geometry.size.width / 2
             let centerY = geometry.size.height / 2
             let _: CGFloat = min(geometry.size.width, geometry.size.height) * 0.4
-            
+
             ZStack {
                 switch animationType {
                 case .expandingCircle:
@@ -277,24 +282,24 @@ struct VisualAnimationDisplay: View {
 
 struct SensoryWaveShape: Shape {
     var progress: Double
-    
+
     var animatableData: Double {
         get { progress }
         set { progress = newValue }
     }
-    
+
     func path(in rect: CGRect) -> Path {
         var path = Path()
         let midY = rect.midY
         let amplitude: CGFloat = rect.height * 0.3
         let wavelength = rect.width / 2
-        
+
         // Start at bottom left
         path.move(to: CGPoint(x: 0, y: rect.height))
-        
+
         // Draw bottom left to start of wave
         path.addLine(to: CGPoint(x: 0, y: midY))
-        
+
         // Draw the wave curve
         for x in stride(from: 0, through: rect.width, by: 2) {
             let relativeX = x / wavelength
@@ -302,11 +307,11 @@ struct SensoryWaveShape: Shape {
             let y = midY + amplitude * sin((relativeX * 2 * .pi) + phase)
             path.addLine(to: CGPoint(x: x, y: y))
         }
-        
+
         // Close the shape by going down to bottom right, then back to start
         path.addLine(to: CGPoint(x: rect.width, y: rect.height))
         path.closeSubpath()
-        
+
         return path
     }
 }
@@ -316,26 +321,26 @@ struct SpiralShape: Shape {
         var path = Path()
         let center = CGPoint(x: rect.midX, y: rect.midY)
         let maxRadius = min(rect.width, rect.height) / 2
-        
+
         var angle: CGFloat = 0
         let turns: CGFloat = 3
         let pointCount = 100
-        
+
         for i in 0..<pointCount {
             let progress = CGFloat(i) / CGFloat(pointCount - 1)
             let radius = maxRadius * progress
             angle = progress * turns * 2 * .pi
-            
+
             let x = center.x + radius * cos(angle)
             let y = center.y + radius * sin(angle)
-            
+
             if i == 0 {
                 path.move(to: CGPoint(x: x, y: y))
             } else {
                 path.addLine(to: CGPoint(x: x, y: y))
             }
         }
-        
+
         return path
     }
 }
@@ -343,23 +348,23 @@ struct SpiralShape: Shape {
 struct FlowerShape: Shape {
     let petalCount: Int
     var bloomProgress: CGFloat
-    
+
     var animatableData: CGFloat {
         get { bloomProgress }
         set { bloomProgress = newValue }
     }
-    
+
     func path(in rect: CGRect) -> Path {
         var path = Path()
         let center = CGPoint(x: rect.midX, y: rect.midY)
         let maxRadius = min(rect.width, rect.height) / 2 * bloomProgress
-        
+
         for i in 0..<petalCount {
             let angle = (CGFloat(i) / CGFloat(petalCount)) * 2 * .pi
             let petalPath = petalPath(center: center, angle: angle, maxRadius: maxRadius)
             path.addPath(petalPath)
         }
-        
+
         // Add center circle
         let centerRadius = maxRadius * 0.2
         path.addEllipse(in: CGRect(
@@ -368,31 +373,31 @@ struct FlowerShape: Shape {
             width: centerRadius * 2,
             height: centerRadius * 2
         ))
-        
+
         return path
     }
-    
+
     private func petalPath(center: CGPoint, angle: CGFloat, maxRadius: CGFloat) -> Path {
         var path = Path()
         let petalLength = maxRadius * 0.8
         let petalWidth = maxRadius * 0.3
-        
+
         let tipX = center.x + petalLength * cos(angle)
         let tipY = center.y + petalLength * sin(angle)
-        
+
         let control1Angle = angle - .pi / 6
         let control2Angle = angle + .pi / 6
-        
+
         let control1X = center.x + petalWidth * cos(control1Angle)
         let control1Y = center.y + petalWidth * sin(control1Angle)
-        
+
         let control2X = center.x + petalWidth * cos(control2Angle)
         let control2Y = center.y + petalWidth * sin(control2Angle)
-        
+
         path.move(to: center)
         path.addQuadCurve(to: CGPoint(x: tipX, y: tipY), control: CGPoint(x: control1X, y: control1Y))
         path.addQuadCurve(to: center, control: CGPoint(x: control2X, y: control2Y))
-        
+
         return path
     }
 }
@@ -402,18 +407,18 @@ struct DotGridView: View {
     let columns: Int
     let scale: CGFloat
     let colors: [Color]
-    
+
     var body: some View {
         GeometryReader { geometry in
             let dotSize: CGFloat = 12 * scale
             let spacingX = geometry.size.width / CGFloat(columns + 1)
             let spacingY = geometry.size.height / CGFloat(rows + 1)
-            
+
             ForEach(0..<rows, id: \.self) { row in
                 ForEach(0..<columns, id: \.self) { col in
                     let x = spacingX * CGFloat(col + 1)
                     let y = spacingY * CGFloat(row + 1)
-                    
+
                     Circle()
                         .fill(colors.first ?? .blue)
                         .frame(width: dotSize, height: dotSize)
@@ -429,7 +434,7 @@ struct RibbonFlowView: View {
     let rotation: Angle
     let scale: CGFloat
     let colors: [Color]
-    
+
     var body: some View {
         ZStack {
             ForEach(0..<3, id: \.self) { index in

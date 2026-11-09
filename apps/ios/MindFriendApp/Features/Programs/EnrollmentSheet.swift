@@ -15,17 +15,17 @@ struct EnrollmentSheet: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 24) {
+            VStack(spacing: SupportTheme.Spacing.l) {
                 // Program summary
-                VStack(spacing: 12) {
+                VStack(spacing: SupportTheme.Spacing.s) {
                     ZStack {
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(program.category.color.gradient)
+                        RoundedRectangle(cornerRadius: SupportTheme.cardRadius)
+                            .fill(SupportTheme.accent)
                             .frame(width: 80, height: 80)
 
                         Image(systemName: program.category.icon)
-                            .font(.system(size: 32))
-                            .foregroundStyle(.white)
+                            .font(.system(.largeTitle))
+                            .foregroundStyle(SupportTheme.onAccent)
                     }
 
                     Text(program.title)
@@ -34,19 +34,19 @@ struct EnrollmentSheet: View {
 
                     Text("\(program.durationDays) days • \(program.estimatedDailyMinutes) min/day")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
 
                 Divider()
 
                 // Time picker
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                     Text("Daily Reminder Time")
                         .font(.headline)
 
                     Text("We'll remind you to complete your daily program content at this time.")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
 
                     DatePicker(
                         "Reminder Time",
@@ -66,12 +66,12 @@ struct EnrollmentSheet: View {
                 } label: {
                     if isEnrolling {
                         ProgressView()
-                            .tint(.white)
+                            .tint(SupportTheme.accent)
                     } else {
                         Text("Start Program")
                     }
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.supportPrimary)
                 .controlSize(.large)
                 .frame(maxWidth: .infinity)
                 .disabled(isEnrolling)
@@ -80,14 +80,15 @@ struct EnrollmentSheet: View {
                 if program.premiumOnly {
                     HStack {
                         Image(systemName: "crown.fill")
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(SupportTheme.accent)
                         Text("This program requires a Premium subscription")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                 }
             }
-            .padding()
+            .padding(SupportTheme.Spacing.m)
+            .supportScreen()
             .navigationTitle("Start Program")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -136,55 +137,55 @@ struct ProgramPausedView: View {
     @State private var showAbandonConfirm = false
 
     var body: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: SupportTheme.Spacing.l) {
             // Status icon
             ZStack {
                 Circle()
-                    .fill(Color.orange.opacity(0.2))
+                    .fill(SupportTheme.accent.opacity(0.2))
                     .frame(width: 80, height: 80)
 
                 Image(systemName: "pause.circle.fill")
-                    .font(.system(size: 40))
-                    .foregroundStyle(.orange)
+                    .font(.system(.largeTitle))
+                    .foregroundStyle(SupportTheme.accent)
             }
 
-            VStack(spacing: 8) {
+            VStack(spacing: SupportTheme.Spacing.xs) {
                 Text("Program Paused")
                     .font(.title2)
                     .fontWeight(.bold)
 
                 Text(enrollment.program?.title ?? "")
                     .font(.headline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
 
             // Progress info
-            VStack(spacing: 4) {
+            VStack(spacing: SupportTheme.Spacing.xxs) {
                 Text("Day \(enrollment.currentDay) of \(enrollment.program?.durationDays ?? 0)")
                     .font(.subheadline)
 
                 if let pausedAt = enrollment.pausedAt {
                     Text("Paused \(pausedAt.formatted(date: .abbreviated, time: .omitted))")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
             }
 
             Spacer()
 
             // Actions
-            VStack(spacing: 12) {
+            VStack(spacing: SupportTheme.Spacing.s) {
                 Button {
                     Task { await resume() }
                 } label: {
                     if isResuming {
                         ProgressView()
-                            .tint(.white)
+                            .tint(SupportTheme.accent)
                     } else {
                         Text("Resume Program")
                     }
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.supportPrimary)
                 .controlSize(.large)
                 .frame(maxWidth: .infinity)
                 .disabled(isResuming || isAbandoning)
@@ -197,7 +198,7 @@ struct ProgramPausedView: View {
                 .disabled(isResuming || isAbandoning)
             }
         }
-        .padding()
+        .padding(SupportTheme.Spacing.m)
         .alert("Leave Program?", isPresented: $showAbandonConfirm) {
             Button("Cancel", role: .cancel) {}
             Button("Leave", role: .destructive) {

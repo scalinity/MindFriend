@@ -11,18 +11,18 @@ struct InsightLabHomeCard: View {
             InsightLabView()
                 .environmentObject(insightLabService)
         } label: {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                 // Header
                 HStack {
                     Label("Insight Lab", systemImage: "flask.fill")
                         .font(.headline)
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(SupportTheme.textPrimary)
 
                     Spacer()
 
                     Image(systemName: "chevron.right")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
 
                 // Content based on active experiment status
@@ -34,9 +34,7 @@ struct InsightLabHomeCard: View {
                     noExperimentContent
                 }
             }
-            .padding()
-            .background(Color(uiColor: .secondarySystemBackground))
-            .cornerRadius(16)
+            .supportCard()
         }
         .buttonStyle(.plain)
         .task {
@@ -47,28 +45,28 @@ struct InsightLabHomeCard: View {
     // MARK: - Active Experiment Content
 
     private func activeExperimentContent(_ experiment: InsightExperiment) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
+            HStack(spacing: SupportTheme.Spacing.s) {
                 // Icon
                 if let actionType = experiment.actionTypeEnum {
                     Image(systemName: actionType.icon)
                         .font(.title2)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(SupportTheme.onAccent)
                         .frame(width: 44, height: 44)
-                        .background(Color.accentColor)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .background(SupportTheme.accent)
+                        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
                 }
 
                 // Progress info
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     Text(experiment.title)
                         .font(.subheadline)
                         .fontWeight(.medium)
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(SupportTheme.textPrimary)
 
                     Text("Day \(experiment.currentDay) of 7")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
 
                 Spacer()
@@ -76,10 +74,10 @@ struct InsightLabHomeCard: View {
                 // Progress indicator
                 ZStack {
                     Circle()
-                        .stroke(Color(.systemGray4), lineWidth: 4)
+                        .stroke(SupportTheme.separator, lineWidth: 4)
                     Circle()
                         .trim(from: 0, to: Double(experiment.completedDays) / 7)
-                        .stroke(Color.accentColor, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                        .stroke(SupportTheme.accent, style: StrokeStyle(lineWidth: 4, lineCap: .round))
                         .rotationEffect(.degrees(-90))
 
                     Text("\(experiment.completedDays)/7")
@@ -98,11 +96,11 @@ struct InsightLabHomeCard: View {
                         .font(.caption)
                         .fontWeight(.medium)
                 }
-                .foregroundStyle(.blue)
-                .padding(.vertical, 8)
+                .foregroundStyle(SupportTheme.accent)
+                .padding(.vertical, SupportTheme.Spacing.xs)
                 .frame(maxWidth: .infinity)
-                .background(Color.accentColor.opacity(0.1))
-                .cornerRadius(8)
+                .background(SupportTheme.surface)
+                .cornerRadius(SupportTheme.controlRadius)
             }
         }
     }
@@ -110,42 +108,42 @@ struct InsightLabHomeCard: View {
     // MARK: - No Experiment Content
 
     private var noExperimentContent: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: SupportTheme.Spacing.s) {
             // Icon
             Image(systemName: "sparkles")
                 .font(.title2)
-                .foregroundStyle(.orange)
+                .foregroundStyle(SupportTheme.accent)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text("Run a 7-day experiment")
                     .font(.subheadline)
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(SupportTheme.textPrimary)
 
                 Text("See how habits affect your mood")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
 
             Spacer()
 
             // Start indicator
-            HStack(spacing: 4) {
+            HStack(spacing: SupportTheme.Spacing.xxs) {
                 Text("Start")
                     .font(.caption)
                     .fontWeight(.medium)
                 Image(systemName: "arrow.right")
                     .font(.caption2)
             }
-            .foregroundStyle(.blue)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(Color.accentColor.opacity(0.1))
-            .cornerRadius(12)
+            .foregroundStyle(SupportTheme.accent)
+            .padding(.horizontal, SupportTheme.Spacing.s)
+            .padding(.vertical, SupportTheme.Spacing.xxs)
+            .background(SupportTheme.surface)
+            .cornerRadius(SupportTheme.controlRadius)
         }
     }
 }
 
 #Preview("No Experiment") {
     InsightLabHomeCard()
-        .padding()
+        .padding(SupportTheme.Spacing.m)
 }

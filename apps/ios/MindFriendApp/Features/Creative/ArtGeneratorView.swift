@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ArtGeneratorView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var container: DependencyContainer
     @Environment(\.dismiss) private var dismiss
@@ -24,16 +25,17 @@ struct ArtGeneratorView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: SupportTheme.Spacing.l) {
                     if let imageURL = generatedImageURL {
                         generatedImageView(url: imageURL)
                     } else {
                         promptInputSection
                     }
                 }
-                .padding()
+                .padding(SupportTheme.Spacing.m)
             }
             .scrollDismissesKeyboard(.interactively)
+            .supportScreen()
             .navigationTitle("Create AI Art")
             .navigationBarTitleDisplayMode(.inline)
             .keyboardDoneButton()
@@ -47,14 +49,19 @@ struct ArtGeneratorView: View {
                     }
                 }
             }
-            .alert("Error", isPresented: Binding(
-                get: { error != nil },
-                set: { if !$0 { error = nil } }
-            )) {
-                Button("OK") { error = nil }
-            } message: {
-                if let error = error {
-                    Text(error)
+            .safeAreaInset(edge: .bottom) {
+                if error != nil {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
+                        if let error = error {
+                            Text(error)
+                        }
+
+                        Button("OK") { error = nil }
+                    }
+                    .foregroundStyle(SupportTheme.textSecondary)
+                    .buttonStyle(.supportSecondary)
+                    .supportCard()
+                    .padding(SupportTheme.Spacing.m)
                 }
             }
             .modifier(CreativeWorkSharePresentation(sharing: sharing))
@@ -80,27 +87,27 @@ struct ArtGeneratorView: View {
     // MARK: - Prompt Input Section
 
     private var promptInputSection: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: SupportTheme.Spacing.l) {
             // Prompt Input
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                 Text("Describe your feeling or mood")
                     .font(.headline)
 
                 Text("The AI will create unique artwork representing your emotions")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
 
                 TextField("e.g., A peaceful moment of clarity after a storm...", text: $prompt, axis: .vertical)
-                    .textFieldStyle(.roundedBorder)
+                    .supportField()
                     .lineLimit(3...6)
             }
 
             // Style Selection
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                 Text("Art Style")
                     .font(.headline)
 
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 100))], spacing: 12) {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 100))], spacing: SupportTheme.Spacing.s) {
                     ForEach(ArtStyle.allCases, id: \.self) { style in
                         StyleOptionButton(
                             style: style,
@@ -113,14 +120,14 @@ struct ArtGeneratorView: View {
             }
 
             // Mood Score Slider
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                 HStack {
                     Text("Current Mood")
                         .font(.headline)
                     Spacer()
                     Text("\(moodScore)/10")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
 
                 Slider(
@@ -139,20 +146,20 @@ struct ArtGeneratorView: View {
                 HStack {
                     Text("Low")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                     Spacer()
                     Text("High")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
             }
 
             // Mood Tags
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                 Text("Mood Tags (optional)")
                     .font(.headline)
 
-                ArtFlowLayout(spacing: 8) {
+                ArtFlowLayout(spacing: SupportTheme.Spacing.xs) {
                     ForEach(moodTags, id: \.self) { tag in
                         MoodTagButton(
                             tag: tag,
@@ -168,24 +175,24 @@ struct ArtGeneratorView: View {
                 }
             }
 
-            Spacer(minLength: 20)
+            Spacer(minLength: SupportTheme.Spacing.xl)
 
             // Streaming partial image preview during generation
             if isGenerating {
-                VStack(spacing: 12) {
+                VStack(spacing: SupportTheme.Spacing.s) {
                     if let partialImage {
                         ZStack {
                             Image(uiImage: partialImage)
                                 .resizable()
                                 .aspectRatio(contentMode: .fit)
                                 .frame(maxHeight: 300)
-                                .clipShape(RoundedRectangle(cornerRadius: 16))
+                                .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
                                 .opacity(0.8)
                                 .blur(radius: 1)
 
                             ProgressView()
                                 .scaleEffect(1.5)
-                                .tint(.white)
+                                .tint(SupportTheme.accent)
                         }
                         .accessibilityLabel("Generating art")
                         .accessibilityValue("Preview showing, refining details")
@@ -195,9 +202,9 @@ struct ArtGeneratorView: View {
                     }
                     Text(partialImage != nil ? "Refining your artwork..." : "Creating your artwork...")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
-                .padding()
+                .padding(SupportTheme.Spacing.m)
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel("Generating")
                 .accessibilityValue("Please wait while your artwork is being created")
@@ -210,7 +217,7 @@ struct ArtGeneratorView: View {
                 HStack {
                     if isGenerating {
                         ProgressView()
-                            .tint(.white)
+                            .tint(SupportTheme.accent)
                     } else {
                         Image(systemName: "wand.and.stars")
                     }
@@ -218,17 +225,17 @@ struct ArtGeneratorView: View {
                 }
                 .font(.headline)
                 .frame(maxWidth: .infinity)
-                .padding()
-                .background(prompt.isEmpty || isGenerating ? Color.gray : Color.accentColor)
-                .foregroundStyle(.white)
-                .cornerRadius(12)
+                .padding(SupportTheme.Spacing.m)
+                .background(prompt.isEmpty || isGenerating ? SupportTheme.textSecondary : SupportTheme.accent)
+                .foregroundStyle(prompt.isEmpty || isGenerating ? SupportTheme.textPrimary : SupportTheme.onAccent)
+                .cornerRadius(SupportTheme.controlRadius)
             }
             .disabled(prompt.isEmpty || isGenerating)
 
             if let quota = quotaRemaining {
                 Text("\(quota) generations remaining today")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
         }
     }
@@ -236,14 +243,14 @@ struct ArtGeneratorView: View {
     // MARK: - Generated Image View
 
     private func generatedImageView(url: URL) -> some View {
-        VStack(spacing: 20) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             AsyncImage(url: url) { phase in
                 switch phase {
                 case .success(let image):
                     image
                         .resizable()
                         .aspectRatio(contentMode: .fit)
-                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
                         .shadow(radius: 8)
                 case .failure:
                     failedImageView
@@ -260,20 +267,20 @@ struct ArtGeneratorView: View {
             Text("\"\(prompt)\"")
                 .font(.subheadline)
                 .italic()
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .multilineTextAlignment(.center)
-                .lineLimit(3)
-                .padding(.horizontal)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, SupportTheme.Spacing.m)
 
-            HStack(spacing: 4) {
+            HStack(spacing: SupportTheme.Spacing.xxs) {
                 Image(systemName: selectedStyle.icon)
                 Text(selectedStyle.displayName)
             }
             .font(.caption)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(SupportTheme.textSecondary)
 
             // Action Buttons - prevent text wrapping
-            HStack(spacing: 12) {
+            HStack(spacing: SupportTheme.Spacing.s) {
                 Button {
                     generatedImageURL = nil
                     generatedWork = nil
@@ -282,9 +289,9 @@ struct ArtGeneratorView: View {
                 } label: {
                     Label("New", systemImage: "arrow.counterclockwise")
                         .font(.subheadline)
-                        .lineLimit(1)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.supportSecondary)
 
                 if let work = generatedWork {
                     Button {
@@ -292,9 +299,9 @@ struct ArtGeneratorView: View {
                     } label: {
                         Label("Share", systemImage: "square.and.arrow.up")
                             .font(.subheadline)
-                            .lineLimit(1)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.supportSecondary)
                 }
 
                 if let work = generatedWork {
@@ -306,9 +313,9 @@ struct ArtGeneratorView: View {
                             systemImage: work.isFavorite ? "heart.fill" : "heart"
                         )
                         .font(.subheadline)
-                        .lineLimit(1)
+                        .fixedSize(horizontal: false, vertical: true)
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.supportSecondary)
                     .tint(work.isFavorite ? .red : nil)
                 }
             }
@@ -316,33 +323,33 @@ struct ArtGeneratorView: View {
             if let quota = quotaRemaining {
                 Text("\(quota) generations remaining today")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
         }
     }
 
     private var failedImageView: some View {
         Rectangle()
-            .fill(Color(.secondarySystemBackground))
+            .fill(SupportTheme.surface)
             .frame(height: 300)
             .overlay {
-                VStack(spacing: 8) {
+                VStack(spacing: SupportTheme.Spacing.xs) {
                     Image(systemName: "exclamationmark.triangle")
                         .font(.largeTitle)
                     Text("Failed to load image")
                         .font(.caption)
                 }
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
             }
-            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
     }
 
     private var moodColor: Color {
         switch moodScore {
         case 1...3: return .red
-        case 4...6: return .orange
-        case 7...10: return .green
-        default: return .blue
+        case 4...6: return SupportTheme.accent
+        case 7...10: return SupportTheme.accent
+        default: return SupportTheme.accent
         }
     }
 
@@ -452,22 +459,22 @@ struct StyleOptionButton: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 6) {
+            VStack(spacing: SupportTheme.Spacing.xxs) {
                 Image(systemName: style.icon)
                     .font(.title2)
                     .frame(height: 30)
 
                 Text(style.displayName)
                     .font(.caption)
-                    .lineLimit(1)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 12)
-            .background(isSelected ? Color.accentColor.opacity(0.2) : Color(.secondarySystemBackground))
-            .cornerRadius(12)
+            .padding(.vertical, SupportTheme.Spacing.s)
+            .background(isSelected ? SupportTheme.accent.opacity(0.2) : SupportTheme.surface)
+            .cornerRadius(SupportTheme.controlRadius)
             .overlay {
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
+                RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                    .stroke(isSelected ? SupportTheme.accent : Color.clear, lineWidth: 2)
             }
         }
         .buttonStyle(.plain)
@@ -487,11 +494,11 @@ struct MoodTagButton: View {
         Button(action: action) {
             Text(tag.capitalized)
                 .font(.caption)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(isSelected ? Color.accentColor : Color(.secondarySystemBackground))
-                .foregroundStyle(isSelected ? .white : .primary)
-                .cornerRadius(16)
+                .padding(.horizontal, SupportTheme.Spacing.s)
+                .padding(.vertical, SupportTheme.Spacing.xxs)
+                .background(isSelected ? SupportTheme.accent : SupportTheme.surface)
+                .foregroundStyle(isSelected ? SupportTheme.onAccent : SupportTheme.textPrimary)
+                .cornerRadius(SupportTheme.cardRadius)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(tag)

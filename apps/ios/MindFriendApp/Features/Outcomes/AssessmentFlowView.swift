@@ -6,7 +6,7 @@ struct AssessmentFlowView: View {
     let template: AssessmentTemplate
     @ObservedObject var outcomeService: OutcomeTrackingService
     @Binding var isPresented: Bool
-    
+
     @State private var currentQuestionIndex = 0
     @State private var answers: [String: Int] = [:]
     @State private var notes: String = ""
@@ -16,114 +16,103 @@ struct AssessmentFlowView: View {
     @State private var submission: OutcomeAssessmentSubmission?
     @State private var submissionError: String?
     @State private var showingSubmissionError = false
-    
+
     var currentQuestion: AssessmentQuestion? {
         guard currentQuestionIndex < template.questions.count else { return nil }
         return template.questions[currentQuestionIndex]
     }
-    
+
     var isLastQuestion: Bool {
         currentQuestionIndex == template.questions.count - 1
     }
-    
+
     var canSubmit: Bool {
         guard let type = AssessmentType(rawValue: template.code) else { return false }
         return (try? type.score(answers: answers, questions: template.questions)) != nil
     }
-    
+
     var progressPercentage: Double {
         let answered = Double(answers.count)
         let total = Double(template.questions.count)
         return answered / total
     }
-    
+
     var isPHQ9Q9: Bool {
         template.code == "PHQ9" && (currentQuestion?.id == "9" || currentQuestionIndex == 8)
     }
-    
+
     var body: some View {
         ZStack {
             // Background
-            LinearGradient(
-                gradient: Gradient(colors: [
-                    Color(red: 0.95, green: 0.97, blue: 1.0),
-                    Color(red: 0.92, green: 0.96, blue: 0.98)
-                ]),
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
+            SupportTheme.canvas
             .ignoresSafeArea()
-            
+
             VStack(spacing: 0) {
                 // Header with progress
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                     HStack {
-                        VStack(alignment: .leading, spacing: 4) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                             Text(template.name)
-                                .font(.system(size: 18, weight: .bold, design: .default))
-                                .foregroundColor(Color(red: 0.1, green: 0.3, blue: 0.5))
-                            
+                                .font(.system(.title3, design: .default).weight(.bold))
+                                .foregroundColor(SupportTheme.accent)
+
                             Text("Question \(currentQuestionIndex + 1) of \(template.questions.count)")
-                                .font(.system(size: 13, weight: .regular, design: .default))
-                                .foregroundColor(.gray)
+                                .font(.system(.caption, design: .default).weight(.regular))
+                                .foregroundColor(SupportTheme.textSecondary)
                         }
-                        
+
                         Spacer()
-                        
+
                         Button(action: { isPresented = false }) {
                             Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 24))
-                                .foregroundColor(.gray)
+                                .font(.system(.title2))
+                                .foregroundColor(SupportTheme.textSecondary)
                         }
                     }
-                    
+
                     // Progress bar
                     ProgressView(value: progressPercentage)
-                        .tint(Color(red: 0.2, green: 0.6, blue: 0.4))
+                        .tint(SupportTheme.accent)
                         .frame(height: 4)
                 }
-                .padding(20)
-                .background(Color.white)
-                .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
-                
+                .padding(SupportTheme.Spacing.m)
+                .background(SupportTheme.surface)
+                .shadow(color: SupportTheme.canvas.opacity(0.05), radius: 4, x: 0, y: 2)
+
                 // Question content
                 ScrollView {
-                    VStack(spacing: 20) {
+                    VStack(spacing: SupportTheme.Spacing.m) {
                         if let question = currentQuestion {
                             // Question text with special styling for PHQ-9 Q9
-                            VStack(alignment: .leading, spacing: 12) {
+                            VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                                 if isPHQ9Q9 {
-                                    HStack(spacing: 8) {
+                                    HStack(spacing: SupportTheme.Spacing.xs) {
                                         Image(systemName: "exclamationmark.circle.fill")
-                                            .font(.system(size: 16))
-                                            .foregroundColor(Color(red: 1.0, green: 0.2, blue: 0.2))
-                                        
+                                            .font(.system(.body))
+                                            .foregroundColor(SupportTheme.accent)
+
                                         Text("Important")
-                                            .font(.system(size: 12, weight: .semibold, design: .default))
-                                            .foregroundColor(Color(red: 1.0, green: 0.2, blue: 0.2))
+                                            .font(.system(.caption, design: .default).weight(.semibold))
+                                            .foregroundColor(SupportTheme.accent)
                                     }
-                                    .padding(10)
+                                    .padding(SupportTheme.Spacing.xs)
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .background(
-                                        RoundedRectangle(cornerRadius: 8)
-                                            .fill(Color(red: 1.0, green: 0.2, blue: 0.2).opacity(0.1))
+                                        RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                                            .fill(SupportTheme.accent.opacity(0.1))
                                     )
                                 }
-                                
+
                                 Text(question.text)
-                                    .font(.system(size: 18, weight: .semibold, design: .default))
-                                    .foregroundColor(Color(red: 0.1, green: 0.3, blue: 0.5))
+                                    .font(.system(.title3, design: .default).weight(.semibold))
+                                    .foregroundColor(SupportTheme.accent)
                                     .lineLimit(nil)
                             }
-                            .padding(20)
-                            .background(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .fill(Color.white)
-                                    .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
-                            )
-                            
+                            .padding(SupportTheme.Spacing.m)
+                            .background(SupportTheme.surface, in: RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
+
                             // Response options (dynamic count based on question)
-                            VStack(spacing: 12) {
+                            VStack(spacing: SupportTheme.Spacing.s) {
                                 ForEach(0..<question.responseOptions.count, id: \.self) { index in
                                     let optionLabel = question.responseOptions[index]
                                     let isSelected = answers[question.id] == index
@@ -137,88 +126,88 @@ struct AssessmentFlowView: View {
                                             showingCrisisAlert = true
                                         }
                                     }) {
-                                        HStack(spacing: 12) {
+                                        HStack(spacing: SupportTheme.Spacing.s) {
                                             Text(optionLabel)
-                                                .font(.system(size: 15, weight: .medium, design: .default))
+                                                .font(.system(.subheadline, design: .default).weight(.medium))
                                                 .foregroundColor(
                                                     isSelected ?
-                                                    Color(red: 0.2, green: 0.6, blue: 0.4) :
-                                                    Color(red: 0.1, green: 0.3, blue: 0.5)
+                                                    SupportTheme.accent :
+                                                    SupportTheme.accent
                                                 )
 
                                             Spacer()
 
                                             if isSelected {
                                                 Image(systemName: "checkmark.circle.fill")
-                                                    .font(.system(size: 20))
-                                                    .foregroundColor(Color(red: 0.2, green: 0.6, blue: 0.4))
+                                                    .font(.system(.title3))
+                                                    .foregroundColor(SupportTheme.accent)
                                             }
                                         }
-                                        .padding(14)
+                                        .padding(SupportTheme.Spacing.s)
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                         .background(
-                                            RoundedRectangle(cornerRadius: 10)
+                                            RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
                                                 .fill(
                                                     isSelected ?
-                                                    Color(red: 0.2, green: 0.6, blue: 0.4).opacity(0.1) :
-                                                    Color.white
+                                                    SupportTheme.accent.opacity(0.1) :
+                                                    SupportTheme.surface
                                                 )
                                                 .stroke(
                                                     isSelected ?
-                                                    Color(red: 0.2, green: 0.6, blue: 0.4) :
-                                                    Color.gray.opacity(0.2),
+                                                    SupportTheme.accent :
+                                                    SupportTheme.textSecondary.opacity(0.2),
                                                     lineWidth: 1
                                                 )
                                         )
                                     }
                                 }
                             }
-                            .padding(20)
+                            .padding(SupportTheme.Spacing.m)
                         }
-                        
+
                         // Optional notes section
                         if isLastQuestion {
-                            VStack(alignment: .leading, spacing: 10) {
+                            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                                 Text("Additional notes (optional)")
-                                    .font(.system(size: 14, weight: .semibold, design: .default))
-                                    .foregroundColor(Color(red: 0.1, green: 0.3, blue: 0.5))
-                                
+                                    .font(.system(.subheadline, design: .default).weight(.semibold))
+                                    .foregroundColor(SupportTheme.accent)
+
                                 TextEditor(text: $notes)
                                     .disabled(submission != nil)
-                                    .font(.system(size: 14, weight: .regular, design: .default))
+                                    .font(.system(.subheadline, design: .default).weight(.regular))
                                     .frame(height: 100)
-                                    .padding(10)
+                                    .padding(SupportTheme.Spacing.xs)
                                     .background(
-                                        RoundedRectangle(cornerRadius: 10)
-                                            .fill(Color.white)
-                                            .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+                                        RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                                            .fill(SupportTheme.surface)
+                                            .stroke(SupportTheme.textSecondary.opacity(0.2), lineWidth: 1)
                                     )
                             }
-                            .padding(20)
+                            .padding(SupportTheme.Spacing.m)
                         }
                     }
-                    .padding(.vertical, 20)
+                    .padding(.vertical, SupportTheme.Spacing.m)
                 }
-                
+
                 // Navigation buttons
-                HStack(spacing: 12) {
+                HStack(spacing: SupportTheme.Spacing.s) {
                     if currentQuestionIndex > 0 {
                         Button(action: {
                             currentQuestionIndex -= 1
                         }) {
                             Text("Previous")
-                                .font(.system(size: 15, weight: .semibold, design: .default))
-                                .foregroundColor(Color(red: 0.1, green: 0.3, blue: 0.5))
+                                .font(.system(.subheadline, design: .default).weight(.semibold))
+                                .foregroundColor(SupportTheme.accent)
                                 .frame(maxWidth: .infinity)
-                                .padding(12)
+                                .padding(SupportTheme.Spacing.s)
                                 .background(
-                                    RoundedRectangle(cornerRadius: 10)
-                                        .fill(Color.white)
-                                        .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+                                    RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                                        .fill(SupportTheme.surface)
+                                        .stroke(SupportTheme.textSecondary.opacity(0.2), lineWidth: 1)
                                 )
                         }
                     }
-                    
+
                     if !isLastQuestion {
                         Button(action: {
                             if answers[currentQuestion?.id ?? ""] != nil {
@@ -226,16 +215,16 @@ struct AssessmentFlowView: View {
                             }
                         }) {
                             Text("Next")
-                                .font(.system(size: 15, weight: .semibold, design: .default))
-                                .foregroundColor(.white)
+                                .font(.system(.subheadline, design: .default).weight(.semibold))
+                                .foregroundColor(answers[currentQuestion?.id ?? ""] != nil ? SupportTheme.onAccent : SupportTheme.textPrimary)
                                 .frame(maxWidth: .infinity)
-                                .padding(12)
+                                .padding(SupportTheme.Spacing.s)
                                 .background(
-                                    RoundedRectangle(cornerRadius: 10)
+                                    RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
                                         .fill(
                                             answers[currentQuestion?.id ?? ""] != nil ?
-                                            Color(red: 0.2, green: 0.6, blue: 0.4) :
-                                            Color.gray.opacity(0.3)
+                                            SupportTheme.accent :
+                                            SupportTheme.textSecondary.opacity(0.3)
                                         )
                                 )
                         }
@@ -249,19 +238,19 @@ struct AssessmentFlowView: View {
                             if isSubmitting {
                                 ProgressView()
                                     .frame(maxWidth: .infinity)
-                                    .padding(12)
+                                    .padding(SupportTheme.Spacing.s)
                             } else {
                                 Text("Submit Assessment")
-                                    .font(.system(size: 15, weight: .semibold, design: .default))
-                                    .foregroundColor(.white)
+                                    .font(.system(.subheadline, design: .default).weight(.semibold))
+                                    .foregroundColor(canSubmit ? SupportTheme.onAccent : SupportTheme.textPrimary)
                                     .frame(maxWidth: .infinity)
-                                    .padding(12)
+                                    .padding(SupportTheme.Spacing.s)
                                     .background(
-                                        RoundedRectangle(cornerRadius: 10)
+                                        RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
                                             .fill(
                                                 canSubmit ?
-                                                Color(red: 0.2, green: 0.6, blue: 0.4) :
-                                                Color.gray.opacity(0.3)
+                                                SupportTheme.accent :
+                                                SupportTheme.textSecondary.opacity(0.3)
                                             )
                                     )
                             }
@@ -269,47 +258,47 @@ struct AssessmentFlowView: View {
                         .disabled(!canSubmit || isSubmitting)
                     }
                 }
-                .padding(20)
-                .background(Color.white)
+                .padding(SupportTheme.Spacing.m)
+                .background(SupportTheme.surface)
             }
-            
+
             // Crisis resources stay available even if saving fails.
             if showingCrisisAlert {
                 ZStack {
-                    Color.black.opacity(0.4)
+                    SupportTheme.canvas.opacity(0.4)
                         .ignoresSafeArea()
-                    
-                    VStack(spacing: 20) {
-                        HStack(spacing: 12) {
+
+                    VStack(spacing: SupportTheme.Spacing.m) {
+                        HStack(spacing: SupportTheme.Spacing.s) {
                             Image(systemName: "heart.fill")
-                                .font(.system(size: 20))
-                                .foregroundColor(Color(red: 1.0, green: 0.2, blue: 0.2))
-                            
+                                .font(.system(.title3))
+                                .foregroundColor(SupportTheme.accent)
+
                             Text("We're here for you")
-                                .font(.system(size: 18, weight: .bold, design: .default))
-                                .foregroundColor(Color(red: 0.1, green: 0.3, blue: 0.5))
-                            
+                                .font(.system(.title3, design: .default).weight(.bold))
+                                .foregroundColor(SupportTheme.accent)
+
                             Spacer()
                         }
-                        
+
                         Text("If you're having thoughts of self-harm, please reach out to someone who can help.")
-                            .font(.system(size: 15, weight: .regular, design: .default))
-                            .foregroundColor(Color(red: 0.1, green: 0.3, blue: 0.5))
+                            .font(.system(.subheadline, design: .default).weight(.regular))
+                            .foregroundColor(SupportTheme.accent)
                             .lineLimit(nil)
-                        
-                        VStack(spacing: 10) {
+
+                        VStack(spacing: SupportTheme.Spacing.xs) {
                             Button(action: {
                                 if let url = URL(string: "tel:988") {
                                     UIApplication.shared.open(url)
                                 }
                             }) {
                                 Text("988 Suicide & Crisis Lifeline")
-                                    .font(.system(size: 14, weight: .semibold, design: .default))
-                                    .foregroundColor(.white)
+                                    .font(.system(.subheadline, design: .default).weight(.semibold))
+                                    .foregroundColor(SupportTheme.onAccent)
                                     .frame(maxWidth: .infinity)
-                                    .padding(12)
-                                    .background(Color(red: 1.0, green: 0.2, blue: 0.2))
-                                    .cornerRadius(8)
+                                    .padding(SupportTheme.Spacing.s)
+                                    .background(SupportTheme.accent)
+                                    .cornerRadius(SupportTheme.controlRadius)
                             }
 
                             Button(action: {
@@ -318,31 +307,28 @@ struct AssessmentFlowView: View {
                                 }
                             }) {
                                 Text("Crisis Text Line (text HOME to 741741)")
-                                    .font(.system(size: 14, weight: .semibold, design: .default))
-                                    .foregroundColor(.white)
+                                    .font(.system(.subheadline, design: .default).weight(.semibold))
+                                    .foregroundColor(SupportTheme.textPrimary)
                                     .frame(maxWidth: .infinity)
-                                    .padding(12)
-                                    .background(Color(red: 1.0, green: 0.2, blue: 0.2).opacity(0.8))
-                                    .cornerRadius(8)
+                                    .padding(SupportTheme.Spacing.s)
+                                    .background(SupportTheme.surface)
+                                    .cornerRadius(SupportTheme.controlRadius)
                             }
                         }
-                        
+
                         Button(action: {
                             showingCrisisAlert = false
                         }) {
                             Text("I'm Safe - Continue")
-                                .font(.system(size: 14, weight: .semibold, design: .default))
-                                .foregroundColor(Color(red: 0.1, green: 0.3, blue: 0.5))
+                                .font(.system(.subheadline, design: .default).weight(.semibold))
+                                .foregroundColor(SupportTheme.accent)
                                 .frame(maxWidth: .infinity)
-                                .padding(12)
+                                .padding(SupportTheme.Spacing.s)
                         }
                     }
-                    .padding(20)
-                    .background(
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(Color.white)
-                    )
-                    .padding(20)
+                    .padding(SupportTheme.Spacing.m)
+                    .background(SupportTheme.surface, in: RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
+                    .padding(SupportTheme.Spacing.m)
                 }
             }
         }
@@ -355,7 +341,7 @@ struct AssessmentFlowView: View {
             Text(submissionError ?? "Your answers are kept on this screen. Try saving again.")
         }
     }
-    
+
     private func submitAssessment() async {
         guard !isSubmitting, let type = AssessmentType(rawValue: template.code) else { return }
         isSubmitting = true

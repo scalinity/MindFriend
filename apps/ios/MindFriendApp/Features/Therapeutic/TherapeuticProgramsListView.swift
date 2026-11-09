@@ -15,7 +15,7 @@ struct TherapeuticProgramsListView: View {
     var body: some View {
         SupportRootNavigation(embedded: supportEmbedded) {
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: SupportTheme.Spacing.l) {
                     // Header
                     headerSection
 
@@ -32,10 +32,11 @@ struct TherapeuticProgramsListView: View {
                         }
                     }
 
-                    Spacer(minLength: 40)
+                    Spacer(minLength: SupportTheme.Spacing.xl)
                 }
-                .padding()
+                .padding(SupportTheme.Spacing.m)
             }
+            .supportScreen()
             .navigationTitle("Therapeutic Programs")
             .navigationBarTitleDisplayMode(.large)
             .refreshable {
@@ -61,13 +62,13 @@ struct TherapeuticProgramsListView: View {
     // MARK: - Header Section
 
     private var headerSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("Evidence-Based Programs")
                 .font(.headline)
 
             Text("Structured therapeutic programs designed by mental health professionals to help you develop lasting coping skills.")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -75,12 +76,12 @@ struct TherapeuticProgramsListView: View {
     // MARK: - Active Enrollment Card
 
     private func activeEnrollmentCard(_ enrollment: ProgramEnrollment) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
             HStack {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     Text("Currently Enrolled")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
 
                     Text(enrollment.program?.title ?? "Program")
                         .font(.headline)
@@ -92,32 +93,32 @@ struct TherapeuticProgramsListView: View {
                     Text(methodology.shortName)
                         .font(.caption)
                         .fontWeight(.bold)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(methodology.color.opacity(0.2))
-                        .foregroundStyle(methodology.color)
+                        .padding(.horizontal, SupportTheme.Spacing.xs)
+                        .padding(.vertical, SupportTheme.Spacing.xxs)
+                        .background(SupportTheme.accent.opacity(0.2))
+                        .foregroundStyle(SupportTheme.accent)
                         .clipShape(Capsule())
                 }
             }
 
             // Progress bar
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 HStack {
                     Text("Week \((enrollment.currentDay - 1) / 7 + 1)")
                         .font(.caption)
                     Spacer()
                     Text("\(Int(enrollment.progressPercentage * 100))% complete")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
 
                 GeometryReader { geometry in
                     ZStack(alignment: .leading) {
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(Color(.systemGray5))
+                        RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                            .fill(SupportTheme.separator)
 
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(Color.accentColor)
+                        RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                            .fill(SupportTheme.accent)
                             .frame(width: geometry.size.width * enrollment.progressPercentage)
                     }
                 }
@@ -133,24 +134,22 @@ struct TherapeuticProgramsListView: View {
                 }
                 .font(.subheadline)
                 .fontWeight(.medium)
-                .padding()
-                .background(Color.accentColor)
-                .foregroundStyle(.white)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .padding(SupportTheme.Spacing.m)
+                .background(SupportTheme.accent)
+                .foregroundStyle(SupportTheme.onAccent)
+                .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
             }
         }
-        .padding()
-        .background(Color(.systemGray6))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .supportCard()
     }
 
     // MARK: - Methodology Section
 
     private func methodologySection(methodology: TherapeuticMethodology, programs: [Program]) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
             HStack {
                 Image(systemName: methodology.icon)
-                    .foregroundStyle(methodology.color)
+                    .foregroundStyle(SupportTheme.accent)
 
                 Text(methodology.displayName)
                     .font(.headline)
@@ -159,7 +158,7 @@ struct TherapeuticProgramsListView: View {
 
                 Text("\(programs.count) program\(programs.count == 1 ? "" : "s")")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
 
             ForEach(programs, id: \.id) { program in
@@ -172,17 +171,17 @@ struct TherapeuticProgramsListView: View {
         Button(action: {
             selectedProgram = program
         }) {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                 HStack {
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                         Text(program.title)
                             .font(.subheadline)
                             .fontWeight(.medium)
-                            .foregroundStyle(.primary)
+                            .foregroundStyle(SupportTheme.textPrimary)
 
                         Text(program.formattedDuration)
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
 
                     Spacer()
@@ -190,32 +189,30 @@ struct TherapeuticProgramsListView: View {
                     if program.premiumOnly {
                         Image(systemName: "star.fill")
                             .font(.caption)
-                            .foregroundStyle(.yellow)
+                            .foregroundStyle(SupportTheme.accent)
                     }
 
                     Image(systemName: "chevron.right")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
 
                 // Target conditions
                 if !program.targetConditions.isEmpty {
-                    HStack(spacing: 8) {
+                    HStack(spacing: SupportTheme.Spacing.xs) {
                         ForEach(program.targetConditions.prefix(3), id: \.self) { condition in
                             Text(condition)
                                 .font(.caption2)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color(.systemGray5))
+                                .padding(.horizontal, SupportTheme.Spacing.xs)
+                                .padding(.vertical, SupportTheme.Spacing.xxs)
+                                .background(SupportTheme.separator)
                                 .clipShape(Capsule())
                         }
                     }
                 }
             }
-            .padding()
-            .background(Color(.systemBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-            .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
+            .supportCard()
+            .shadow(color: SupportTheme.canvas.opacity(0.05), radius: 8, x: 0, y: 2)
         }
         .buttonStyle(.plain)
     }
@@ -276,14 +273,14 @@ struct TherapeuticProgramDetailSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.l) {
                     // Header
                     headerSection
 
                     // Description
                     Text(program.description)
                         .font(.body)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
 
                     // Evidence summary
                     if let evidence = program.evidenceSummary {
@@ -298,10 +295,11 @@ struct TherapeuticProgramDetailSheet: View {
                     // Program details
                     detailsSection
 
-                    Spacer(minLength: 100)
+                    Spacer(minLength: SupportTheme.Spacing.xl)
                 }
-                .padding()
+                .padding(SupportTheme.Spacing.m)
             }
+            .supportScreen()
             .navigationTitle(program.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -327,14 +325,14 @@ struct TherapeuticProgramDetailSheet: View {
     }
 
     private var headerSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             if let methodology = program.methodology {
                 HStack {
                     Image(systemName: methodology.icon)
                     Text(methodology.displayName)
                 }
                 .font(.subheadline)
-                .foregroundStyle(methodology.color)
+                .foregroundStyle(SupportTheme.accent)
             }
 
             HStack {
@@ -343,20 +341,20 @@ struct TherapeuticProgramDetailSheet: View {
                 Label("\(program.estimatedDailyMinutes) min/day", systemImage: "clock")
             }
             .font(.caption)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(SupportTheme.textSecondary)
         }
     }
 
     private func evidenceCard(_ evidence: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             Label("Evidence-Based", systemImage: "checkmark.seal.fill")
                 .font(.caption)
                 .fontWeight(.medium)
-                .foregroundStyle(.green)
+                .foregroundStyle(SupportTheme.accent)
 
             Text(evidence)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
 
             if let url = program.evidenceUrl, let evidenceURL = URL(string: url) {
                 Link(destination: evidenceURL) {
@@ -365,21 +363,22 @@ struct TherapeuticProgramDetailSheet: View {
                 }
             }
         }
-        .padding()
+        .padding(SupportTheme.Spacing.m)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.green.opacity(0.1))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .background(SupportTheme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
     }
 
     private var objectivesSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("What You'll Learn")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
             ForEach(program.learningObjectives, id: \.self) { objective in
-                HStack(alignment: .top, spacing: 12) {
+                HStack(alignment: .top, spacing: SupportTheme.Spacing.s) {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(Color.accentColor)
+                        .foregroundStyle(SupportTheme.accent)
 
                     Text(objective)
                         .font(.subheadline)
@@ -389,21 +388,21 @@ struct TherapeuticProgramDetailSheet: View {
     }
 
     private var detailsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("Program Details")
                 .font(.headline)
 
             Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 12) {
                 GridRow {
                     Text("Duration")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                     Text(program.formattedDuration)
                         .fontWeight(.medium)
                 }
 
                 GridRow {
                     Text("Difficulty")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                     Text(program.difficulty.displayName)
                         .fontWeight(.medium)
                 }
@@ -411,7 +410,7 @@ struct TherapeuticProgramDetailSheet: View {
                 if program.requiresBaselineAssessment {
                     GridRow {
                         Text("Assessment")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                         Text(program.assessmentType?.uppercased() ?? "Required")
                             .fontWeight(.medium)
                     }
@@ -422,11 +421,11 @@ struct TherapeuticProgramDetailSheet: View {
     }
 
     private var enrollButton: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: SupportTheme.Spacing.xs) {
             if !canEnroll {
                 Text("Complete your current program before starting a new one.")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .multilineTextAlignment(.center)
             }
 
@@ -436,15 +435,15 @@ struct TherapeuticProgramDetailSheet: View {
                 Text(canEnroll ? "Start Program" : "Already Enrolled in Another Program")
                     .font(.headline)
                     .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(canEnroll ? Color.accentColor : Color(.systemGray4))
-                    .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .padding(SupportTheme.Spacing.m)
+                    .background(canEnroll ? SupportTheme.accent : SupportTheme.separator)
+                    .foregroundStyle(canEnroll ? SupportTheme.onAccent : SupportTheme.textPrimary)
+                    .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
             }
             .disabled(!canEnroll)
         }
-        .padding()
-        .background(Color(.systemBackground))
+        .padding(SupportTheme.Spacing.m)
+        .background(SupportTheme.canvas)
     }
 }
 

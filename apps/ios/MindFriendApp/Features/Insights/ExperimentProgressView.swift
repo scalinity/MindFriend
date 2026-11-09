@@ -4,6 +4,7 @@
 import SwiftUI
 
 struct ExperimentProgressView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var insightLabService: InsightLabService
     @State private var showingMoodPicker = false
     @State private var showingCancelConfirmation = false
@@ -17,7 +18,7 @@ struct ExperimentProgressView: View {
             if let experiment = insightLabService.activeExperiment {
                 let _ = print("[ExperimentProgressView] Rendering with experiment: \(experiment.title), days: \(experiment.days.count)")
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 24) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.l) {
                         // Progress header
                         progressHeader(experiment)
 
@@ -34,8 +35,9 @@ struct ExperimentProgressView: View {
                             cancelButton
                         }
                     }
-                    .padding()
+                    .padding(SupportTheme.Spacing.m)
                 }
+                .supportScreen()
                 .navigationTitle(experiment.title)
                 .navigationBarTitleDisplayMode(.inline)
             } else {
@@ -83,59 +85,67 @@ struct ExperimentProgressView: View {
         } message: {
             Text("Are you sure? Your progress will be lost and no report will be generated.")
         }
-        .alert("Error", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
-            Button("OK") {
-                errorMessage = nil
+        .safeAreaInset(edge: .bottom) {
+                if errorMessage != nil {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
+                    if let error = errorMessage {
+                        Text(error)
+                    }
+
+                    Button("OK") {
+                        errorMessage = nil
+                    }
+                }
+                    .foregroundStyle(SupportTheme.textSecondary)
+                    .buttonStyle(.supportSecondary)
+                    .supportCard()
+                    .padding(SupportTheme.Spacing.m)
+                }
             }
-        } message: {
-            if let error = errorMessage {
-                Text(error)
-            }
-        }
     }
 
     // MARK: - Progress Header
 
     private func progressHeader(_ experiment: InsightExperiment) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
             // Icon and status
-            HStack(spacing: 16) {
+            HStack(spacing: SupportTheme.Spacing.m) {
                 if let actionType = experiment.actionTypeEnum {
                     Image(systemName: actionType.icon)
                         .font(.largeTitle)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(SupportTheme.onAccent)
                         .frame(width: 70, height: 70)
-                        .background(Color.accentColor)
-                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                        .background(SupportTheme.accent)
+                        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
                 }
 
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     Text("Day \(experiment.currentDay) of 7")
                         .font(.title2)
                         .fontWeight(.bold)
 
                     Text("\(experiment.completedDays) days completed")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
 
                     if experiment.hasBaseline {
                         Label("Baseline data available", systemImage: "checkmark.circle.fill")
                             .font(.caption)
-                            .foregroundStyle(.green)
+                            .foregroundStyle(SupportTheme.accent)
                     }
                 }
             }
 
             // Progress bar
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                 ProgressView(value: Double(experiment.completedDays), total: 7)
-                    .tint(.accentColor)
+                    .tint(SupportTheme.accent)
                     .scaleEffect(x: 1, y: 2, anchor: .center)
 
                 HStack {
                     Text("\(experiment.daysRemaining) days remaining")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                     Spacer()
                     Text("\(Int((Double(experiment.completedDays) / 7) * 100))%")
                         .font(.caption)
@@ -143,9 +153,7 @@ struct ExperimentProgressView: View {
                 }
             }
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .supportCard()
     }
 
     // MARK: - Today's Action Card
@@ -154,25 +162,25 @@ struct ExperimentProgressView: View {
         let currentDay = experiment.currentDay
         let todayCompleted = experiment.days.first(where: { $0.dayIndex == currentDay })?.completed ?? false
 
-        return VStack(alignment: .leading, spacing: 16) {
+        return VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
             Text("Today's Action")
                 .font(.headline)
 
             Text(experiment.description)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
 
             if todayCompleted {
                 HStack {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
+                        .foregroundStyle(SupportTheme.accent)
                     Text("Completed for today!")
                         .fontWeight(.medium)
                 }
-                .padding()
+                .padding(SupportTheme.Spacing.m)
                 .frame(maxWidth: .infinity)
-                .background(Color.green.opacity(0.1))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .background(SupportTheme.surface)
+                .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
             } else {
                 Button {
                     selectedDayIndex = currentDay
@@ -184,26 +192,21 @@ struct ExperimentProgressView: View {
                             .fontWeight(.medium)
                     }
                     .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.accentColor)
-                    .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
+                .buttonStyle(.supportPrimary)
             }
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .supportCard()
     }
 
     // MARK: - Day Progress Grid
 
     private func dayProgressGrid(_ experiment: InsightExperiment) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("Progress")
                 .font(.headline)
 
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 7), spacing: 12) {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: SupportTheme.Spacing.s), count: 7), spacing: SupportTheme.Spacing.s) {
                 ForEach(1...7, id: \.self) { dayIndex in
                     let day = experiment.days.first(where: { $0.dayIndex == dayIndex })
                     let isToday = dayIndex == experiment.currentDay
@@ -219,17 +222,15 @@ struct ExperimentProgressView: View {
             }
 
             // Legend
-            HStack(spacing: 16) {
-                LegendItem(color: .green, label: "Completed")
-                LegendItem(color: .accentColor, label: "Today")
-                LegendItem(color: Color(.systemGray4), label: "Upcoming")
+            HStack(spacing: SupportTheme.Spacing.m) {
+                LegendItem(color: SupportTheme.accent, label: "Completed")
+                LegendItem(color: SupportTheme.accent, label: "Today")
+                LegendItem(color: SupportTheme.separator, label: "Upcoming")
             }
             .font(.caption)
-            .padding(.top, 8)
+            .padding(.top, SupportTheme.Spacing.xs)
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .supportCard()
     }
 
     // MARK: - Cancel Button
@@ -242,7 +243,7 @@ struct ExperimentProgressView: View {
                 .font(.subheadline)
         }
         .frame(maxWidth: .infinity)
-        .padding(.top)
+        .padding(.top, SupportTheme.Spacing.m)
     }
 
     // MARK: - Actions
@@ -268,7 +269,7 @@ struct DayBubble: View {
     let moodScore: Int?
 
     var body: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: SupportTheme.Spacing.xxs) {
             ZStack {
                 Circle()
                     .fill(bubbleColor)
@@ -277,11 +278,11 @@ struct DayBubble: View {
                 if isCompleted {
                     Image(systemName: "checkmark")
                         .font(.headline)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(SupportTheme.textPrimary)
                 } else {
                     Text("\(dayNumber)")
                         .font(.headline)
-                        .foregroundStyle(isToday ? .white : .secondary)
+                        .foregroundStyle(isToday ? SupportTheme.onAccent : SupportTheme.textSecondary)
                 }
             }
 
@@ -297,11 +298,11 @@ struct DayBubble: View {
 
     private var bubbleColor: Color {
         if isCompleted {
-            return .green
+            return SupportTheme.accent
         } else if isToday {
-            return .accentColor
+            return SupportTheme.accent
         } else {
-            return Color(.systemGray4)
+            return SupportTheme.separator
         }
     }
 
@@ -324,12 +325,12 @@ struct LegendItem: View {
     let label: String
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: SupportTheme.Spacing.xxs) {
             Circle()
                 .fill(color)
                 .frame(width: 10, height: 10)
             Text(label)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
     }
 }

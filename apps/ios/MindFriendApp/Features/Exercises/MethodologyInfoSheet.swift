@@ -12,13 +12,13 @@ struct MethodologyInfoSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
                     // Header
                     HStack {
                         Text(basis.shortLabel)
                             .font(.title)
                             .fontWeight(.bold)
-                            .foregroundColor(basis.color)
+                            .foregroundColor(SupportTheme.accent)
                         Spacer()
                     }
 
@@ -28,41 +28,42 @@ struct MethodologyInfoSheet: View {
                     if isLoading {
                         ProgressView()
                             .frame(maxWidth: .infinity)
-                            .padding()
+                            .padding(SupportTheme.Spacing.m)
                     } else if let info {
                         Text(info.description)
                             .font(.body)
 
                         if let source = info.source {
-                            VStack(alignment: .leading, spacing: 4) {
+                            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                                 Text("Source")
                                     .font(.caption)
-                                    .foregroundColor(.secondary)
+                                    .foregroundColor(SupportTheme.textSecondary)
                                 Text(source)
                                     .font(.caption)
                                     .italic()
                             }
-                            .padding()
+                            .padding(SupportTheme.Spacing.m)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(Color(.systemGray6))
-                            .cornerRadius(8)
+                            .background(SupportTheme.separator)
+                            .cornerRadius(SupportTheme.controlRadius)
                         }
                     }
 
                     // Therapist review note
-                    HStack(spacing: 8) {
+                    HStack(spacing: SupportTheme.Spacing.xs) {
                         Image(systemName: "checkmark.seal.fill")
-                            .foregroundColor(.green)
+                            .foregroundColor(SupportTheme.accent)
                         Text("Exercises using this methodology have been reviewed by mental health professionals.")
                             .font(.caption)
                     }
-                    .padding()
+                    .padding(SupportTheme.Spacing.m)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.green.opacity(0.1))
-                    .cornerRadius(8)
+                    .background(SupportTheme.surface)
+                    .cornerRadius(SupportTheme.controlRadius)
                 }
-                .padding()
+                .padding(SupportTheme.Spacing.m)
             }
+            .supportScreen()
             .navigationTitle("About This Method")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

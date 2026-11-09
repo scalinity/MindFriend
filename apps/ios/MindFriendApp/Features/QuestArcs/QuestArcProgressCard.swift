@@ -17,21 +17,21 @@ struct QuestArcProgressCard: View {
 
     var body: some View {
         Button(action: onTap) {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
                 // Header
                 HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack(spacing: 8) {
-                            Image(systemName: "flame.fill")
-                                .foregroundStyle(.orange)
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
+                        HStack(spacing: SupportTheme.Spacing.xs) {
+                            Image(systemName: "leaf.fill")
+                                .foregroundStyle(SupportTheme.accent)
                             Text("Active Journey")
                                 .font(.subheadline.weight(.medium))
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                         }
 
                         Text(arc?.title ?? "Quest Journey")
                             .font(.title3.weight(.semibold))
-                            .foregroundStyle(.primary)
+                            .foregroundStyle(SupportTheme.textPrimary)
                     }
 
                     Spacer()
@@ -71,16 +71,14 @@ struct QuestArcProgressCard: View {
                         icon: "chart.line.uptrend.xyaxis"
                     )
                 }
-                .padding(.top, 4)
+                .padding(.top, SupportTheme.Spacing.xxs)
 
                 // Status badge for paused arcs
                 if userArc.status == .paused {
                     pausedBadge
                 }
             }
-            .padding()
-            .background(Color(.secondarySystemBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .supportCard()
         }
         .buttonStyle(.plain)
     }
@@ -106,19 +104,19 @@ struct QuestArcProgressCard: View {
     }
 
     private var progressSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             // Day progress text
             HStack {
                 Text("Day \(userArc.currentDay) of \(userArc.snapshotDurationDays)")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
 
                 Spacer()
 
                 if let nextMilestone = userArc.nextMilestoneDay {
                     Text("Next milestone: Day \(nextMilestone)")
                         .font(.caption)
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(SupportTheme.accent)
                 }
             }
 
@@ -130,29 +128,25 @@ struct QuestArcProgressCard: View {
 
                 ZStack(alignment: .leading) {
                     // Background track
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(Color(.systemGray5))
+                    RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                        .fill(SupportTheme.separator)
                         .frame(height: 8)
 
                     // Progress fill
-                    RoundedRectangle(cornerRadius: 4)
+                    RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
                         .fill(
-                            LinearGradient(
-                                colors: [categoryColor.opacity(0.8), categoryColor],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
+                            SupportTheme.surface
                         )
                         .frame(width: width * userArc.progressPercentage, height: 8)
 
                     // Milestone markers (using cached positions)
                     ForEach(markers) { marker in
                         Circle()
-                            .fill(marker.isCompleted ? categoryColor : Color(.systemGray4))
+                            .fill(marker.isCompleted ? categoryColor : SupportTheme.separator)
                             .frame(width: 12, height: 12)
                             .overlay(
                                 Circle()
-                                    .stroke(Color(.systemBackground), lineWidth: 2)
+                                    .stroke(SupportTheme.canvas, lineWidth: 2)
                             )
                             .offset(x: (width * marker.position) - 6)
                     }
@@ -174,36 +168,36 @@ struct QuestArcProgressCard: View {
     }
 
     private func statItem(value: String, label: String, icon: String) -> some View {
-        HStack(spacing: 6) {
+        HStack(spacing: SupportTheme.Spacing.xxs) {
             Image(systemName: icon)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text(value)
                     .font(.subheadline.weight(.semibold))
                 Text(label)
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var pausedBadge: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: SupportTheme.Spacing.xxs) {
             Image(systemName: "pause.circle.fill")
             Text("Paused")
                 .font(.caption.weight(.medium))
             Text("- Tap to resume")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
-        .foregroundStyle(.orange)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(Color.orange.opacity(0.1))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .foregroundStyle(SupportTheme.accent)
+        .padding(.horizontal, SupportTheme.Spacing.s)
+        .padding(.vertical, SupportTheme.Spacing.xs)
+        .background(SupportTheme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
     }
 
     // MARK: - Helpers
@@ -217,18 +211,18 @@ struct NoActiveArcCard: View {
 
     var body: some View {
         Button(action: onBrowse) {
-            VStack(spacing: 16) {
+            VStack(spacing: SupportTheme.Spacing.m) {
                 Image(systemName: "map.fill")
                     .font(.largeTitle)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
 
-                VStack(spacing: 4) {
+                VStack(spacing: SupportTheme.Spacing.xxs) {
                     Text("Start a Quest Journey")
                         .font(.headline)
 
                     Text("Multi-day programs to build lasting habits")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                         .multilineTextAlignment(.center)
                 }
 
@@ -237,12 +231,12 @@ struct NoActiveArcCard: View {
                     Text("Browse Journeys")
                         .font(.subheadline.weight(.medium))
                 }
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(SupportTheme.accent)
             }
-            .padding()
+            .padding(SupportTheme.Spacing.m)
             .frame(maxWidth: .infinity)
-            .background(Color(.secondarySystemBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .background(SupportTheme.surface)
+            .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
         }
         .buttonStyle(.plain)
     }
@@ -281,10 +275,10 @@ struct NoActiveArcCard: View {
         ),
         onTap: {}
     )
-    .padding()
+    .padding(SupportTheme.Spacing.m)
 }
 
 #Preview("No Active Arc") {
     NoActiveArcCard(onBrowse: {})
-        .padding()
+        .padding(SupportTheme.Spacing.m)
 }

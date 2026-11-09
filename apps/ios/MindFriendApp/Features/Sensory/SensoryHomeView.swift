@@ -14,28 +14,28 @@ struct SensoryHomeView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 24) {
+            VStack(spacing: SupportTheme.Spacing.l) {
                 // Header
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                     Text("Sensory Toolkit")
                         .font(.largeTitle)
                         .fontWeight(.bold)
 
                     Text("Use gentle vibrations, calming visuals, or nature sounds to regulate your nervous system")
                         .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(SupportTheme.textSecondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal)
+                .padding(.horizontal, SupportTheme.Spacing.m)
 
                 // Modality cards
-                VStack(spacing: 16) {
+                VStack(spacing: SupportTheme.Spacing.m) {
                     NavigationLink(destination: TactileLibraryView()) {
                         ModalityCard(
                             title: "Tactile",
                             subtitle: "Feel gentle vibrations",
                             icon: "hand.tap.fill",
-                            color: .blue,
+                            color: SupportTheme.accent,
                             patternCount: TactilePattern.library.count
                         )
                     }
@@ -45,7 +45,7 @@ struct SensoryHomeView: View {
                             title: "Visual",
                             subtitle: "Watch calming animations",
                             icon: "eye.fill",
-                            color: .purple,
+                            color: SupportTheme.accent,
                             patternCount: VisualAnimation.library.count
                         )
                     }
@@ -55,19 +55,20 @@ struct SensoryHomeView: View {
                             title: "Audio",
                             subtitle: "Listen to nature sounds",
                             icon: "speaker.wave.3.fill",
-                            color: .teal,
+                            color: SupportTheme.accent,
                             patternCount: AudioSoundscape.library.count
                         )
                     }
                 }
-                .padding(.horizontal)
+                .padding(.horizontal, SupportTheme.Spacing.m)
 
                 // Recent sessions (if any)
                 if !recentSessions.isEmpty {
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                         Text("Recent Sessions")
                             .font(.headline)
-                            .padding(.horizontal)
+                .accessibilityAddTraits(.isHeader)
+                            .padding(.horizontal, SupportTheme.Spacing.m)
 
                         ForEach(recentSessions.prefix(3)) { session in
                             RecentSessionRow(session: session)
@@ -76,10 +77,11 @@ struct SensoryHomeView: View {
                 }
 
                 // Tips section
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                     Text("Tips")
                         .font(.headline)
-                        .padding(.horizontal)
+                .accessibilityAddTraits(.isHeader)
+                        .padding(.horizontal, SupportTheme.Spacing.m)
 
                     SensoryTipCard(
                         icon: "headphones",
@@ -93,10 +95,11 @@ struct SensoryHomeView: View {
                         message: "Start with 5-10 minutes. Sessions auto-pause at 30 minutes to prevent overuse."
                     )
                 }
-                .padding(.horizontal)
+                .padding(.horizontal, SupportTheme.Spacing.m)
             }
-            .padding(.vertical)
+            .padding(.vertical, SupportTheme.Spacing.m)
         }
+        .supportScreen()
         .navigationTitle("Sensory Toolkit")
         .navigationBarTitleDisplayMode(.inline)
         .task {
@@ -120,7 +123,7 @@ struct ModalityCard: View {
     let patternCount: Int
 
     var body: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: SupportTheme.Spacing.m) {
             // Icon
             ZStack {
                 Circle()
@@ -134,35 +137,30 @@ struct ModalityCard: View {
             .fixedSize()
 
             // Info
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text(title)
                     .font(.title3)
                     .fontWeight(.semibold)
-                    .foregroundColor(.primary)
+                    .foregroundColor(SupportTheme.textPrimary)
                     .multilineTextAlignment(.leading)
 
                 Text(subtitle)
                     .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(SupportTheme.textSecondary)
                     .multilineTextAlignment(.leading)
 
                 Text("\(patternCount) patterns available")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(SupportTheme.textSecondary)
                     .multilineTextAlignment(.leading)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
             Image(systemName: "chevron.right")
                 .font(.caption)
-                .foregroundColor(.secondary)
+                .foregroundColor(SupportTheme.textSecondary)
         }
-        .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color(.systemBackground))
-                .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 2)
-        )
+        .supportCard()
     }
 }
 
@@ -172,13 +170,13 @@ struct RecentSessionRow: View {
     let session: SensorySession
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: SupportTheme.Spacing.s) {
             Image(systemName: session.modality.icon)
                 .font(.title3)
-                .foregroundColor(.secondary)
+                .foregroundColor(SupportTheme.textSecondary)
                 .frame(width: 40)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text(session.modality.displayName)
                     .font(.subheadline)
                     .fontWeight(.medium)
@@ -186,18 +184,14 @@ struct RecentSessionRow: View {
                 if let duration = session.durationSeconds {
                     Text("\(duration / 60) min • \(session.startedAt.formatted(.relative(presentation: .named)))")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(SupportTheme.textSecondary)
                 }
             }
 
             Spacer()
         }
-        .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color(.secondarySystemBackground))
-        )
-        .padding(.horizontal)
+        .supportCard()
+        .padding(.horizontal, SupportTheme.Spacing.m)
     }
 }
 
@@ -209,13 +203,13 @@ struct SensoryTipCard: View {
     let message: String
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: SupportTheme.Spacing.s) {
             Image(systemName: icon)
                 .font(.title3)
-                .foregroundColor(.blue)
+                .foregroundColor(SupportTheme.accent)
                 .frame(width: 30)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text(title)
                     .font(.subheadline)
                     .fontWeight(.semibold)
@@ -223,16 +217,16 @@ struct SensoryTipCard: View {
 
                 Text(message)
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(SupportTheme.textSecondary)
                     .multilineTextAlignment(.leading)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
+        .padding(SupportTheme.Spacing.m)
         .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.blue.opacity(0.1))
+            RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                .fill(SupportTheme.accent.opacity(0.1))
         )
     }
 }

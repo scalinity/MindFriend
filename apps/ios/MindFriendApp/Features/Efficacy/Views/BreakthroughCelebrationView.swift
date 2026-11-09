@@ -9,8 +9,6 @@ import SwiftUI
 
 struct BreakthroughCelebrationView: View {
     @Environment(\.dismiss) private var dismiss
-    @State private var isAnimating = false
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let breakthroughSecond: Int?
     let onDismiss: () -> Void
@@ -18,7 +16,7 @@ struct BreakthroughCelebrationView: View {
     var body: some View {
         ZStack {
             // Background overlay
-            Color.black.opacity(0.4)
+            SupportTheme.canvas.opacity(0.4)
                 .ignoresSafeArea()
                 .onTapGesture {
                     dismiss()
@@ -28,81 +26,39 @@ struct BreakthroughCelebrationView: View {
             CelebrationParticles().ignoresSafeArea()
 
             // Celebration card
-            VStack(spacing: 24) {
-                // Sparkles icon
-                ZStack {
-                    Circle()
-                        .fill(
-                            LinearGradient(
-                                colors: [.purple, .pink],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .frame(width: 100, height: 100)
-                        .scaleEffect(isAnimating && !reduceMotion ? 1.2 : 1.0)
-                        .animation(reduceMotion ? nil : .easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: isAnimating)
-
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 48))
-                        .foregroundColor(.white)
-                        .rotationEffect(.degrees(isAnimating && !reduceMotion ? 360 : 0))
-                        .animation(reduceMotion ? nil : .linear(duration: 2).repeatForever(autoreverses: false), value: isAnimating)
-                }
+            VStack(spacing: SupportTheme.Spacing.l) {
+                CelebrationEmblem(.symbol("sparkles"))
+                    .celebrationReveal()
 
                 // Title
-                Text("Breakthrough!")
-                    .font(.system(size: 32, weight: .bold))
-                    .foregroundColor(.primary)
+                Text("A moment of change")
+                    .font(.system(.largeTitle).weight(.bold))
+                    .foregroundColor(SupportTheme.textPrimary)
 
                 // Message
-                VStack(spacing: 8) {
-                    Text("You just experienced a significant emotional shift!")
+                VStack(spacing: SupportTheme.Spacing.xs) {
+                    Text("You experienced a meaningful emotional shift.")
                         .font(.headline)
                         .multilineTextAlignment(.center)
 
                     if let second = breakthroughSecond {
                         Text("Detected at \(formatTime(second))")
                             .font(.subheadline)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(SupportTheme.textSecondary)
                     }
                 }
 
-                // Dismiss button
-                Button(action: {
+                Button("Continue") {
                     dismiss()
                     onDismiss()
-                }) {
-                    Text("Continue")
-                        .font(.headline)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(
-                            LinearGradient(
-                                colors: [.purple, .pink],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
-                        .cornerRadius(12)
                 }
+                .buttonStyle(.supportPrimary)
             }
-            .padding(32)
-            .background(
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(Color(.systemBackground))
-                    .shadow(color: .black.opacity(0.2), radius: 20, x: 0, y: 10)
-            )
-            .padding(.horizontal, 32)
-            .scaleEffect(isAnimating || reduceMotion ? 1.0 : 0.8)
-            .opacity(isAnimating ? 1.0 : 0)
+            .supportCard()
+            .padding(.horizontal, SupportTheme.Spacing.xl)
+            .celebrationReveal()
         }
         .onAppear {
-            withAnimation(reduceMotion ? .easeInOut(duration: 0.3) : .spring(response: 0.5, dampingFraction: 0.7)) {
-                isAnimating = true
-            }
-
             // Auto-dismiss after 5 seconds
             DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
                 dismiss()

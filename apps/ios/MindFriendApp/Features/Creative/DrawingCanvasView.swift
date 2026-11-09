@@ -26,6 +26,7 @@ struct DrawingCanvasView: View {
                     drawingToolbar
                 }
             }
+            .supportScreen()
             .navigationTitle("Draw")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -36,19 +37,25 @@ struct DrawingCanvasView: View {
                 }
 
                 ToolbarItem(placement: .topBarTrailing) {
-                    HStack(spacing: 16) {
+                    HStack(spacing: SupportTheme.Spacing.m) {
                         Button {
                             drawingState.undo()
                         } label: {
                             Image(systemName: "arrow.uturn.backward")
+                            .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                         }
+                        .accessibilityLabel("Undo")
+                        .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                         .disabled(!drawingState.canUndo)
 
                         Button {
                             drawingState.redo()
                         } label: {
                             Image(systemName: "arrow.uturn.forward")
+                            .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                         }
+                        .accessibilityLabel("Redo")
+                        .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                         .disabled(!drawingState.canRedo)
 
                         Button {
@@ -64,11 +71,19 @@ struct DrawingCanvasView: View {
             .sheet(isPresented: $showSaveSheet) {
                 saveDrawingSheet
             }
-            .alert("Error", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
-                Button("OK") { error = nil }
-            } message: {
-                if let error = error {
-                    Text(error)
+            .safeAreaInset(edge: .bottom) {
+                if error != nil {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
+                        if let error = error {
+                            Text(error)
+                        }
+
+                        Button("OK") { error = nil }
+                    }
+                    .foregroundStyle(SupportTheme.textSecondary)
+                    .buttonStyle(.supportSecondary)
+                    .supportCard()
+                    .padding(SupportTheme.Spacing.m)
                 }
             }
         }
@@ -77,31 +92,31 @@ struct DrawingCanvasView: View {
     // MARK: - Drawing Toolbar
 
     private var drawingToolbar: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: SupportTheme.Spacing.s) {
             // Tool selection
-            HStack(spacing: 16) {
+            HStack(spacing: SupportTheme.Spacing.m) {
                 ForEach(DrawingTool.allCases, id: \.self) { tool in
                     Button {
                         drawingState.selectedTool = tool
                     } label: {
-                        VStack(spacing: 4) {
+                        VStack(spacing: SupportTheme.Spacing.xxs) {
                             Image(systemName: tool.icon)
                                 .font(.title3)
                             Text(tool.displayName)
                                 .font(.caption2)
                         }
                         .frame(width: 50)
-                        .padding(.vertical, 8)
-                        .background(drawingState.selectedTool == tool ? Color.accentColor.opacity(0.2) : Color.clear)
-                        .cornerRadius(8)
+                        .padding(.vertical, SupportTheme.Spacing.xs)
+                        .background(drawingState.selectedTool == tool ? SupportTheme.accent.opacity(0.2) : Color.clear)
+                        .cornerRadius(SupportTheme.controlRadius)
                     }
-                    .foregroundStyle(drawingState.selectedTool == tool ? .primary : .secondary)
+                    .foregroundStyle(drawingState.selectedTool == tool ? .primary : SupportTheme.textSecondary)
                 }
             }
 
             // Color picker
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
+                HStack(spacing: SupportTheme.Spacing.s) {
                     ForEach(DrawingState.presetColors, id: \.self) { color in
                         Button {
                             drawingState.selectedColor = color
@@ -111,7 +126,7 @@ struct DrawingCanvasView: View {
                                 .frame(width: 32, height: 32)
                                 .overlay {
                                     Circle()
-                                        .stroke(drawingState.selectedColor == color ? Color.primary : Color.clear, lineWidth: 2)
+                                        .stroke(drawingState.selectedColor == color ? SupportTheme.textPrimary : Color.clear, lineWidth: 2)
                                 }
                         }
                     }
@@ -120,26 +135,26 @@ struct DrawingCanvasView: View {
                         .labelsHidden()
                         .frame(width: 32, height: 32)
                 }
-                .padding(.horizontal)
+                .padding(.horizontal, SupportTheme.Spacing.m)
             }
 
             // Brush size slider
             HStack {
                 Image(systemName: "circle.fill")
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
 
                 Slider(value: $drawingState.lineWidth, in: 1...30)
                     .frame(maxWidth: 200)
 
                 Image(systemName: "circle.fill")
                     .font(.title3)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
-            .padding(.horizontal, 32)
+            .padding(.horizontal, SupportTheme.Spacing.xl)
         }
-        .padding()
-        .background(.ultraThinMaterial)
+        .padding(SupportTheme.Spacing.m)
+        .background(SupportTheme.elevated)
     }
 
     // MARK: - Save Sheet
@@ -156,7 +171,7 @@ struct DrawingCanvasView: View {
                         Text("Mood")
                         Spacer()
                         Text("\(moodScore)/10")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                     Slider(
                         value: Binding(
@@ -168,6 +183,7 @@ struct DrawingCanvasView: View {
                     )
                 }
             }
+            .supportScreen()
             .navigationTitle("Save Drawing")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -264,12 +280,12 @@ class DrawingState: ObservableObject {
     func redo() {
         canvasView.undoManager?.redo()
     }
-    
+
     func clear() {
         canvasView.drawing = PKDrawing()
         updateState()
     }
-    
+
     func updateState() {
         canUndo = canvasView.undoManager?.canUndo ?? false
         canRedo = canvasView.undoManager?.canRedo ?? false
@@ -282,12 +298,12 @@ class DrawingState: ObservableObject {
             // Fill background with white since PKCanvasView is transparent by default in some contexts
             UIColor.white.setFill()
             context.fill(canvasView.bounds)
-            
+
             canvasView.drawHierarchy(in: canvasView.bounds, afterScreenUpdates: true)
         }
         return image.pngData()
     }
-    
+
     /// Convert PKDrawing to simplified DrawingStroke model for storage/replay
     func generateStrokes() -> [DrawingStroke] {
         return canvasView.drawing.strokes.compactMap { pkStroke -> DrawingStroke? in
@@ -299,15 +315,15 @@ class DrawingState: ObservableObject {
             case .watercolor: tool = .watercolor
             default: tool = .pen
             }
-            
+
             // Extract points
             let points = pkStroke.path.compactMap { $0.location }
             guard !points.isEmpty else { return nil }
-            
+
             // Approximate width from the first point of the path
             // PKStroke doesn't expose a global width, so we take a sample
             let approxWidth = pkStroke.path.first?.size.width ?? 5.0
-            
+
             return DrawingStroke(
                 id: UUID(),
                 points: points,
@@ -413,10 +429,10 @@ struct CreativeExercisesListView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 20) {
+            VStack(spacing: SupportTheme.Spacing.m) {
                 // Category filter
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
+                    HStack(spacing: SupportTheme.Spacing.xs) {
                         FilterChip(
                             label: "All",
                             isSelected: selectedCategory == nil,
@@ -431,13 +447,13 @@ struct CreativeExercisesListView: View {
                             )
                         }
                     }
-                    .padding(.horizontal)
+                    .padding(.horizontal, SupportTheme.Spacing.m)
                 }
 
                 // Exercises list
                 if isLoading {
                     ProgressView()
-                        .padding(.top, 40)
+                        .padding(.top, SupportTheme.Spacing.xl)
                 } else if filteredExercises.isEmpty {
                     ContentUnavailableView(
                         "No Exercises",
@@ -445,7 +461,7 @@ struct CreativeExercisesListView: View {
                         description: Text("Check back soon for new creative exercises")
                     )
                 } else {
-                    LazyVStack(spacing: 16) {
+                    LazyVStack(spacing: SupportTheme.Spacing.m) {
                         ForEach(filteredExercises) { exercise in
                             NavigationLink {
                                 CreativeExerciseDetailView(exercise: exercise)
@@ -455,11 +471,12 @@ struct CreativeExercisesListView: View {
                             .buttonStyle(.plain)
                         }
                     }
-                    .padding(.horizontal)
+                    .padding(.horizontal, SupportTheme.Spacing.m)
                 }
             }
-            .padding(.vertical)
+            .padding(.vertical, SupportTheme.Spacing.m)
         }
+        .supportScreen()
         .navigationTitle("Creative Exercises")
         .task {
             await loadExercises()
@@ -482,15 +499,15 @@ struct CreativeExerciseCard: View {
     let exercise: CreativeExercise
 
     var body: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: SupportTheme.Spacing.m) {
             Image(systemName: exercise.exerciseType.icon)
                 .font(.title)
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(SupportTheme.accent)
                 .frame(width: 60, height: 60)
-                .background(Color.accentColor.opacity(0.1))
-                .cornerRadius(12)
+                .background(SupportTheme.accent.opacity(0.1))
+                .cornerRadius(SupportTheme.controlRadius)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 HStack {
                     Text(exercise.title)
                         .font(.headline)
@@ -498,31 +515,29 @@ struct CreativeExerciseCard: View {
                     if exercise.isPremium {
                         Image(systemName: "star.fill")
                             .font(.caption)
-                            .foregroundStyle(.yellow)
+                            .foregroundStyle(SupportTheme.accent)
                     }
                 }
 
                 Text(exercise.description)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
+                    .foregroundStyle(SupportTheme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
 
-                HStack(spacing: 8) {
+                HStack(spacing: SupportTheme.Spacing.xs) {
                     Label("\(exercise.estimatedMinutes) min", systemImage: "clock")
                     Label(exercise.difficulty.rawValue.capitalized, systemImage: "chart.bar")
                 }
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
             }
 
             Spacer()
 
             Image(systemName: "chevron.right")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .cornerRadius(16)
+        .supportCard()
     }
 }
 
@@ -540,26 +555,26 @@ struct CreativeExerciseDetailView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.l) {
                 // Header
-                HStack(spacing: 16) {
+                HStack(spacing: SupportTheme.Spacing.m) {
                     Image(systemName: exercise.exerciseType.icon)
                         .font(.largeTitle)
-                        .foregroundStyle(Color.accentColor)
+                        .foregroundStyle(SupportTheme.accent)
                         .frame(width: 80, height: 80)
-                        .background(Color.accentColor.opacity(0.1))
-                        .cornerRadius(16)
+                        .background(SupportTheme.accent.opacity(0.1))
+                        .cornerRadius(SupportTheme.cardRadius)
 
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                         Text(exercise.title)
                             .font(.title2.bold())
 
-                        HStack(spacing: 12) {
+                        HStack(spacing: SupportTheme.Spacing.s) {
                             Label("\(exercise.estimatedMinutes) min", systemImage: "clock")
                             Label(exercise.difficulty.rawValue.capitalized, systemImage: "chart.bar")
                         }
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                     }
                 }
 
@@ -568,18 +583,18 @@ struct CreativeExerciseDetailView: View {
                     .font(.body)
 
                 // Instructions
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                     Text("Instructions")
                         .font(.headline)
 
                     Text(exercise.instructions)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
 
                 if isStarted && !isComplete {
                     // Mood before
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                         Text("How do you feel before starting?")
                             .font(.headline)
 
@@ -601,7 +616,7 @@ struct CreativeExerciseDetailView: View {
 
                 if isComplete {
                     // Mood after
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                         Text("How do you feel now?")
                             .font(.headline)
 
@@ -621,17 +636,17 @@ struct CreativeExerciseDetailView: View {
                     }
 
                     // Reflection
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                         Text("Reflection (optional)")
                             .font(.headline)
 
                         TextField("What did you notice during this exercise?", text: $reflection, axis: .vertical)
-                            .textFieldStyle(.roundedBorder)
+                            .supportField()
                             .lineLimit(3...6)
                     }
                 }
 
-                Spacer(minLength: 20)
+                Spacer(minLength: SupportTheme.Spacing.xl)
 
                 // Action button
                 if !isStarted {
@@ -641,11 +656,8 @@ struct CreativeExerciseDetailView: View {
                         Text("Start Exercise")
                             .font(.headline)
                             .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.accentColor)
-                            .foregroundStyle(.white)
-                            .cornerRadius(12)
                     }
+                    .buttonStyle(.supportPrimary)
                 } else if !isComplete {
                     Button {
                         isComplete = true
@@ -653,11 +665,8 @@ struct CreativeExerciseDetailView: View {
                         Text("I'm Done")
                             .font(.headline)
                             .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.green)
-                            .foregroundStyle(.white)
-                            .cornerRadius(12)
                     }
+                    .buttonStyle(.supportPrimary)
                 } else {
                     Button {
                         Task { await completeExercise() }
@@ -665,14 +674,11 @@ struct CreativeExerciseDetailView: View {
                         Text("Complete & Save")
                             .font(.headline)
                             .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.accentColor)
-                            .foregroundStyle(.white)
-                            .cornerRadius(12)
                     }
+                    .buttonStyle(.supportPrimary)
                 }
             }
-            .padding()
+            .padding(SupportTheme.Spacing.m)
         }
         .navigationBarTitleDisplayMode(.inline)
     }

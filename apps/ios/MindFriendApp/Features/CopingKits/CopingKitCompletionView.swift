@@ -9,12 +9,11 @@ struct CopingKitCompletionView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var selectedFeedback: Bool?
     @State private var feedbackComment: String = ""
-    @State private var showingCelebration = false
 
     var body: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: SupportTheme.Spacing.l) {
             ScrollView {
-                VStack(spacing: 32) {
+                VStack(spacing: SupportTheme.Spacing.xl) {
                     // Celebration icon
                     celebrationIcon
 
@@ -32,7 +31,7 @@ struct CopingKitCompletionView: View {
                         feedbackSubmittedSection
                     }
                 }
-                .padding(20)
+                .padding(SupportTheme.Spacing.m)
             }
 
             // Bottom action
@@ -40,44 +39,28 @@ struct CopingKitCompletionView: View {
                 doneButton
             }
         }
-        .onAppear {
-            showingCelebration = true
-        }
+        .supportSheet()
     }
 
     // MARK: - Celebration Icon
 
     private var celebrationIcon: some View {
-        ZStack {
-            // Pulsing background
-            Circle()
-                .fill(Color.pink.opacity(0.1))
-                .frame(width: 120, height: 120)
-                .scaleEffect(showingCelebration ? 1.2 : 1.0)
-                .animation(.spring(response: 0.6, dampingFraction: 0.6), value: showingCelebration)
-
-            Circle()
-                .fill(Color.pink.opacity(0.2))
-                .frame(width: 90, height: 90)
-
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 60))
-                .foregroundStyle(.pink)
-        }
-        .padding(.top, 20)
+        CelebrationEmblem(.symbol("checkmark.circle.fill"))
+            .celebrationReveal()
+            .padding(.top, SupportTheme.Spacing.m)
     }
 
     // MARK: - Success Message
 
     private var successMessage: some View {
-        VStack(spacing: 12) {
-            Text("Well done!")
+        VStack(spacing: SupportTheme.Spacing.s) {
+            Text("Well done")
                 .font(.title)
                 .fontWeight(.bold)
 
             Text(kit.contextTag.completionMessage)
                 .font(.body)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .multilineTextAlignment(.center)
         }
     }
@@ -85,61 +68,40 @@ struct CopingKitCompletionView: View {
     // MARK: - Stats Section
 
     private var statsSection: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             if let result = viewModel.completionResult {
                 // XP gained
                 HStack {
                     Image(systemName: "star.fill")
-                        .foregroundStyle(.yellow)
+                        .foregroundStyle(SupportTheme.accent)
 
                     Text("+\(result.xpAwarded) XP earned")
                         .fontWeight(.semibold)
 
                     Spacer()
                 }
-                .padding()
-                .background(Color.yellow.opacity(0.1))
-                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .supportCard()
 
-                // Streak info
-                if result.streakIncremented {
-                    HStack {
-                        Image(systemName: "flame.fill")
-                            .foregroundStyle(.orange)
 
-                        Text("Streak maintained!")
-                            .fontWeight(.semibold)
-
-                        Spacer()
-
-                        Text("\(result.streakIncremented ? "1" : "0") day")
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding()
-                    .background(Color.orange.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                }
 
                 // Level up
                 if let levelUp = result.levelUp {
                     HStack {
                         Image(systemName: "arrow.up.circle.fill")
-                            .foregroundStyle(.green)
+                            .foregroundStyle(SupportTheme.accent)
 
-                        Text("Level \(levelUp.oldLevel) → \(levelUp.newLevel)!")
+                        Text("Level \(levelUp.oldLevel) → \(levelUp.newLevel)")
                             .fontWeight(.semibold)
 
                         Spacer()
                     }
-                    .padding()
-                    .background(Color.green.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .supportCard()
                 }
             } else {
                 // Default stats
                 HStack {
                     Image(systemName: "clock.fill")
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(SupportTheme.accent)
 
                     Text("\(kit.formattedDuration) completed")
                         .fontWeight(.medium)
@@ -147,11 +109,9 @@ struct CopingKitCompletionView: View {
                     Spacer()
 
                     Text("\(kit.stepsCount) steps")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
-                .padding()
-                .background(Color.blue.opacity(0.1))
-                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .supportCard()
             }
         }
     }
@@ -159,18 +119,18 @@ struct CopingKitCompletionView: View {
     // MARK: - Feedback Section
 
     private var feedbackSection: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             Text("Was this helpful?")
                 .font(.headline)
 
-            HStack(spacing: 32) {
+            HStack(spacing: SupportTheme.Spacing.xl) {
                 Button {
                     selectedFeedback = true
                 } label: {
-                    VStack(spacing: 8) {
+                    VStack(spacing: SupportTheme.Spacing.xs) {
                         Image(systemName: "hand.thumbsup.fill")
                             .font(.largeTitle)
-                            .foregroundStyle(.green)
+                            .foregroundStyle(SupportTheme.accent)
                         Text("Yes")
                             .font(.caption)
                     }
@@ -180,7 +140,7 @@ struct CopingKitCompletionView: View {
                 Button {
                     selectedFeedback = false
                 } label: {
-                    VStack(spacing: 8) {
+                    VStack(spacing: SupportTheme.Spacing.xs) {
                         Image(systemName: "hand.thumbsdown.fill")
                             .font(.largeTitle)
                             .foregroundStyle(.red)
@@ -194,13 +154,11 @@ struct CopingKitCompletionView: View {
             // Comment field (optional)
             if selectedFeedback == false {
                 TextField("How could we improve?", text: $feedbackComment)
-                    .textFieldStyle(.roundedBorder)
-                    .padding(.top, 8)
+                    .supportField()
+                    .padding(.top, SupportTheme.Spacing.xs)
             }
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .supportCard()
     }
 
     // MARK: - Feedback Submitted Section
@@ -208,16 +166,14 @@ struct CopingKitCompletionView: View {
     private var feedbackSubmittedSection: some View {
         HStack {
             Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(.green)
+                .foregroundStyle(SupportTheme.accent)
 
             Text("Thanks for your feedback!")
                 .fontWeight(.medium)
 
             Spacer()
         }
-        .padding()
-        .background(Color.green.opacity(0.1))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .supportCard()
     }
 
     // MARK: - Done Button
@@ -241,13 +197,10 @@ struct CopingKitCompletionView: View {
             Text("Done")
                 .fontWeight(.semibold)
                 .frame(maxWidth: .infinity)
-                .padding()
-                .background(Color.pink)
-                .foregroundStyle(.white)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
         }
-        .padding(.horizontal, 20)
-        .padding(.bottom, 20)
+        .buttonStyle(.supportPrimary)
+        .padding(.horizontal, SupportTheme.Spacing.m)
+        .padding(.bottom, SupportTheme.Spacing.m)
     }
 }
 

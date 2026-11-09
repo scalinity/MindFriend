@@ -11,7 +11,7 @@ struct ExperimentCatalogView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.l) {
                 // Header
                 headerSection
 
@@ -25,8 +25,9 @@ struct ExperimentCatalogView: View {
                     experimentListSection
                 }
             }
-            .padding()
+            .padding(SupportTheme.Spacing.m)
         }
+        .supportScreen()
         .navigationTitle("Insight Lab")
         .sheet(item: $selectedExperiment) { experiment in
             ExperimentStartConfirmationView(
@@ -44,15 +45,23 @@ struct ExperimentCatalogView: View {
             .presentationDetents([.height(280)])
             .presentationDragIndicator(.visible)
         }
-        .alert("Error", isPresented: Binding(get: { startError != nil }, set: { if !$0 { startError = nil } })) {
-            Button("OK") {
-                startError = nil
+        .safeAreaInset(edge: .bottom) {
+                if startError != nil {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
+                    if let error = startError {
+                        Text(error)
+                    }
+
+                    Button("OK") {
+                        startError = nil
+                    }
+                }
+                    .foregroundStyle(SupportTheme.textSecondary)
+                    .buttonStyle(.supportSecondary)
+                    .supportCard()
+                    .padding(SupportTheme.Spacing.m)
+                }
             }
-        } message: {
-            if let error = startError {
-                Text(error)
-            }
-        }
         .task {
             await insightLabService.fetchActiveExperiment()
         }
@@ -61,14 +70,14 @@ struct ExperimentCatalogView: View {
     // MARK: - Header
 
     private var headerSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             Text("Run 7-Day Experiments")
                 .font(.title2)
                 .fontWeight(.bold)
 
             Text("Test how different habits affect your mood and energy. Choose an experiment to begin your journey.")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
     }
 
@@ -76,38 +85,36 @@ struct ExperimentCatalogView: View {
 
     private func activeExperimentBanner(_ experiment: InsightExperiment) -> some View {
         NavigationLink(destination: ExperimentProgressView()) {
-            HStack(spacing: 16) {
+            HStack(spacing: SupportTheme.Spacing.m) {
                 if let actionType = experiment.actionTypeEnum {
                     Image(systemName: actionType.icon)
                         .font(.title2)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(SupportTheme.onAccent)
                         .frame(width: 50, height: 50)
-                        .background(Color.accentColor)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .background(SupportTheme.accent)
+                        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
                 }
 
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     Text(experiment.title)
                         .font(.headline)
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(SupportTheme.textPrimary)
 
                     Text("Day \(experiment.currentDay) of 7")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
 
                     // Progress bar
                     ProgressView(value: Double(experiment.completedDays), total: 7)
-                        .tint(.accentColor)
+                        .tint(SupportTheme.accent)
                 }
 
                 Spacer()
 
                 Image(systemName: "chevron.right")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
-            .padding()
-            .background(Color(.secondarySystemBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .supportCard()
         }
         .buttonStyle(.plain)
     }
@@ -115,10 +122,10 @@ struct ExperimentCatalogView: View {
     // MARK: - Experiment List
 
     private var experimentListSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
             Text("Available Experiments")
                 .font(.headline)
-                .padding(.top, 8)
+                .padding(.top, SupportTheme.Spacing.xs)
 
             ForEach(ExperimentActionType.allCases) { actionType in
                 ExperimentCard(
@@ -156,90 +163,89 @@ struct ExperimentCatalogView: View {
 // MARK: - Experiment Start Confirmation View
 
 struct ExperimentStartConfirmationView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let experiment: ExperimentActionType
     let isStarting: Bool
     let onStart: () -> Void
     let onCancel: () -> Void
-    
+
     var body: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: SupportTheme.Spacing.l) {
             // Title
             Text("Start Experiment")
                 .font(.title3)
+                .accessibilityAddTraits(.isHeader)
                 .fontWeight(.semibold)
-            
+
             // Message
             Text("You'll track this habit for 7 days and see how it affects your mood. Ready to begin?")
                 .font(.body)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .multilineTextAlignment(.center)
-                .padding(.horizontal)
-            
+                .padding(.horizontal, SupportTheme.Spacing.m)
+
             // Buttons
-            VStack(spacing: 12) {
+            VStack(spacing: SupportTheme.Spacing.s) {
                 Button(action: onStart) {
                     HStack {
                         if isStarting {
                             ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                .progressViewStyle(CircularProgressViewStyle(tint: SupportTheme.textPrimary))
                                 .scaleEffect(0.8)
                         }
                         Text(isStarting ? "Starting..." : "Start \(experiment.title)")
                             .fontWeight(.semibold)
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(Color.accentColor)
-                    .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
+                .buttonStyle(.supportPrimary)
                 .disabled(isStarting)
-                
+
                 Button(action: onCancel) {
                     Text("Cancel")
                         .fontWeight(.medium)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(Color(.systemGray5))
-                        .foregroundStyle(.primary)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .padding(.vertical, SupportTheme.Spacing.m)
+                        .background(SupportTheme.separator)
+                        .foregroundStyle(SupportTheme.textPrimary)
+                        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
                 }
                 .disabled(isStarting)
             }
-            .padding(.horizontal)
+            .padding(.horizontal, SupportTheme.Spacing.m)
         }
-        .padding(.vertical, 24)
-        .padding(.horizontal, 8)
+        .padding(.vertical, SupportTheme.Spacing.l)
+        .padding(.horizontal, SupportTheme.Spacing.xs)
     }
 }
 
 // MARK: - Experiment Card
 
 struct ExperimentCard: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let actionType: ExperimentActionType
     let isLoading: Bool
     let onStart: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
+            HStack(spacing: SupportTheme.Spacing.s) {
                 // Icon
                 Image(systemName: actionType.icon)
                     .font(.title2)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(SupportTheme.textPrimary)
                     .frame(width: 44, height: 44)
                     .background(iconColor)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
 
                 // Title and description
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     Text(actionType.title)
                         .font(.headline)
 
                     Text(actionType.description)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
+                        .foregroundStyle(SupportTheme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Spacer()
@@ -250,35 +256,29 @@ struct ExperimentCard: View {
                 HStack {
                     if isLoading {
                         ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            .progressViewStyle(CircularProgressViewStyle(tint: SupportTheme.textPrimary))
                             .scaleEffect(0.8)
                     }
                     Text(isLoading ? "Starting..." : "Start Experiment")
                         .fontWeight(.medium)
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
-                .background(Color.accentColor)
-                .foregroundStyle(.white)
-                .clipShape(RoundedRectangle(cornerRadius: 10))
             }
+            .buttonStyle(.supportPrimary)
             .disabled(isLoading)
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .supportCard()
     }
 
     private var iconColor: Color {
         switch actionType.color {
-        case "green": return .green
-        case "purple": return .purple
-        case "indigo": return .indigo
-        case "orange": return .orange
-        case "cyan": return .cyan
-        case "teal": return .teal
+        case "green": return SupportTheme.accent
+        case "purple": return SupportTheme.accent
+        case "indigo": return SupportTheme.accent
+        case "orange": return SupportTheme.accent
+        case "cyan": return SupportTheme.accent
+        case "teal": return SupportTheme.accent
         case "red": return .red
-        default: return .accentColor
+        default: return SupportTheme.accent
         }
     }
 }

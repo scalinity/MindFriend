@@ -1,12 +1,12 @@
 import SwiftUI
 
-/// Explore: search plus inline named sections with direct destination rows (SUPPORT_SESSION_SPEC §4.1–4.2).
-/// Every row opens an existing destination view. Circles is a direct root row (two deliberate taps from any tab).
+/// Explore offers short practices, familiar suggestions, and focused category pages.
 struct SupportExploreView: View {
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var container: DependencyContainer
     @EnvironmentObject private var navigator: SupportShellNavigator
     @EnvironmentObject private var pins: SupportPinStore
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var query = ""
     @State private var activeEnrollment: ProgramEnrollment?
@@ -33,17 +33,21 @@ struct SupportExploreView: View {
                             SupportActivityChoiceButton(template: template, origin: .explore)
                         }
                     }
+                    .listRowBackground(SupportTheme.surface)
+                    suggestedSection
+                    categorySection
                     activeProgramSection
-                    ForEach(Self.exploreSections, id: \.self) { section in
-                        destinationSection(section)
-                    }
                 }
             }
-            .supportCanvas()
+            .supportScreen()
+
             .navigationTitle(SupportShellTab.explore.title)
             .searchable(text: $query, prompt: Text("Search practices, programs, and people"))
             .navigationDestination(for: SupportDestination.self) { destination in
                 SupportDestinationView(destination: destination)
+            }
+            .navigationDestination(for: SupportSection.self) { section in
+                categoryPage(section)
             }
             .sheet(item: $replaceCandidate) { candidate in
                 ReplacePinSheet(candidate: candidate)
@@ -58,6 +62,115 @@ struct SupportExploreView: View {
     }
 
     // MARK: Sections
+
+    private var suggestedDestinations: [SupportDestination] {
+        let available = Set(Self.exploreSections.flatMap { SupportDestination.exploreRows(in: $0) }
+            .filter { $0 != .quote })
+        let candidates = pins.pins.map(\.destination) + [SupportDestination.quickBreathing, .journal, .sleep, .sensoryToolkit]
+        var seen = Set<SupportDestination>()
+        return Array(candidates.filter { available.contains($0) && seen.insert($0).inserted }.prefix(5))
+    }
+
+    private var suggestedSection: some View {
+        Section("Suggested for you") {
+            ScrollView(.horizontal) {
+                HStack(alignment: .top, spacing: SupportTheme.Spacing.s) {
+                    ForEach(suggestedDestinations) { destination in
+                        NavigationLink(value: destination) {
+                            VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
+                                Image(systemName: destination.icon)
+                                    .font(.title2)
+                                    .foregroundStyle(SupportTheme.accent)
+                                    .accessibilityHidden(true)
+                                Text(destination.title)
+                                    .font(.headline)
+                                    .foregroundStyle(SupportTheme.textPrimary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                if let subtitle = destination.subtitle {
+                                    Text(subtitle)
+                                        .font(.subheadline)
+                                        .foregroundStyle(SupportTheme.textSecondary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
+                            .frame(width: SupportTheme.readableWidth / (dynamicTypeSize.isAccessibilitySize ? 2 : 3), alignment: .leading)
+                            .frame(maxHeight: .infinity, alignment: .topLeading)
+                            .supportCard()
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityAction(named: pins.isPinned(destination) ? Text("Unpin from Today") : Text("Pin to Today")) {
+                            togglePin(SupportPin(destination))
+                        }
+                        .contextMenu { pinSwipeAction(SupportPin(destination)) }
+                    }
+                }
+                // Every card takes the tallest card's height, so the row has no ragged band.
+                .fixedSize(horizontal: false, vertical: true)
+            }
+            .listRowInsets(EdgeInsets(top: SupportTheme.Spacing.xs, leading: 0, bottom: SupportTheme.Spacing.xs, trailing: 0))
+            .listRowBackground(SupportTheme.canvas)
+        }
+    }
+
+    private var categorySection: some View {
+        Section("Browse by category") {
+            // A two-by-two grid: tiles in a row share its height, and titles wrap instead of clipping.
+            // At accessibility sizes the same tiles stack; AnyLayout keeps their identity across the change.
+            let layout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(spacing: SupportTheme.Spacing.s))
+                : AnyLayout(GridLayout(horizontalSpacing: SupportTheme.Spacing.s, verticalSpacing: SupportTheme.Spacing.s))
+            layout {
+                ForEach(0..<(Self.exploreSections.count + 1) / 2, id: \.self) { row in
+                    // Outside a grid layout a GridRow acts as a group, so the stack lists the tiles one by one.
+                    GridRow {
+                        ForEach(Self.exploreSections[(row * 2)..<min(row * 2 + 2, Self.exploreSections.count)], id: \.self) {
+                            categoryTile($0)
+                        }
+                    }
+                }
+            }
+            .listRowInsets(EdgeInsets(top: SupportTheme.Spacing.xs, leading: 0, bottom: SupportTheme.Spacing.xs, trailing: 0))
+            .listRowBackground(SupportTheme.canvas)
+        }
+    }
+
+    /// A button rather than a NavigationLink: inside a List, links gain a disclosure chevron outside the card.
+    private func categoryTile(_ section: SupportSection) -> some View {
+        Button { navigator.explorePath.append(section) } label: {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
+                Image(systemName: categoryIcon(section))
+                    .font(.title2)
+                    .foregroundStyle(SupportTheme.accent)
+                    .accessibilityHidden(true)
+                Text(section.title)
+                    .font(.headline)
+                    .foregroundStyle(SupportTheme.textPrimary)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .supportCard()
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func categoryPage(_ section: SupportSection) -> some View {
+        List { destinationSection(section) }
+            .supportScreen()
+
+            .navigationTitle(section.title)
+            .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func categoryIcon(_ section: SupportSection) -> String {
+        switch section {
+        case .practices: return "leaf"
+        case .programsAndPathways: return "map"
+        case .toolsAndExperiments: return "slider.horizontal.3"
+        case .peopleAndCircles: return "person.3"
+        default: return "square.grid.2x2"
+        }
+    }
 
     @ViewBuilder
     private var activeProgramSection: some View {
@@ -100,6 +213,7 @@ struct SupportExploreView: View {
                     togglePin(activePin)
                 }
             }
+            .listRowBackground(SupportTheme.surface)
         }
     }
 
@@ -108,7 +222,7 @@ struct SupportExploreView: View {
             if section == .peopleAndCircles {
                 activeCircleRows
             }
-            ForEach(SupportDestination.exploreRows(in: section)) { destination in
+            ForEach(SupportDestination.exploreRows(in: section).filter { $0 != .quote }) { destination in
                 destinationRow(destination)
             }
             if section == .peopleAndCircles {
@@ -124,6 +238,7 @@ struct SupportExploreView: View {
                 .buttonStyle(.plain)
             }
         }
+        .listRowBackground(SupportTheme.surface)
     }
 
     @ViewBuilder
@@ -144,7 +259,7 @@ struct SupportExploreView: View {
     @ViewBuilder
     private var searchResults: some View {
         let matches = Self.exploreSections.flatMap { SupportDestination.exploreRows(in: $0) }
-            .filter { $0.matches(query) }
+            .filter { $0 != .quote && $0.matches(query) }
         if matches.isEmpty {
             Section {
                 SupportUnavailableState(
@@ -152,12 +267,14 @@ struct SupportExploreView: View {
                     message: String(localized: "Try another word, or clear the search to browse everything.")
                 )
             }
+            .listRowBackground(SupportTheme.surface)
         } else {
             Section(String(localized: "Results")) {
                 ForEach(matches) { destination in
                     destinationRow(destination, showsSection: true)
                 }
             }
+            .listRowBackground(SupportTheme.surface)
         }
     }
 
@@ -242,6 +359,7 @@ struct ReplacePinSheet: View {
                         .font(.body)
                         .foregroundStyle(SupportTheme.textSecondary)
                 }
+                .listRowBackground(SupportTheme.surface)
                 Section(String(localized: "Current pins")) {
                     ForEach(pins.pins) { pinned in
                         Button {
@@ -256,8 +374,10 @@ struct ReplacePinSheet: View {
                         .buttonStyle(.plain)
                     }
                 }
+                .listRowBackground(SupportTheme.surface)
             }
-            .supportCanvas()
+            .supportScreen()
+
             .navigationTitle(String(localized: "Replace a pin"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -266,6 +386,7 @@ struct ReplacePinSheet: View {
                 }
             }
         }
+        .supportSheet()
         .presentationDetents([.medium, .large])
     }
 }
@@ -310,8 +431,10 @@ struct SupportJournalHub: View {
             } footer: {
                 Text("Text and voice entries are kept separately, and each list is searched on its own. Art and drawing tools are in Create.")
             }
+            .listRowBackground(SupportTheme.surface)
         }
-        .supportCanvas()
+        .supportScreen()
+
         .navigationTitle(SupportDestination.journal.title)
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -347,6 +470,7 @@ struct SupportPathwaysHub: View {
                     }
                 }
             }
+            .listRowBackground(SupportTheme.surface)
             Section {
                 NavigationLink {
                     PathwaySelectionView().environmentObject(container)
@@ -358,8 +482,10 @@ struct SupportPathwaysHub: View {
                     )
                 }
             }
+            .listRowBackground(SupportTheme.surface)
         }
-        .supportCanvas()
+        .supportScreen()
+
         .navigationTitle(SupportDestination.pathways.title)
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(isPresented: Binding(
@@ -420,6 +546,7 @@ struct SupportSeasonalHub: View {
             .padding(SupportTheme.Spacing.m)
         }
         .background(SupportTheme.canvas.ignoresSafeArea())
+        .supportScreen()
         .navigationTitle(SupportDestination.seasonalEvents.title)
         .navigationBarTitleDisplayMode(.inline)
         .task(id: retry) { await load() }
@@ -489,6 +616,7 @@ struct SupportBuddyHub: View {
             .padding(SupportTheme.Spacing.m)
         }
         .background(SupportTheme.canvas.ignoresSafeArea())
+        .supportScreen()
         .navigationTitle(SupportDestination.buddy.title)
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showInvite) {

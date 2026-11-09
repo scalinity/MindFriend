@@ -4,6 +4,7 @@
 import SwiftUI
 
 struct ForYouView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var container: DependencyContainer
     @State private var recommendations: [ContentRecommendation] = []
     @State private var isLoading = true
@@ -23,7 +24,7 @@ struct ForYouView: View {
     var body: some View {
         SupportRootNavigation(embedded: supportEmbedded) {
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: SupportTheme.Spacing.l) {
                     // Quick Mood Check
                     if currentMood == nil {
                         moodCheckSection
@@ -36,7 +37,7 @@ struct ForYouView: View {
                     if isLoading {
                         ProgressView("Loading personalized recommendations...")
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 40)
+                            .padding(.vertical, SupportTheme.Spacing.xl)
                             .accessibilityLabel("Loading recommendations")
                     } else if let error {
                         errorView(error)
@@ -51,8 +52,9 @@ struct ForYouView: View {
                         insightsPreviewSection
                     }
                 }
-                .padding()
+                .padding(SupportTheme.Spacing.m)
             }
+            .supportScreen()
             .navigationTitle("For You")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -61,6 +63,7 @@ struct ForYouView: View {
                         Task { await loadRecommendations() }
                     }, label: {
                         Image(systemName: "arrow.clockwise")
+                        .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                     })
                     .disabled(isLoading)
                     .accessibilityLabel("Refresh recommendations")
@@ -78,88 +81,87 @@ struct ForYouView: View {
     // MARK: - Anxiety & Energy Section
 
     private var anxietyEnergySection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 16) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
+            // Stacked: each selector needs five 44-point targets, too wide to sit side by side on a phone.
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
                 // Anxiety Level
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                     Label("Anxiety", systemImage: "brain.head.profile")
                         .font(.subheadline)
                         .fontWeight(.medium)
 
-                    HStack(spacing: 6) {
+                    HStack(spacing: SupportTheme.Spacing.xxs) {
                         ForEach(AnxietyLevel.allCases, id: \.self) { level in
                             Button {
-                                withAnimation {
+                                withAnimation(.easeInOut(duration: 0.2)) {
                                     anxietyLevel = level
                                 }
                                 Task { await loadRecommendations() }
                             } label: {
                                 Image(systemName: level.icon)
-                                    .foregroundStyle(anxietyLevel == level ? level.color : .gray)
+                                    .foregroundStyle(anxietyLevel == level ? SupportTheme.accent : SupportTheme.textSecondary)
                                     .font(.caption)
+                                    .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                             }
                             .accessibilityLabel("Anxiety: \(level.displayName)")
                         }
                     }
                 }
 
-                Spacer()
-
                 // Energy Level
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                     Label("Energy", systemImage: "bolt.fill")
                         .font(.subheadline)
                         .fontWeight(.medium)
 
-                    HStack(spacing: 6) {
+                    HStack(spacing: SupportTheme.Spacing.xxs) {
                         ForEach(EnergyLevel.allCases, id: \.self) { level in
                             Button {
-                                withAnimation {
+                                withAnimation(.easeInOut(duration: 0.2)) {
                                     energyLevel = level
                                 }
                                 Task { await loadRecommendations() }
                             } label: {
                                 Image(systemName: level.icon)
-                                    .foregroundStyle(energyLevel == level ? level.color : .gray)
+                                    .foregroundStyle(energyLevel == level ? SupportTheme.accent : SupportTheme.textSecondary)
                                     .font(.caption)
+                                    .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                             }
                             .accessibilityLabel("Energy: \(level.displayName)")
                         }
                     }
                 }
             }
-            .padding()
-            .background(Color(.secondarySystemGroupedBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .supportCard()
         }
     }
 
     // MARK: - Mood Check Section
 
     private var moodCheckSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("How are you feeling?")
                 .font(.headline)
 
             Text("This helps us suggest the right content")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
 
-            HStack(spacing: 16) {
+            HStack(spacing: SupportTheme.Spacing.m) {
                 // Order: mood:1 (stressed) on left → mood:5 (great) on right
                 ForEach(MoodEmojiMapper.moodsLowToHigh, id: \.name) { mood in
                     Button {
-                        withAnimation {
+                        withAnimation(.easeInOut(duration: 0.2)) {
                             currentMood = mood.name
                         }
                         Task { await loadRecommendations() }
                     } label: {
-                        VStack(spacing: 4) {
+                        VStack(spacing: SupportTheme.Spacing.xxs) {
                             Text(mood.emoji)
                                 .font(.title)
                             Text(mood.name.capitalized)
                                 .font(.caption2)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                         }
                     }
                     .accessibilityLabel("Feeling \(mood.name)")
@@ -167,15 +169,13 @@ struct ForYouView: View {
             }
             .frame(maxWidth: .infinity)
         }
-        .padding()
-        .background(Color(.secondarySystemGroupedBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .supportCard()
     }
 
     // MARK: - Recommendations Section
 
     private var recommendationsSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
             HStack {
                 Text("Recommended for You")
                     .font(.headline)
@@ -184,7 +184,7 @@ struct ForYouView: View {
 
                 if currentMood != nil {
                     Button {
-                        withAnimation {
+                        withAnimation(.easeInOut(duration: 0.2)) {
                             currentMood = nil
                         }
                         Task { await loadRecommendations() }
@@ -219,7 +219,7 @@ struct ForYouView: View {
     // MARK: - Insights Preview Section
 
     private var insightsPreviewSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             HStack {
                 Text("Your Insights")
                     .font(.headline)
@@ -244,26 +244,26 @@ struct ForYouView: View {
     // MARK: - Empty & Error States
 
     private var emptyStateView: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             Image(systemName: "sparkles")
-                .font(.system(size: 48))
-                .foregroundStyle(.blue)
+                .font(.system(.largeTitle))
+                .foregroundStyle(SupportTheme.accent)
 
             Text("Your Personal Feed")
                 .font(.headline)
 
             Text("Complete more activities to unlock personalized recommendations tailored just for you.")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .multilineTextAlignment(.center)
         }
-        .padding()
+        .padding(SupportTheme.Spacing.m)
     }
 
     private func errorView(_ message: String) -> some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             Image(systemName: "exclamationmark.circle")
-                .font(.system(size: 48))
+                .font(.system(.largeTitle))
                 .foregroundStyle(.red)
                 .accessibilityHidden(true)
 
@@ -272,7 +272,7 @@ struct ForYouView: View {
 
             Text(message)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .multilineTextAlignment(.center)
 
             Button(action: {
@@ -280,9 +280,9 @@ struct ForYouView: View {
             }, label: {
                 Text("Try Again")
             })
-            .buttonStyle(.bordered)
+            .buttonStyle(.supportSecondary)
         }
-        .padding()
+        .padding(SupportTheme.Spacing.m)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Error loading recommendations")
         .accessibilityHint(message)
@@ -360,70 +360,68 @@ struct ContentRecommendationCardContent: View {
     let recommendation: ContentRecommendation
 
     var body: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: SupportTheme.Spacing.m) {
             // Icon
             Image(systemName: contentTypeIcon)
                 .font(.title)
-                .foregroundStyle(.blue)
+                .foregroundStyle(SupportTheme.accent)
                 .frame(width: 50, height: 50)
-                .background(Color.blue.opacity(0.1))
-                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .background(SupportTheme.surface)
+                .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
 
             // Content
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text(recommendation.contentName)
                     .font(.headline)
-                    .foregroundStyle(.primary)
-                    .lineLimit(2)
+                    .foregroundStyle(SupportTheme.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
 
-                HStack(spacing: 12) {
+                HStack(spacing: SupportTheme.Spacing.s) {
                     Label("\(recommendation.durationMinutes) min", systemImage: "clock")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
 
                     Text(recommendation.contentType.capitalized)
                         .font(.caption)
-                        .foregroundStyle(.blue)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 2)
-                        .background(Color.blue.opacity(0.1))
+                        .foregroundStyle(SupportTheme.accent)
+                        .padding(.horizontal, SupportTheme.Spacing.xs)
+                        .padding(.vertical, SupportTheme.Spacing.xxs)
+                        .background(SupportTheme.surface)
                         .clipShape(Capsule())
                 }
 
                 // Recommendation reason
                 if let reason = recommendation.reasons.first {
-                    HStack(spacing: 4) {
+                    HStack(spacing: SupportTheme.Spacing.xxs) {
                         Image(systemName: "sparkles")
                             .font(.caption2)
                         Text(reason)
                             .font(.caption)
                     }
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                    .foregroundStyle(SupportTheme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
                 }
             }
 
             Spacer()
 
             // Match score and chevron
-            HStack(spacing: 8) {
-                VStack(spacing: 4) {
+            HStack(spacing: SupportTheme.Spacing.xs) {
+                VStack(spacing: SupportTheme.Spacing.xxs) {
                     Text("\(Int(recommendation.score * 100))%")
                         .font(.headline)
                         .foregroundStyle(scoreColor)
                     Text("match")
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
 
                 Image(systemName: "chevron.right")
                     .font(.caption)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
         }
-        .padding()
-        .background(Color(.secondarySystemGroupedBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .supportCard()
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(recommendation.contentName), \(recommendation.durationMinutes) minutes, \(Int(recommendation.score * 100))% match")
     }
@@ -440,9 +438,9 @@ struct ContentRecommendationCardContent: View {
     }
 
     private var scoreColor: Color {
-        if recommendation.score >= 0.8 { return .green }
-        if recommendation.score >= 0.5 { return .yellow }
-        return .orange
+        if recommendation.score >= 0.8 { return SupportTheme.accent }
+        if recommendation.score >= 0.5 { return SupportTheme.accent }
+        return SupportTheme.accent
     }
 }
 
@@ -452,34 +450,32 @@ struct PersonalizedInsightCardCompact: View {
     let insight: DBPersonalizedInsight
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: SupportTheme.Spacing.s) {
             Image(systemName: insight.icon)
                 .font(.title2)
-                .foregroundStyle(insight.color)
+                .foregroundStyle(SupportTheme.accent)
                 .frame(width: 40, height: 40)
-                .background(insight.color.opacity(0.1))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .background(SupportTheme.accent.opacity(0.1))
+                .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text(insight.title)
                     .font(.subheadline)
                     .fontWeight(.medium)
 
                 Text(insight.description)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
+                    .foregroundStyle(SupportTheme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Spacer()
 
             Image(systemName: "chevron.right")
                 .font(.caption)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
-        .padding()
-        .background(Color(.secondarySystemGroupedBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .supportCard()
     }
 }
 

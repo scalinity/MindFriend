@@ -4,13 +4,14 @@
 import SwiftUI
 
 struct ContentTypePickerView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Binding var selectedTypes: Set<PersonalizationContentType>
 
     var body: some View {
         List {
             ForEach(PersonalizationContentType.allCases, id: \.self) { type in
                 Button {
-                    withAnimation {
+                    withAnimation(.easeInOut(duration: 0.2)) {
                         if selectedTypes.contains(type) {
                             selectedTypes.remove(type)
                         } else {
@@ -18,25 +19,25 @@ struct ContentTypePickerView: View {
                         }
                     }
                 } label: {
-                    HStack(spacing: 12) {
+                    HStack(spacing: SupportTheme.Spacing.s) {
                         Image(systemName: type.icon)
                             .font(.title3)
-                            .foregroundStyle(selectedTypes.contains(type) ? .blue : .secondary)
+                            .foregroundStyle(selectedTypes.contains(type) ? .blue : SupportTheme.textSecondary)
                             .frame(width: 30)
 
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                             Text(type.displayName)
-                                .foregroundStyle(.primary)
+                                .foregroundStyle(SupportTheme.textPrimary)
                             Text(typeDescription(type))
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                         }
 
                         Spacer()
 
                         if selectedTypes.contains(type) {
                             Image(systemName: "checkmark")
-                                .foregroundStyle(.blue)
+                                .foregroundStyle(SupportTheme.accent)
                                 .fontWeight(.semibold)
                         }
                     }
@@ -45,6 +46,7 @@ struct ContentTypePickerView: View {
                 .accessibilityLabel("\(type.displayName), \(typeDescription(type))")
             }
         }
+        .supportScreen()
         .navigationTitle("Content Types")
         .navigationBarTitleDisplayMode(.inline)
     }

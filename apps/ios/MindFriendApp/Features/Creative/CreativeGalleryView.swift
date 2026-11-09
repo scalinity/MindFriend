@@ -14,7 +14,7 @@ struct CreativeGalleryView: View {
     @State private var workToDelete: CreativeWork?
     @State private var isRefreshingMedia = false
 
-    private let columns = [GridItem(.adaptive(minimum: 150), spacing: 12)]
+    private let columns = [GridItem(.adaptive(minimum: 150), spacing: SupportTheme.Spacing.s)]
 
     var filteredWorks: [CreativeWork] {
         guard let filter = selectedFilter else { return works }
@@ -23,14 +23,14 @@ struct CreativeGalleryView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 16) {
+            VStack(spacing: SupportTheme.Spacing.m) {
                 // Filter Pills
                 filterSection
 
                 // Grid
                 if isLoading {
                     ProgressView()
-                        .padding(.top, 60)
+                        .padding(.top, SupportTheme.Spacing.xl)
                 } else if filteredWorks.isEmpty {
                     emptyStateView
                 } else {
@@ -38,6 +38,7 @@ struct CreativeGalleryView: View {
                 }
             }
         }
+        .supportScreen()
         .navigationTitle("Gallery")
         .modifier(CreativeWorkSharePresentation(sharing: sharing))
         .task(id: scenePhase) {
@@ -65,7 +66,7 @@ struct CreativeGalleryView: View {
 
     private var filterSection: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
+            HStack(spacing: SupportTheme.Spacing.xs) {
                 FilterPill(
                     title: "All",
                     count: works.count,
@@ -88,7 +89,7 @@ struct CreativeGalleryView: View {
                     }
                 }
             }
-            .padding(.horizontal)
+            .padding(.horizontal, SupportTheme.Spacing.m)
         }
     }
 
@@ -103,15 +104,15 @@ struct CreativeGalleryView: View {
             NavigationLink("Create Something") {
                 CreativeHubView()
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.supportSecondary)
         }
-        .padding(.top, 60)
+        .padding(.top, SupportTheme.Spacing.xl)
     }
 
     // MARK: - Gallery Grid
 
     private var galleryGrid: some View {
-        LazyVGrid(columns: columns, spacing: 12) {
+        LazyVGrid(columns: columns, spacing: SupportTheme.Spacing.s) {
             ForEach(filteredWorks) { work in
                 NavigationLink {
                     CreativeWorkDetailView(work: work)
@@ -147,7 +148,7 @@ struct CreativeGalleryView: View {
                 .buttonStyle(.plain)
             }
         }
-        .padding(.horizontal)
+        .padding(.horizontal, SupportTheme.Spacing.m)
     }
 
     // MARK: - Data Operations
@@ -263,7 +264,7 @@ struct FilterPill: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 4) {
+            HStack(spacing: SupportTheme.Spacing.xxs) {
                 if let icon = icon {
                     Image(systemName: icon)
                         .font(.caption)
@@ -273,14 +274,14 @@ struct FilterPill: View {
                 if let count = count, count > 0 {
                     Text("(\(count))")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .background(isSelected ? Color.accentColor : Color(.secondarySystemBackground))
-            .foregroundStyle(isSelected ? .white : .primary)
-            .cornerRadius(20)
+            .padding(.horizontal, SupportTheme.Spacing.m)
+            .padding(.vertical, SupportTheme.Spacing.xs)
+            .background(isSelected ? SupportTheme.accent : SupportTheme.surface)
+            .foregroundStyle(isSelected ? SupportTheme.onAccent : SupportTheme.textPrimary)
+            .cornerRadius(SupportTheme.cardRadius)
         }
     }
 }
@@ -291,39 +292,39 @@ struct GalleryThumbnailView: View {
     let work: CreativeWork
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             // Thumbnail
             ZStack(alignment: .topTrailing) {
                 thumbnailImage
                     .frame(height: 150)
                     .frame(maxWidth: .infinity)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
 
                 if work.isFavorite {
                     Image(systemName: "heart.fill")
                         .font(.caption)
-                        .foregroundStyle(.white)
-                        .padding(6)
+                        .foregroundStyle(SupportTheme.textPrimary)
+                        .padding(SupportTheme.Spacing.xxs)
                         .background(Color.red)
                         .clipShape(Circle())
-                        .padding(8)
+                        .padding(SupportTheme.Spacing.xs)
                 }
             }
 
             // Info
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 4) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
+                HStack(spacing: SupportTheme.Spacing.xxs) {
                     Image(systemName: work.workType.icon)
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                     Text(work.title ?? work.workType.displayName)
                         .font(.caption)
-                        .lineLimit(1)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Text(work.createdAt.formatted(date: .abbreviated, time: .omitted))
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
         }
         .accessibilityElement(children: .combine)
@@ -344,7 +345,7 @@ struct GalleryThumbnailView: View {
                 case .empty:
                     ProgressView()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .background(Color(.secondarySystemBackground))
+                        .background(SupportTheme.surface)
                 @unknown default:
                     placeholderView
                 }
@@ -356,11 +357,11 @@ struct GalleryThumbnailView: View {
 
     private var placeholderView: some View {
         Rectangle()
-            .fill(Color(.secondarySystemBackground))
+            .fill(SupportTheme.surface)
             .overlay {
                 Image(systemName: work.workType.icon)
                     .font(.largeTitle)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
     }
 
@@ -405,7 +406,7 @@ struct CreativeWorkDetailView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 20) {
+            VStack(spacing: SupportTheme.Spacing.m) {
                 // Main content based on type
                 contentView
 
@@ -427,11 +428,12 @@ struct CreativeWorkDetailView: View {
                     } label: {
                         Label(analysis == nil ? "Analyze Recording" : "View Analysis", systemImage: "waveform")
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.supportSecondary)
                 }
             }
-            .padding()
+            .padding(SupportTheme.Spacing.m)
         }
+        .supportScreen()
         .navigationTitle(localWork.workType.displayName)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -461,6 +463,8 @@ struct CreativeWorkDetailView: View {
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
+                    .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                    .accessibilityLabel("More options")
                 }
             }
         }
@@ -515,7 +519,7 @@ struct CreativeWorkDetailView: View {
                         image
                             .resizable()
                             .aspectRatio(contentMode: .fit)
-                            .clipShape(RoundedRectangle(cornerRadius: 16))
+                            .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
                             .shadow(radius: 8)
                     case .failure:
                         imagePlaceholder
@@ -542,29 +546,29 @@ struct CreativeWorkDetailView: View {
                 } placeholder: {
                     ProgressView()
                 }
-                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
             }
         }
     }
 
     private var imagePlaceholder: some View {
         Rectangle()
-            .fill(Color(.secondarySystemBackground))
+            .fill(SupportTheme.surface)
             .frame(height: 300)
             .overlay {
-                VStack(spacing: 8) {
+                VStack(spacing: SupportTheme.Spacing.xs) {
                     Image(systemName: "exclamationmark.triangle")
                         .font(.largeTitle)
                     Text("Image not available")
                         .font(.caption)
                 }
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
             }
-            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
     }
 
     private var voicePlayerView: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             // Waveform placeholder
             WaveformVisualization(
                 levels: Array(repeating: 0.3, count: 40),
@@ -575,7 +579,7 @@ struct CreativeWorkDetailView: View {
             // Time display
             if let duration = localWork.durationSeconds {
                 Text(formatDuration(duration))
-                    .font(.system(size: 32, weight: .light, design: .monospaced))
+                    .font(.system(.largeTitle, design: .monospaced).weight(.light))
             }
 
             // Play button
@@ -584,36 +588,36 @@ struct CreativeWorkDetailView: View {
                 playbackTask = Task { await toggleVoicePlayback() }
             } label: {
                 Image(systemName: isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                    .font(.system(size: 60))
-                    .foregroundStyle(Color.accentColor)
+                    .font(.system(.largeTitle))
+                    .foregroundStyle(SupportTheme.accent)
+                    .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                    .accessibilityLabel(isPlaying ? "Pause" : "Play")
             }
 
-            if let playbackError { Text(playbackError).font(.caption).foregroundStyle(.secondary) }
+            if let playbackError { Text(playbackError).font(.caption).foregroundStyle(SupportTheme.textSecondary) }
 
             // Transcription
             if let transcription = analysis?.fullTranscription ?? localWork.transcription {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                     Text("Transcription")
                         .font(.headline)
                     Text(transcription)
                         .font(.body)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
-                .padding()
+                .padding(SupportTheme.Spacing.m)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color(.secondarySystemBackground))
-                .cornerRadius(12)
+                .background(SupportTheme.surface)
+                .cornerRadius(SupportTheme.controlRadius)
             }
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .cornerRadius(16)
+        .supportCard()
     }
 
     // MARK: - Metadata Section
 
     private var metadataSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             if let title = localWork.title {
                 Text(title)
                     .font(.title2.bold())
@@ -623,10 +627,10 @@ struct CreativeWorkDetailView: View {
                 Text("\"\(prompt)\"")
                     .font(.subheadline)
                     .italic()
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
 
-            HStack(spacing: 16) {
+            HStack(spacing: SupportTheme.Spacing.m) {
                 Label(localWork.createdAt.formatted(date: .long, time: .shortened), systemImage: "calendar")
 
                 if let mood = localWork.moodScore {
@@ -638,24 +642,24 @@ struct CreativeWorkDetailView: View {
                 }
             }
             .font(.caption)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(SupportTheme.textSecondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func tagsSection(_ tags: [String]) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             Text("Mood Tags")
                 .font(.headline)
 
-            FlowLayout(spacing: 8) {
+            FlowLayout(spacing: SupportTheme.Spacing.xs) {
                 ForEach(tags, id: \.self) { tag in
                     Text(tag.capitalized)
                         .font(.caption)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(Color.accentColor.opacity(0.2))
-                        .cornerRadius(16)
+                        .padding(.horizontal, SupportTheme.Spacing.s)
+                        .padding(.vertical, SupportTheme.Spacing.xxs)
+                        .background(SupportTheme.surface)
+                        .cornerRadius(SupportTheme.cardRadius)
                 }
             }
         }
@@ -663,9 +667,9 @@ struct CreativeWorkDetailView: View {
     }
 
     private func voiceAnalysisSection(_ analysis: VoiceJournalAnalysis) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
             Text("Insights are inferred from the transcript.")
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.caption).foregroundStyle(SupportTheme.textSecondary)
             Text("Insights")
                 .font(.headline)
 
@@ -675,31 +679,31 @@ struct CreativeWorkDetailView: View {
             }
 
             if !analysis.keyThemes.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     Text("Key Themes")
                         .font(.caption.bold())
-                    FlowLayout(spacing: 8) {
+                    FlowLayout(spacing: SupportTheme.Spacing.xs) {
                         ForEach(analysis.keyThemes, id: \.self) { theme in
                             Text(theme)
                                 .font(.caption)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 4)
-                                .background(Color.blue.opacity(0.2))
-                                .cornerRadius(12)
+                                .padding(.horizontal, SupportTheme.Spacing.xs)
+                                .padding(.vertical, SupportTheme.Spacing.xxs)
+                                .background(SupportTheme.surface)
+                                .cornerRadius(SupportTheme.controlRadius)
                         }
                     }
                 }
             }
 
             if !analysis.reflectionPrompts.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                     Text("Reflection Prompts")
                         .font(.caption.bold())
                     ForEach(analysis.reflectionPrompts, id: \.self) { prompt in
-                        HStack(alignment: .top, spacing: 8) {
+                        HStack(alignment: .top, spacing: SupportTheme.Spacing.xs) {
                             Image(systemName: "lightbulb")
                                 .font(.caption)
-                                .foregroundStyle(.yellow)
+                                .foregroundStyle(SupportTheme.accent)
                             Text(prompt)
                                 .font(.caption)
                         }
@@ -707,10 +711,10 @@ struct CreativeWorkDetailView: View {
                 }
             }
         }
-        .padding()
+        .padding(SupportTheme.Spacing.m)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemBackground))
-        .cornerRadius(12)
+        .background(SupportTheme.surface)
+        .cornerRadius(SupportTheme.controlRadius)
     }
 
     // MARK: - Actions

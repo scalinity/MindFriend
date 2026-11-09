@@ -2,6 +2,7 @@ import SwiftUI
 
 /// Interactive grounding exercise player (5-4-3-2-1 technique)
 struct LibraryGroundingPlayerView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject var viewModel: LibraryExercisePlayerViewModel
     @State private var currentInput: String = ""
 
@@ -24,43 +25,43 @@ struct LibraryGroundingPlayerView: View {
             // Bottom controls
             controlsSection
         }
-        .background(Color(.systemBackground))
+        .background(SupportTheme.canvas)
     }
 
     // MARK: - Progress Header
 
     private var progressHeader: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             // Technique name
             if let technique = viewModel.groundingInstructions?.technique {
                 Text(technique.replacingOccurrences(of: "_", with: " ").capitalized)
                     .font(.headline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
 
             // Sense progress icons
             if let grounding = viewModel.groundingInstructions {
-                HStack(spacing: 16) {
+                HStack(spacing: SupportTheme.Spacing.m) {
                     ForEach(Array(grounding.prompts.enumerated()), id: \.offset) { index, prompt in
                         SenseIcon(
                             sense: prompt.sense ?? "general",
                             isCompleted: viewModel.acknowledgedItems.contains(index),
-                            color: prompt.senseColor
+                            color: SupportTheme.accent
                         )
-                        .scaleEffect(index == viewModel.currentGroundingIndex ? 1.1 : 0.85)
-                        .animation(.spring(response: 0.3), value: viewModel.currentGroundingIndex)
+                        .scaleEffect(reduceMotion ? 1 : (index == viewModel.currentGroundingIndex ? 1.1 : 0.85))
+                        .animation(reduceMotion ? nil : .spring(response: 0.3), value: viewModel.currentGroundingIndex)
                     }
                 }
             }
         }
-        .padding()
+        .padding(SupportTheme.Spacing.m)
     }
 
     // MARK: - Grounding Content
 
     private func groundingContent(_ grounding: GroundingInstructions) -> some View {
         ScrollView {
-            VStack(spacing: 24) {
+            VStack(spacing: SupportTheme.Spacing.l) {
                 // Current prompt
                 if viewModel.currentGroundingIndex < grounding.prompts.count {
                     let prompt = grounding.prompts[viewModel.currentGroundingIndex]
@@ -70,16 +71,16 @@ struct LibraryGroundingPlayerView: View {
                 // Acknowledged items for current sense
                 acknowledgedItemsList
             }
-            .padding()
+            .padding(SupportTheme.Spacing.m)
         }
     }
 
     private func currentPromptCard(_ prompt: GroundingPrompt) -> some View {
-        VStack(spacing: 20) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             // Sense icon
             Image(systemName: prompt.senseIcon)
-                .font(.system(size: 48))
-                .foregroundStyle(prompt.senseColor)
+                .font(.system(.largeTitle))
+                .foregroundStyle(SupportTheme.accent)
 
             // Prompt text
             Text(prompt.text)
@@ -91,13 +92,13 @@ struct LibraryGroundingPlayerView: View {
             if let count = prompt.count {
                 Text("Name \(count) things")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
 
             // Input field
             HStack {
                 TextField("What do you notice?", text: $currentInput)
-                    .textFieldStyle(.roundedBorder)
+                    .supportField()
 
                 Button {
                     if !currentInput.isEmpty {
@@ -106,7 +107,9 @@ struct LibraryGroundingPlayerView: View {
                 } label: {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.title2)
-                        .foregroundStyle(currentInput.isEmpty ? .secondary : Color.accentColor)
+                        .foregroundStyle(currentInput.isEmpty ? .secondary : SupportTheme.accent)
+                        .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                        .accessibilityLabel("Add response")
                 }
                 .disabled(currentInput.isEmpty)
             }
@@ -117,26 +120,24 @@ struct LibraryGroundingPlayerView: View {
             } label: {
                 Text("I noticed something")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .supportCard()
     }
 
     private var acknowledgedItemsList: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             if !viewModel.groundingResponses.filter({ !$0.isEmpty }).isEmpty {
                 Text("What you noticed:")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
 
                 ForEach(Array(viewModel.groundingResponses.enumerated()), id: \.offset) { index, response in
                     if !response.isEmpty {
                         HStack {
                             Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(.green)
+                                .foregroundStyle(SupportTheme.accent)
                             Text(response)
                                 .font(.body)
                         }
@@ -150,17 +151,17 @@ struct LibraryGroundingPlayerView: View {
     // MARK: - Fallback
 
     private var fallbackContent: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: SupportTheme.Spacing.l) {
             Spacer()
 
             Image(systemName: "sparkles")
-                .font(.system(size: 64))
-                .foregroundStyle(.secondary)
+                .font(.system(.largeTitle))
+                .foregroundStyle(SupportTheme.textSecondary)
 
             Text(viewModel.exercise.description)
                 .font(.title3)
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
+                .padding(.horizontal, SupportTheme.Spacing.xl)
 
             Spacer()
         }
@@ -169,7 +170,7 @@ struct LibraryGroundingPlayerView: View {
     // MARK: - Controls
 
     private var controlsSection: some View {
-        HStack(spacing: 24) {
+        HStack(spacing: SupportTheme.Spacing.l) {
             // Previous
             Button {
                 if viewModel.currentGroundingIndex > 0 {
@@ -178,6 +179,8 @@ struct LibraryGroundingPlayerView: View {
             } label: {
                 Image(systemName: "chevron.left.circle.fill")
                     .font(.title)
+                .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                .accessibilityLabel("Previous step")
             }
             .disabled(viewModel.currentGroundingIndex == 0)
 
@@ -204,10 +207,12 @@ struct LibraryGroundingPlayerView: View {
                     ? "checkmark.circle.fill"
                     : "chevron.right.circle.fill")
                     .font(.title)
+                .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                .accessibilityLabel("Continue exercise")
             }
         }
-        .padding()
-        .padding(.bottom, 16)
+        .padding(SupportTheme.Spacing.m)
+        .padding(.bottom, SupportTheme.Spacing.m)
     }
 
     // MARK: - Actions

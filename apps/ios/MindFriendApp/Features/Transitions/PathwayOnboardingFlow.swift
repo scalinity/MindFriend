@@ -38,6 +38,7 @@ struct PathwayOnboardingFlow: View {
                     }
                 }
             }
+            .supportScreen()
             .navigationTitle(pathway.name)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

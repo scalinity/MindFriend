@@ -13,13 +13,13 @@ struct PersonalizedInsightsView: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(spacing: 16) {
+            LazyVStack(spacing: SupportTheme.Spacing.m) {
                 if personalizationService.insights.isEmpty && !personalizationService.isLoading {
                     emptyState
                 } else if personalizationService.isLoading {
                     ProgressView("Loading insights...")
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 40)
+                        .padding(.vertical, SupportTheme.Spacing.xl)
                         .accessibilityLabel("Loading insights")
                 } else {
                     ForEach(personalizationService.insights) { insight in
@@ -28,8 +28,9 @@ struct PersonalizedInsightsView: View {
                     }
                 }
             }
-            .padding()
+            .padding(SupportTheme.Spacing.m)
         }
+        .supportScreen()
         .navigationTitle("Insights")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -41,11 +42,14 @@ struct PersonalizedInsightsView: View {
                         isRefreshing = false
                     }
                 }, label: {
-                    if isRefreshing {
-                        ProgressView()
-                    } else {
-                        Image(systemName: "arrow.clockwise")
+                    Group {
+                        if isRefreshing {
+                            ProgressView()
+                        } else {
+                            Image(systemName: "arrow.clockwise")
+                        }
                     }
+                    .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                 })
                 .disabled(isRefreshing)
                 .accessibilityLabel("Refresh insights")
@@ -60,17 +64,17 @@ struct PersonalizedInsightsView: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             Image(systemName: "lightbulb")
-                .font(.system(size: 48))
-                .foregroundStyle(.secondary)
+                .font(.system(.largeTitle))
+                .foregroundStyle(SupportTheme.textSecondary)
 
             Text("No Insights Yet")
                 .font(.headline)
 
             Text("Keep using MindFriend and we'll discover patterns and suggestions tailored to you.")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .multilineTextAlignment(.center)
 
             Button("Generate Insights") {
@@ -80,10 +84,10 @@ struct PersonalizedInsightsView: View {
                     isRefreshing = false
                 }
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.supportPrimary)
             .disabled(isRefreshing)
         }
-        .padding()
+        .padding(SupportTheme.Spacing.m)
     }
 }
 
@@ -98,14 +102,14 @@ struct PersonalizedInsightCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             HStack {
                 Image(systemName: insight.icon)
                     .font(.title2)
-                    .foregroundStyle(insight.color)
+                    .foregroundStyle(SupportTheme.accent)
                     .frame(width: 40, height: 40)
-                    .background(insight.color.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .background(SupportTheme.accent.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
 
                 VStack(alignment: .leading) {
                     Text(insight.title)
@@ -113,7 +117,7 @@ struct PersonalizedInsightCard: View {
 
                     Text(insight.insightCategory.capitalized)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
 
                 Spacer()
@@ -128,30 +132,30 @@ struct PersonalizedInsightCard: View {
                     }
                 } label: {
                     Image(systemName: "ellipsis")
-                        .foregroundStyle(.secondary)
-                        .padding(8)
+                        .foregroundStyle(SupportTheme.textSecondary)
+                        .padding(SupportTheme.Spacing.xs)
+                    .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                    .accessibilityLabel("More options")
                 }
             }
 
             Text(insight.description)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
 
             // Confidence indicator
-            HStack(spacing: 6) {
+            HStack(spacing: SupportTheme.Spacing.xxs) {
                 ConfidenceIndicator(confidence: insight.confidence)
                 Text("\(Int(insight.confidence * 100))% confident")
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
 
             if let actionType = insight.actionTypeEnum {
                 actionButton(for: actionType)
             }
         }
-        .padding()
-        .background(Color(.secondarySystemGroupedBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .supportCard()
         .onAppear {
             Task {
                 try? await personalizationService.markInsightAsShown(insight)
@@ -175,7 +179,7 @@ struct PersonalizedInsightCard: View {
             .font(.subheadline)
             .fontWeight(.medium)
         }
-        .buttonStyle(.borderedProminent)
+        .buttonStyle(.supportPrimary)
         .controlSize(.small)
     }
 
@@ -202,7 +206,7 @@ struct ConfidenceIndicator: View {
     }
 
     var body: some View {
-        HStack(spacing: 2) {
+        HStack(spacing: SupportTheme.Spacing.xxs) {
             ForEach(0..<3) { index in
                 Circle()
                     .fill(fillColor(for: index))
@@ -215,13 +219,13 @@ struct ConfidenceIndicator: View {
     private func fillColor(for index: Int) -> Color {
         if index < level {
             switch level {
-            case 1: return .orange
-            case 2: return .yellow
-            case 3: return .green
-            default: return .gray
+            case 1: return SupportTheme.accent
+            case 2: return SupportTheme.accent
+            case 3: return SupportTheme.accent
+            default: return SupportTheme.accent
             }
         }
-        return .gray.opacity(0.3)
+        return SupportTheme.textSecondary.opacity(0.3)
     }
 }
 

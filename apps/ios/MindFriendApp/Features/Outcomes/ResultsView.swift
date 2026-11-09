@@ -8,7 +8,7 @@ struct ResultsView: View {
     let template: AssessmentTemplate
     @ObservedObject var outcomeService: OutcomeTrackingService
     @Binding var isPresented: Bool
-    
+
     @State private var showingGoalSheet = false
     @State private var isSharing = false
     @State private var recommendations: [AssessmentExerciseRecommendation] = []
@@ -19,19 +19,19 @@ struct ResultsView: View {
     @State private var trendUnavailable = false
 
     var recommendationService: AssessmentRecommendationService?
-    
+
     var severityColor: Color {
-        guard response.availableScore != nil else { return .gray }
+        guard response.availableScore != nil else { return SupportTheme.accent }
         switch response.severityLevel.lowercased() {
-        case "minimal": return Color(red: 0.2, green: 0.6, blue: 0.4)
-        case "mild": return Color(red: 0.3, green: 0.7, blue: 0.5)
-        case "moderate": return Color(red: 0.95, green: 0.7, blue: 0.0)
-        case "moderately_severe", "moderately severe": return Color(red: 1.0, green: 0.5, blue: 0.0)
-        case "severe": return Color(red: 1.0, green: 0.2, blue: 0.2)
-        default: return Color.gray
+        case "minimal": return SupportTheme.accent
+        case "mild": return SupportTheme.accent
+        case "moderate": return SupportTheme.accent
+        case "moderately_severe", "moderately severe": return SupportTheme.accent
+        case "severe": return SupportTheme.accent
+        default: return SupportTheme.textSecondary
         }
     }
-    
+
     var severityBackgroundColor: Color {
         severityColor.opacity(0.1)
     }
@@ -63,297 +63,274 @@ struct ResultsView: View {
             return template.description ?? "This assessment helps track your mental wellness over time."
         }
     }
-    
+
     var trendIndicator: (image: String, color: Color, label: String) {
         guard response.availableScore != nil else {
-            return (image: "minus.circle.fill", color: .gray, label: "No trend")
+            return (image: "minus.circle.fill", color: SupportTheme.textSecondary, label: "No trend")
         }
         guard !isLoadingTrend else {
-            return (image: "minus.circle.fill", color: .gray, label: "Loading trend")
+            return (image: "minus.circle.fill", color: SupportTheme.textSecondary, label: "Loading trend")
         }
         guard !trendUnavailable, let previousScore = previousResponse?.availableScore,
               let type = AssessmentType(rawValue: template.code) else {
-            return (image: "minus.circle.fill", color: .gray,
+            return (image: "minus.circle.fill", color: SupportTheme.textSecondary,
                     label: trendUnavailable ? "Trend unavailable" : "No earlier score")
         }
         let scoreDelta = type.improvement(from: previousScore, to: response.totalScore)
-        
+
         if scoreDelta > 0 {
-            return (image: type.higherScoresAreBetter ? "arrow.up.circle.fill" : "arrow.down.circle.fill", color: Color(red: 0.2, green: 0.6, blue: 0.4), label: String(localized: "Improving"))
+            return (image: type.higherScoresAreBetter ? "arrow.up.circle.fill" : "arrow.down.circle.fill", color: SupportTheme.accent, label: String(localized: "Improving"))
         } else if scoreDelta < 0 {
-            return (image: type.higherScoresAreBetter ? "arrow.down.circle.fill" : "arrow.up.circle.fill", color: Color(red: 1.0, green: 0.2, blue: 0.2), label: String(localized: "Worsening"))
+            return (image: type.higherScoresAreBetter ? "arrow.down.circle.fill" : "arrow.up.circle.fill", color: SupportTheme.accent, label: String(localized: "Worsening"))
         } else {
-            return (image: "minus.circle.fill", color: Color.gray, label: String(localized: "Stable"))
+            return (image: "minus.circle.fill", color: SupportTheme.textSecondary, label: String(localized: "Stable"))
         }
     }
-    
+
     var body: some View {
         ZStack {
             // Background
-            LinearGradient(
-                gradient: Gradient(colors: [
-                    Color(red: 0.95, green: 0.97, blue: 1.0),
-                    Color(red: 0.92, green: 0.96, blue: 0.98)
-                ]),
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
+            SupportTheme.canvas
             .ignoresSafeArea()
-            
+
             VStack(spacing: 0) {
                 // Header
                 HStack {
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                         Text("Assessment Results")
-                            .font(.system(size: 18, weight: .bold, design: .default))
-                            .foregroundColor(Color(red: 0.1, green: 0.3, blue: 0.5))
-                        
+                            .font(.system(.title3, design: .default).weight(.bold))
+                            .foregroundColor(SupportTheme.accent)
+
                         Text(response.completedAt.formatted(date: .abbreviated, time: .shortened))
-                            .font(.system(size: 13, weight: .regular, design: .default))
-                            .foregroundColor(.gray)
+                            .font(.system(.caption, design: .default).weight(.regular))
+                            .foregroundColor(SupportTheme.textSecondary)
                     }
-                    
+
                     Spacer()
-                    
+
                     Button(action: { isPresented = false }) {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 24))
-                            .foregroundColor(.gray)
+                            .font(.system(.title2))
+                            .foregroundColor(SupportTheme.textSecondary)
                     }
                 }
-                .padding(20)
-                .background(Color.white)
-                .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
-                
+                .padding(SupportTheme.Spacing.m)
+                .background(SupportTheme.surface)
+                .shadow(color: SupportTheme.canvas.opacity(0.05), radius: 4, x: 0, y: 2)
+
                 // Scrollable content
                 ScrollView {
-                    VStack(spacing: 20) {
+                    VStack(spacing: SupportTheme.Spacing.m) {
                         // Score card (large)
-                        VStack(spacing: 16) {
-                            VStack(spacing: 8) {
+                        VStack(spacing: SupportTheme.Spacing.m) {
+                            VStack(spacing: SupportTheme.Spacing.xs) {
                                 Text(template.name)
-                                    .font(.system(size: 16, weight: .semibold, design: .default))
-                                    .foregroundColor(.gray)
-                                
-                                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                                    .font(.system(.body, design: .default).weight(.semibold))
+                                    .foregroundColor(SupportTheme.textSecondary)
+
+                                HStack(alignment: .firstTextBaseline, spacing: SupportTheme.Spacing.xxs) {
                                     Text(response.availableScore.map(String.init) ?? "—")
-                                        .font(.system(size: 56, weight: .bold, design: .default))
+                                        .font(.system(.largeTitle, design: .default).weight(.bold))
                                         .foregroundColor(severityColor)
-                                    
+
                                     Text("/ \(AssessmentType(rawValue: template.code)?.maxScore ?? 27)")
-                                        .font(.system(size: 18, weight: .regular, design: .default))
-                                        .foregroundColor(.gray)
+                                        .font(.system(.title3, design: .default).weight(.regular))
+                                        .foregroundColor(SupportTheme.textSecondary)
                                 }
                             }
-                            
+
                             if let explanation = response.scoreStatus.explanation {
                                 Text(explanation)
                                     .font(.footnote)
-                                    .foregroundColor(.secondary)
+                                    .foregroundColor(SupportTheme.textSecondary)
                             }
                             Divider()
-                                .padding(.vertical, 4)
-                            
+                                .padding(.vertical, SupportTheme.Spacing.xxs)
+
                             // Severity badge
-                            VStack(spacing: 8) {
+                            VStack(spacing: SupportTheme.Spacing.xs) {
                                 Text("Severity Level")
-                                    .font(.system(size: 12, weight: .semibold, design: .default))
-                                    .foregroundColor(.gray)
+                                    .font(.system(.caption, design: .default).weight(.semibold))
+                                    .foregroundColor(SupportTheme.textSecondary)
                                     .frame(maxWidth: .infinity, alignment: .leading)
-                                
-                                HStack(spacing: 8) {
+
+                                HStack(spacing: SupportTheme.Spacing.xs) {
                                     Circle()
                                         .fill(severityColor)
                                         .frame(width: 12, height: 12)
 
                                     Text(formattedSeverityLevel)
-                                        .font(.system(size: 15, weight: .semibold, design: .default))
-                                        .foregroundColor(Color(red: 0.1, green: 0.3, blue: 0.5))
+                                        .font(.system(.subheadline, design: .default).weight(.semibold))
+                                        .foregroundColor(SupportTheme.accent)
 
                                     Spacer()
                                 }
                             }
                         }
-                        .padding(20)
-                        .background(
-                            RoundedRectangle(cornerRadius: 16)
-                                .fill(Color.white)
-                                .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
-                        )
-                        .padding(.horizontal, 20)
+                        .padding(SupportTheme.Spacing.m)
+                        .background(SupportTheme.surface, in: RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
+                        .padding(.horizontal, SupportTheme.Spacing.m)
 
                         // About this assessment
-                        VStack(alignment: .leading, spacing: 10) {
-                            HStack(spacing: 8) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
+                            HStack(spacing: SupportTheme.Spacing.xs) {
                                 Image(systemName: "info.circle.fill")
-                                    .font(.system(size: 14))
-                                    .foregroundColor(Color(red: 0.4, green: 0.5, blue: 0.7))
+                                    .font(.system(.subheadline))
+                                    .foregroundColor(SupportTheme.accent)
 
                                 Text("About this Assessment")
-                                    .font(.system(size: 14, weight: .semibold, design: .default))
-                                    .foregroundColor(Color(red: 0.1, green: 0.3, blue: 0.5))
+                                    .font(.system(.subheadline, design: .default).weight(.semibold))
+                                    .foregroundColor(SupportTheme.accent)
                             }
 
                             Text(assessmentDescription)
-                                .font(.system(size: 13, weight: .regular, design: .default))
-                                .foregroundColor(Color(red: 0.3, green: 0.3, blue: 0.3))
+                                .font(.system(.caption, design: .default).weight(.regular))
+                                .foregroundColor(SupportTheme.textSecondary)
                                 .lineSpacing(3)
                         }
-                        .padding(14)
+                        .padding(SupportTheme.Spacing.s)
                         .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(Color(red: 0.95, green: 0.96, blue: 0.98))
+                            RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                                .fill(SupportTheme.surface)
                         )
-                        .padding(.horizontal, 20)
+                        .padding(.horizontal, SupportTheme.Spacing.m)
 
                         // Trend card
-                        VStack(spacing: 12) {
+                        VStack(spacing: SupportTheme.Spacing.s) {
                             HStack {
                                 Text("Progress Trend")
-                                    .font(.system(size: 14, weight: .semibold, design: .default))
-                                    .foregroundColor(Color(red: 0.1, green: 0.3, blue: 0.5))
-                                
+                                    .font(.system(.subheadline, design: .default).weight(.semibold))
+                                    .foregroundColor(SupportTheme.accent)
+
                                 Spacer()
                             }
-                            
-                            HStack(spacing: 12) {
+
+                            HStack(spacing: SupportTheme.Spacing.s) {
                                 Image(systemName: trendIndicator.image)
-                                    .font(.system(size: 20))
+                                    .font(.system(.title3))
                                     .foregroundColor(trendIndicator.color)
-                                
-                                VStack(alignment: .leading, spacing: 2) {
+
+                                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                                     Text(trendIndicator.label)
-                                        .font(.system(size: 15, weight: .semibold, design: .default))
+                                        .font(.system(.subheadline, design: .default).weight(.semibold))
                                         .foregroundColor(trendIndicator.color)
-                                    
+
                                     Text("vs last assessment")
-                                        .font(.system(size: 12, weight: .regular, design: .default))
-                                        .foregroundColor(.gray)
+                                        .font(.system(.caption, design: .default).weight(.regular))
+                                        .foregroundColor(SupportTheme.textSecondary)
                                 }
-                                
+
                                 Spacer()
                             }
                         }
-                        .padding(14)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(Color.white)
-                                .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
-                        )
-                        .padding(.horizontal, 20)
-                        
+                        .padding(SupportTheme.Spacing.s)
+                        .background(SupportTheme.surface, in: RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
+                        .padding(.horizontal, SupportTheme.Spacing.m)
+
                         // Interpretation section
-                        VStack(alignment: .leading, spacing: 12) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                             Text("What this means")
-                                .font(.system(size: 14, weight: .semibold, design: .default))
-                                .foregroundColor(Color(red: 0.1, green: 0.3, blue: 0.5))
-                            
+                                .font(.system(.subheadline, design: .default).weight(.semibold))
+                                .foregroundColor(SupportTheme.accent)
+
                             Text(interpretationText())
-                                .font(.system(size: 14, weight: .regular, design: .default))
-                                .foregroundColor(Color(red: 0.2, green: 0.2, blue: 0.2))
+                                .font(.system(.subheadline, design: .default).weight(.regular))
+                                .foregroundColor(SupportTheme.accent)
                                 .lineLimit(nil)
                         }
-                        .padding(14)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(Color.white)
-                                .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
-                        )
-                        .padding(.horizontal, 20)
+                        .padding(SupportTheme.Spacing.s)
+                        .background(SupportTheme.surface, in: RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
+                        .padding(.horizontal, SupportTheme.Spacing.m)
 
                         // Exercise recommendations section
                         if !recommendations.isEmpty {
-                            VStack(alignment: .leading, spacing: 12) {
-                                HStack(spacing: 8) {
+                            VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
+                                HStack(spacing: SupportTheme.Spacing.xs) {
                                     Image(systemName: "sparkles")
-                                        .font(.system(size: 14))
-                                        .foregroundColor(Color(red: 0.2, green: 0.6, blue: 0.4))
+                                        .font(.system(.subheadline))
+                                        .foregroundColor(SupportTheme.accent)
 
                                     Text("Recommended for You")
-                                        .font(.system(size: 14, weight: .semibold, design: .default))
-                                        .foregroundColor(Color(red: 0.1, green: 0.3, blue: 0.5))
+                                        .font(.system(.subheadline, design: .default).weight(.semibold))
+                                        .foregroundColor(SupportTheme.accent)
 
                                     Spacer()
                                 }
 
-                                VStack(spacing: 8) {
+                                VStack(spacing: SupportTheme.Spacing.xs) {
                                     ForEach(recommendations) { rec in
                                         Button(action: {
                                             selectedExercise = rec.exercise
                                         }) {
-                                            HStack(spacing: 12) {
+                                            HStack(spacing: SupportTheme.Spacing.s) {
                                                 Image(systemName: rec.exerciseType.icon)
-                                                    .font(.system(size: 16, weight: .semibold))
-                                                    .foregroundColor(rec.exerciseType.themeColor)
+                                                    .font(.system(.body).weight(.semibold))
+                                                    .foregroundColor(SupportTheme.accent)
                                                     .frame(width: 32, height: 32)
                                                     .background(
-                                                        RoundedRectangle(cornerRadius: 8)
-                                                            .fill(rec.exerciseType.themeColor.opacity(0.1))
+                                                        RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                                                            .fill(SupportTheme.accent.opacity(0.1))
                                                     )
 
-                                                VStack(alignment: .leading, spacing: 2) {
+                                                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                                                     Text(rec.title)
-                                                        .font(.system(size: 14, weight: .semibold, design: .default))
-                                                        .foregroundColor(Color(red: 0.1, green: 0.3, blue: 0.5))
+                                                        .font(.system(.subheadline, design: .default).weight(.semibold))
+                                                        .foregroundColor(SupportTheme.accent)
 
                                                     Text(rec.reason)
-                                                        .font(.system(size: 12, weight: .regular, design: .default))
-                                                        .foregroundColor(.gray)
-                                                        .lineLimit(1)
+                                                        .font(.system(.caption, design: .default).weight(.regular))
+                                                        .foregroundColor(SupportTheme.textSecondary)
+                                                        .fixedSize(horizontal: false, vertical: true)
                                                 }
 
                                                 Spacer()
 
                                                 Text(rec.durationLabel)
-                                                    .font(.system(size: 12, weight: .medium, design: .default))
-                                                    .foregroundColor(.gray)
+                                                    .font(.system(.caption, design: .default).weight(.medium))
+                                                    .foregroundColor(SupportTheme.textSecondary)
 
                                                 Image(systemName: "chevron.right")
-                                                    .font(.system(size: 12, weight: .semibold))
-                                                    .foregroundColor(.gray.opacity(0.5))
+                                                    .font(.system(.caption).weight(.semibold))
+                                                    .foregroundColor(SupportTheme.textSecondary.opacity(0.5))
                                             }
-                                            .padding(12)
+                                            .padding(SupportTheme.Spacing.s)
                                             .background(
-                                                RoundedRectangle(cornerRadius: 10)
-                                                    .fill(Color.white)
-                                                    .stroke(Color.gray.opacity(0.15), lineWidth: 1)
+                                                RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                                                    .fill(SupportTheme.surface)
+                                                    .stroke(SupportTheme.textSecondary.opacity(0.15), lineWidth: 1)
                                             )
                                         }
                                         .buttonStyle(PlainButtonStyle())
                                     }
                                 }
                             }
-                            .padding(14)
-                            .background(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .fill(Color.white)
-                                    .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
-                            )
-                            .padding(.horizontal, 20)
+                            .padding(SupportTheme.Spacing.s)
+                            .background(SupportTheme.surface, in: RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
+                            .padding(.horizontal, SupportTheme.Spacing.m)
                         } else if isLoadingRecommendations {
                             HStack {
                                 Spacer()
                                 ProgressView()
-                                    .padding()
+                                    .padding(SupportTheme.Spacing.m)
                                 Spacer()
                             }
-                            .padding(.horizontal, 20)
+                            .padding(.horizontal, SupportTheme.Spacing.m)
                         }
 
                         // Resources section (if needed)
                         if isHighRisk() {
-                            VStack(alignment: .leading, spacing: 12) {
-                                HStack(spacing: 8) {
+                            VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
+                                HStack(spacing: SupportTheme.Spacing.xs) {
                                     Image(systemName: "exclamationmark.circle.fill")
-                                        .font(.system(size: 14))
-                                        .foregroundColor(Color(red: 1.0, green: 0.2, blue: 0.2))
-                                    
+                                        .font(.system(.subheadline))
+                                        .foregroundColor(SupportTheme.accent)
+
                                     Text("Support Resources")
-                                        .font(.system(size: 14, weight: .semibold, design: .default))
-                                        .foregroundColor(Color(red: 1.0, green: 0.2, blue: 0.2))
+                                        .font(.system(.subheadline, design: .default).weight(.semibold))
+                                        .foregroundColor(SupportTheme.accent)
                                 }
-                                
-                                VStack(spacing: 8) {
+
+                                VStack(spacing: SupportTheme.Spacing.xs) {
                                     ResourceLink(
                                         icon: "phone.fill",
                                         title: "988 Suicide & Crisis Lifeline",
@@ -376,63 +353,63 @@ struct ResultsView: View {
                                     )
                                 }
                             }
-                            .padding(14)
+                            .padding(SupportTheme.Spacing.s)
                             .background(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .fill(Color(red: 1.0, green: 0.2, blue: 0.2).opacity(0.05))
-                                    .stroke(Color(red: 1.0, green: 0.2, blue: 0.2).opacity(0.2), lineWidth: 1)
+                                RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                                    .fill(SupportTheme.accent.opacity(0.05))
+                                    .stroke(SupportTheme.accent.opacity(0.2), lineWidth: 1)
                             )
-                            .padding(.horizontal, 20)
+                            .padding(.horizontal, SupportTheme.Spacing.m)
                         }
-                        
+
                         // Action buttons
-                        VStack(spacing: 10) {
+                        VStack(spacing: SupportTheme.Spacing.xs) {
                             Button(action: {
                                 showingGoalSheet = true
                             }) {
-                                HStack(spacing: 8) {
+                                HStack(spacing: SupportTheme.Spacing.xs) {
                                     Image(systemName: "target")
-                                        .font(.system(size: 14, weight: .semibold))
-                                    
+                                        .font(.system(.subheadline).weight(.semibold))
+
                                     Text("Set Outcome Goal")
-                                        .font(.system(size: 15, weight: .semibold, design: .default))
+                                        .font(.system(.subheadline, design: .default).weight(.semibold))
                                 }
-                                .foregroundColor(.white)
+                                .foregroundColor(SupportTheme.onAccent)
                                 .frame(maxWidth: .infinity)
-                                .padding(12)
+                                .padding(SupportTheme.Spacing.s)
                                 .background(
-                                    RoundedRectangle(cornerRadius: 10)
-                                        .fill(Color(red: 0.2, green: 0.6, blue: 0.4))
+                                    RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                                        .fill(SupportTheme.accent)
                                 )
                             }
-                            
+
                             .disabled(response.availableScore == nil)
                             Button(action: {
                                 isSharing = true
                             }) {
-                                HStack(spacing: 8) {
+                                HStack(spacing: SupportTheme.Spacing.xs) {
                                     Image(systemName: "square.and.arrow.up")
-                                        .font(.system(size: 14, weight: .semibold))
-                                    
+                                        .font(.system(.subheadline).weight(.semibold))
+
                                     Text("Share Results")
-                                        .font(.system(size: 15, weight: .semibold, design: .default))
+                                        .font(.system(.subheadline, design: .default).weight(.semibold))
                                 }
-                                .foregroundColor(Color(red: 0.1, green: 0.3, blue: 0.5))
+                                .foregroundColor(SupportTheme.accent)
                                 .frame(maxWidth: .infinity)
-                                .padding(12)
+                                .padding(SupportTheme.Spacing.s)
                                 .background(
-                                    RoundedRectangle(cornerRadius: 10)
-                                        .fill(Color.white)
-                                        .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+                                    RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                                        .fill(SupportTheme.surface)
+                                        .stroke(SupportTheme.textSecondary.opacity(0.2), lineWidth: 1)
                                 )
                             }
                         }
                         .disabled(response.availableScore == nil)
-                        .padding(20)
+                        .padding(SupportTheme.Spacing.m)
                     }
-                    .padding(.vertical, 20)
+                    .padding(.vertical, SupportTheme.Spacing.m)
                 }
-                
+
                 Spacer()
             }
         }
@@ -508,7 +485,7 @@ struct ResultsView: View {
             return "Review your results with a healthcare provider."
         }
     }
-    
+
     private func isHighRisk() -> Bool {
         let severity = response.severityLevel.lowercased()
         return severity == "severe" || severity == "moderately_severe" || severity == "moderately severe"
@@ -529,33 +506,30 @@ struct ResourceLink: View {
                 UIApplication.shared.open(url)
             }
         }) {
-            HStack(spacing: 12) {
+            HStack(spacing: SupportTheme.Spacing.s) {
                 Image(systemName: icon)
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(Color(red: 1.0, green: 0.2, blue: 0.2))
+                    .font(.system(.body).weight(.semibold))
+                    .foregroundColor(SupportTheme.accent)
                     .frame(width: 24)
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     Text(title)
-                        .font(.system(size: 14, weight: .semibold, design: .default))
-                        .foregroundColor(Color(red: 0.1, green: 0.3, blue: 0.5))
+                        .font(.system(.subheadline, design: .default).weight(.semibold))
+                        .foregroundColor(SupportTheme.accent)
 
                     Text(subtitle)
-                        .font(.system(size: 12, weight: .regular, design: .default))
-                        .foregroundColor(.gray)
+                        .font(.system(.caption, design: .default).weight(.regular))
+                        .foregroundColor(SupportTheme.textSecondary)
                 }
 
                 Spacer()
 
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(.gray)
+                    .font(.system(.caption).weight(.semibold))
+                    .foregroundColor(SupportTheme.textSecondary)
             }
-            .padding(12)
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color.white)
-            )
+            .padding(SupportTheme.Spacing.s)
+            .background(SupportTheme.surface, in: RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
         }
     }
 }

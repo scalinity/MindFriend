@@ -534,21 +534,23 @@ extension MainTab {
 
 /// Programmatic navigation for the Explore and You stacks, so deep links open real destinations inside
 /// the correct tab with its back stack preserved. Replacing the path avoids piling up repeated links.
+/// Explore's path also holds category pages (`SupportSection`), so a destination opened from a
+/// category is pushed on top of it.
 @MainActor
 final class SupportShellNavigator: ObservableObject {
-    @Published var explorePath: [SupportDestination] = []
+    @Published var explorePath = NavigationPath()
     @Published var youPath: [SupportDestination] = []
 
     func open(_ destination: SupportDestination) {
         switch destination.tab {
-        case .explore: explorePath = [destination]
+        case .explore: explorePath = NavigationPath([destination])
         case .you: youPath = [destination]
         case .today, .chat: break
         }
     }
 
     func popToRoot() {
-        explorePath = []
+        explorePath = NavigationPath()
         youPath = []
     }
 }

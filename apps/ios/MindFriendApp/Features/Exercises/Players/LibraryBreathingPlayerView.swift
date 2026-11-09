@@ -9,9 +9,9 @@ struct LibraryBreathingPlayerView: View {
         ZStack {
             // Immersive gradient background
             ImmersiveBackground(colors: viewModel.breathingPhaseColors)
-                .animation(.easeInOut(duration: 0.5), value: viewModel.breathingPhase)
+                .animation(reduceMotion ? nil : .easeInOut(duration: 0.5), value: viewModel.breathingPhase)
 
-            VStack(spacing: 40) {
+            VStack(spacing: SupportTheme.Spacing.xl) {
                 Spacer()
 
                 // Intro text (before starting)
@@ -19,17 +19,17 @@ struct LibraryBreathingPlayerView: View {
                     if let intro = viewModel.breathingInstructions?.introText {
                         Text(intro)
                             .font(.body)
-                            .foregroundStyle(.white.opacity(0.8))
+                            .foregroundStyle(SupportTheme.textPrimary.opacity(0.8))
                             .multilineTextAlignment(.center)
-                            .padding(.horizontal, 32)
-                            .transition(.opacity)
+                            .padding(.horizontal, SupportTheme.Spacing.xl)
+                            .transition(reduceMotion ? .opacity : .opacity)
                     }
                 }
 
                 // Phase label
                 PhaseLabel(
                     text: viewModel.breathingPhase.displayText,
-                    color: .white
+                    color: SupportTheme.textPrimary
                 )
                 .opacity(viewModel.isPlaying ? 1 : 0.5)
 
@@ -49,7 +49,7 @@ struct LibraryBreathingPlayerView: View {
 
                 // Timer
                 TimerDisplay(seconds: viewModel.timeRemaining, style: .large)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(SupportTheme.textPrimary)
 
                 // Cycle counter
                 if let instructions = viewModel.breathingInstructions {
@@ -57,7 +57,7 @@ struct LibraryBreathingPlayerView: View {
                         current: viewModel.currentCycle,
                         total: instructions.cycles
                     )
-                    .foregroundStyle(.white.opacity(0.7))
+                    .foregroundStyle(SupportTheme.textPrimary.opacity(0.7))
                 }
 
                 Spacer()
@@ -80,8 +80,8 @@ struct LibraryBreathingPlayerView: View {
                         viewModel.completeExercise()
                     }
                 )
-                .foregroundStyle(.white)
-                .padding(.bottom, 32)
+                .foregroundStyle(SupportTheme.textPrimary)
+                .padding(.bottom, SupportTheme.Spacing.xl)
             }
         }
         .accessibilityElement(children: .combine)

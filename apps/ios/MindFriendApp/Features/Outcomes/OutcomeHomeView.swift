@@ -9,6 +9,7 @@ struct OutcomeHomeView: View {
     @ObservedObject var authService: SupabaseAuthService
     @StateObject private var insightsService: WellnessInsightsService
     @State private var selectedAssessmentType: AssessmentType?
+    @State private var loadError: String?
 
     // Outcomes tutorial state
     @AppStorage("outcomes_tutorial_completed") private var outcomesTutorialCompleted = false
@@ -25,19 +26,19 @@ struct OutcomeHomeView: View {
     @State private var selectedGoal: OutcomeGoal?
     @State private var showingProgressChart = false
     @State private var progressChartAssessments: [AssessmentResponse] = []
-    
+
     var dueAssessments: [AssessmentSchedule] {
         outcomeService.assessmentSchedules
             .filter { $0.isDue && $0.enabled }
             .sorted { $0.nextDueAt < $1.nextDueAt }
     }
-    
+
     private var hasAnyData: Bool {
         !dueAssessments.isEmpty ||
         !outcomeService.recentResponses.isEmpty ||
         !outcomeService.outcomeGoals.isEmpty
     }
-    
+
     /// Set by the stable shell so pushed work adds no second NavigationStack; standalone callers keep their own.
     @Environment(\.supportRootEmbedded) private var supportEmbedded
 
@@ -45,78 +46,72 @@ struct OutcomeHomeView: View {
         SupportRootNavigation(embedded: supportEmbedded) {
             ZStack {
                 // Gradient background
-                LinearGradient(
-                    gradient: Gradient(colors: [
-                        Color(red: 0.95, green: 0.97, blue: 1.0),
-                        Color(red: 0.92, green: 0.96, blue: 0.98)
-                    ]),
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
+                SupportTheme.canvas
                 .ignoresSafeArea()
-                
+
                 ScrollView {
-                    VStack(spacing: 24) {
+                    VStack(spacing: SupportTheme.Spacing.l) {
                         // Header
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Wellness Tracking")
-                                .font(.system(size: 28, weight: .bold, design: .default))
-                                .foregroundColor(Color(red: 0.1, green: 0.3, blue: 0.5))
-                            
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
+                            Text(SupportDestination.outcomes.title)
+                                .font(.system(.title, design: .default).weight(.bold))
+                                .foregroundColor(SupportTheme.accent)
+
                             Text("Monitor your mental health journey")
-                                .font(.system(size: 16, weight: .regular, design: .default))
-                                .foregroundColor(.gray)
+                                .font(.system(.body, design: .default).weight(.regular))
+                                .foregroundColor(SupportTheme.textSecondary)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 20)
-                        .padding(.top, 12)
-                        
+                        .padding(.horizontal, SupportTheme.Spacing.m)
+                        .padding(.top, SupportTheme.Spacing.s)
+
+                        if let loadError {
+                            SupportUnavailableState(title: "Assessments unavailable", message: loadError)
+                                .padding(.horizontal, SupportTheme.Spacing.m)
+                        }
+
                         // Empty state for brand-new users
                         if !hasAnyData {
                             emptyStateSection
                         }
-                        
+
                         // Due Assessments
                         if !dueAssessments.isEmpty {
-                            VStack(alignment: .leading, spacing: 12) {
+                            VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                                 Text("Assessments Due")
-                                    .font(.system(size: 16, weight: .semibold, design: .default))
-                                    .foregroundColor(Color(red: 0.1, green: 0.3, blue: 0.5))
-                                    .padding(.horizontal, 20)
-                                
+                                    .font(.system(.body, design: .default).weight(.semibold))
+                                    .foregroundColor(SupportTheme.accent)
+                                    .padding(.horizontal, SupportTheme.Spacing.m)
+
                                 ForEach(dueAssessments, id: \.id) { schedule in
                                     if let template = outcomeService.assessmentTemplates
                                         .first(where: { $0.id == schedule.assessmentTemplateId }) {
-                                        
+
                                         Button(action: {
                                             selectedAssessmentType = AssessmentType(rawValue: template.code)
                                             showingAssessmentFlow = true
                                         }) {
-                                            HStack(spacing: 16) {
-                                                VStack(alignment: .leading, spacing: 4) {
+                                            HStack(spacing: SupportTheme.Spacing.m) {
+                                                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                                                     Text(template.name)
-                                                        .font(.system(size: 16, weight: .semibold, design: .default))
-                                                        .foregroundColor(Color(red: 0.1, green: 0.3, blue: 0.5))
-                                                    
+                                                        .font(.system(.body, design: .default).weight(.semibold))
+                                                        .foregroundColor(SupportTheme.accent)
+
                                                     Text("Due today")
-                                                        .font(.system(size: 13, weight: .regular, design: .default))
-                                                        .foregroundColor(.gray)
+                                                        .font(.system(.caption, design: .default).weight(.regular))
+                                                        .foregroundColor(SupportTheme.textSecondary)
                                                 }
-                                                
+
                                                 Spacer()
-                                                
+
                                                 Image(systemName: "arrow.right")
-                                                    .font(.system(size: 14, weight: .semibold))
-                                                    .foregroundColor(Color(red: 0.2, green: 0.6, blue: 0.4))
+                                                    .font(.system(.subheadline).weight(.semibold))
+                                                    .foregroundColor(SupportTheme.accent)
                                             }
-                                            .padding(16)
-                                            .background(
-                                                RoundedRectangle(cornerRadius: 12)
-                                                    .fill(Color.white)
-                                                    .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
-                                            )
+                                            .padding(SupportTheme.Spacing.m)
+                                            .background(SupportTheme.surface, in: RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
                                         }
-                                        .padding(.horizontal, 20)
+                                        .padding(.horizontal, SupportTheme.Spacing.m)
                                     }
                                 }
                             }
@@ -125,17 +120,17 @@ struct OutcomeHomeView: View {
                         // Wellness Insights (mood trend + helpful activities)
                         if hasAnyData {
                             WellnessInsightsCard(insightsService: insightsService)
-                                .padding(.horizontal, 20)
+                                .padding(.horizontal, SupportTheme.Spacing.m)
                         }
 
                         // Recent Results
                         if !outcomeService.recentResponses.isEmpty {
-                            VStack(alignment: .leading, spacing: 12) {
+                            VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                                 Text("Recent Results")
-                                    .font(.system(size: 16, weight: .semibold, design: .default))
-                                    .foregroundColor(Color(red: 0.1, green: 0.3, blue: 0.5))
-                                    .padding(.horizontal, 20)
-                                
+                                    .font(.system(.body, design: .default).weight(.semibold))
+                                    .foregroundColor(SupportTheme.accent)
+                                    .padding(.horizontal, SupportTheme.Spacing.m)
+
                                 ForEach(outcomeService.recentResponses.prefix(3), id: \.id) { response in
                                     Button(action: {
                                         selectedResult = response
@@ -143,19 +138,19 @@ struct OutcomeHomeView: View {
                                     }) {
                                         RecentResultCard(response: response)
                                     }
-                                    .padding(.horizontal, 20)
+                                    .padding(.horizontal, SupportTheme.Spacing.m)
                                 }
                             }
                         }
-                        
+
                         // Outcome Goals
                         if !outcomeService.outcomeGoals.isEmpty {
-                            VStack(alignment: .leading, spacing: 12) {
+                            VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                                 Text("Your Goals")
-                                    .font(.system(size: 16, weight: .semibold, design: .default))
-                                    .foregroundColor(Color(red: 0.1, green: 0.3, blue: 0.5))
-                                    .padding(.horizontal, 20)
-                                
+                                    .font(.system(.body, design: .default).weight(.semibold))
+                                    .foregroundColor(SupportTheme.accent)
+                                    .padding(.horizontal, SupportTheme.Spacing.m)
+
                                 ForEach(outcomeService.outcomeGoals.filter({ !$0.achieved }), id: \.id) { goal in
                                     Button(action: {
                                         selectedGoal = goal
@@ -177,22 +172,25 @@ struct OutcomeHomeView: View {
                                                 .filter { $0.assessmentTemplateId == goal.assessmentTemplateId }
                                                 .sorted { $0.completedAt > $1.completedAt }.first?.availableScore)
                                     }
-                                    .padding(.horizontal, 20)
+                                    .padding(.horizontal, SupportTheme.Spacing.m)
                                 }
                             }
                         }
-                        
+
                         Spacer()
                             .frame(height: 20)
                     }
-                    .padding(.vertical, 12)
+                    .padding(.vertical, SupportTheme.Spacing.s)
                 }
             }
+            .supportScreen()
+            .navigationTitle(SupportDestination.outcomes.title)
+            .navigationBarTitleDisplayMode(.inline)
             .navigationDestination(isPresented: $showingAssessmentFlow) {
                 if let type = selectedAssessmentType,
                    let template = outcomeService.assessmentTemplates
                     .first(where: { AssessmentType(rawValue: $0.code) == type }) {
-                    
+
                     AssessmentFlowView(
                         template: template,
                         outcomeService: outcomeService,
@@ -204,7 +202,7 @@ struct OutcomeHomeView: View {
                 if let result = selectedResult,
                    let template = outcomeService.assessmentTemplates
                     .first(where: { $0.id == result.assessmentTemplateId }) {
-                    
+
                     ResultsView(
                         response: result,
                         template: template,
@@ -218,7 +216,7 @@ struct OutcomeHomeView: View {
                    let template = outcomeService.assessmentTemplates
                     .first(where: { $0.id == goal.assessmentTemplateId }),
                    let assessmentType = AssessmentType(rawValue: template.code) {
-                    
+
                     ProgressChartView(
                         assessmentType: assessmentType,
                         responses: progressChartAssessments,
@@ -251,6 +249,7 @@ struct OutcomeHomeView: View {
                 try await outcomeService.loadRecentResponses()
                 print("[OutcomeHomeView] Loaded \(outcomeService.recentResponses.count) responses")
             } catch {
+                loadError = error.localizedDescription
                 print("[OutcomeHomeView] ERROR: \(error)")
             }
         }
@@ -263,6 +262,7 @@ struct OutcomeHomeView: View {
                     try await outcomeService.loadOutcomeGoals()
                     try await outcomeService.loadRecentResponses()
                 } catch {
+                    loadError = error.localizedDescription
                     print("[OutcomeHomeView] ERROR reloading on auth change: \(error)")
                 }
             }
@@ -287,25 +287,25 @@ struct OutcomeHomeView: View {
 
 private extension OutcomeHomeView {
     var emptyStateSection: some View {
-        VStack(spacing: 16) {
-            HStack(alignment: .top, spacing: 12) {
+        VStack(spacing: SupportTheme.Spacing.m) {
+            HStack(alignment: .top, spacing: SupportTheme.Spacing.s) {
                 ZStack {
                     Circle()
-                        .fill(Color.white.opacity(0.9))
+                        .fill(SupportTheme.surface.opacity(0.9))
                         .frame(width: 40, height: 40)
                     Image(systemName: "chart.line.uptrend.xyaxis")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundColor(Color(red: 0.2, green: 0.6, blue: 0.4))
+                        .font(.system(.title3).weight(.semibold))
+                        .foregroundColor(SupportTheme.accent)
                 }
 
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     Text("Start tracking your progress")
-                        .font(.system(size: 16, weight: .semibold, design: .default))
-                        .foregroundColor(Color(red: 0.1, green: 0.3, blue: 0.5))
+                        .font(.system(.body, design: .default).weight(.semibold))
+                        .foregroundColor(SupportTheme.accent)
 
                     Text("Take a quick check-in to set a baseline and unlock personalized goals.")
-                        .font(.system(size: 14, weight: .regular, design: .default))
-                        .foregroundColor(.gray)
+                        .font(.system(.subheadline, design: .default).weight(.regular))
+                        .foregroundColor(SupportTheme.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
@@ -320,75 +320,64 @@ private extension OutcomeHomeView {
                 }
             } label: {
                 Text("Take your first assessment")
-                    .font(.system(size: 15, weight: .semibold, design: .default))
+                    .font(.system(.subheadline, design: .default).weight(.semibold))
                     .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color(red: 0.2, green: 0.6, blue: 0.4))
-                    .foregroundColor(.white)
-                    .cornerRadius(12)
             }
+            .buttonStyle(.supportPrimary)
         }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.white)
-                .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
-        )
-        .padding(.horizontal, 20)
+        .padding(SupportTheme.Spacing.m)
+        .background(SupportTheme.surface, in: RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
+        .padding(.horizontal, SupportTheme.Spacing.m)
     }
 }
 
 struct RecentResultCard: View {
     let response: AssessmentResponse
-    
+
     var severityColor: Color {
         switch response.severityLevel.lowercased() {
-        case "minimal": return Color(red: 0.2, green: 0.6, blue: 0.4)
-        case "mild": return Color(red: 0.3, green: 0.7, blue: 0.5)
-        case "moderate": return Color(red: 0.95, green: 0.7, blue: 0.0)
-        case "moderately_severe", "moderately severe": return Color(red: 1.0, green: 0.5, blue: 0.0)
-        case "severe": return Color(red: 1.0, green: 0.2, blue: 0.2)
-        default: return Color.gray
+        case "minimal": return SupportTheme.accent
+        case "mild": return SupportTheme.accent
+        case "moderate": return SupportTheme.accent
+        case "moderately_severe", "moderately severe": return SupportTheme.accent
+        case "severe": return SupportTheme.accent
+        default: return SupportTheme.textSecondary
         }
     }
-    
+
     var body: some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 6) {
+        HStack(spacing: SupportTheme.Spacing.s) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text(response.availableScore.map { "Score: \($0)" } ?? "Score unavailable")
-                    .font(.system(size: 18, weight: .bold, design: .default))
-                    .foregroundColor(Color(red: 0.1, green: 0.3, blue: 0.5))
-                
+                    .font(.system(.title3, design: .default).weight(.bold))
+                    .foregroundColor(SupportTheme.accent)
+
                 Text(response.availableScore == nil ? "Retake this assessment for a current score" : response.severityLevel)
-                    .font(.system(size: 13, weight: .semibold, design: .default))
+                    .font(.system(.caption, design: .default).weight(.semibold))
                     .foregroundColor(severityColor)
-                
+
                 if response.scoreStatus == .recalculated {
-                    Text("Recalculated from saved answers").font(.caption).foregroundColor(.secondary)
+                    Text("Recalculated from saved answers").font(.caption).foregroundColor(SupportTheme.textSecondary)
                 }
                 Text(response.completedAt.formatted(date: .abbreviated, time: .omitted))
-                    .font(.system(size: 12, weight: .regular, design: .default))
-                    .foregroundColor(.gray)
+                    .font(.system(.caption, design: .default).weight(.regular))
+                    .foregroundColor(SupportTheme.textSecondary)
             }
-            
+
             Spacer()
-            
+
             Image(systemName: "chevron.right")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(.gray)
+                .font(.system(.subheadline).weight(.semibold))
+                .foregroundColor(SupportTheme.textSecondary)
         }
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(Color.white)
-                .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
-        )
+        .padding(SupportTheme.Spacing.s)
+        .background(SupportTheme.surface, in: RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
     }
 }
 
 struct OutcomeGoalCard: View {
     let goal: OutcomeGoal
-    
+
     let assessmentType: AssessmentType?
     let currentScore: Int?
 
@@ -398,35 +387,35 @@ struct OutcomeGoalCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             HStack {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     Text("Goal: \(goal.targetScore) by \(goal.targetDate?.formatted(date: .abbreviated, time: .omitted) ?? "No date")")
-                        .font(.system(size: 14, weight: .semibold, design: .default))
-                        .foregroundColor(Color(red: 0.1, green: 0.3, blue: 0.5))
-                    
+                        .font(.system(.subheadline, design: .default).weight(.semibold))
+                        .foregroundColor(SupportTheme.accent)
+
                     Text("From baseline: \(goal.baselineScore)")
-                        .font(.system(size: 12, weight: .regular, design: .default))
-                        .foregroundColor(.gray)
+                        .font(.system(.caption, design: .default).weight(.regular))
+                        .foregroundColor(SupportTheme.textSecondary)
                 }
-                
+
                 Spacer()
             }
-            
+
             if let progress {
                 ProgressView(value: progress)
-                    .tint(Color(red: 0.2, green: 0.6, blue: 0.4))
+                    .tint(SupportTheme.accent)
             } else {
                 Text(assessmentType.map { goal.requiresScoreReview(for: $0) } == true
                      ? "Review this target after scoring corrections" : "No current score available")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(SupportTheme.textSecondary)
             }
         }
-        .padding(14)
+        .padding(SupportTheme.Spacing.s)
         .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(Color(red: 0.98, green: 0.99, blue: 1.0))
+            RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                .fill(SupportTheme.surface)
         )
     }
 }

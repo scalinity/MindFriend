@@ -29,6 +29,7 @@ struct InsightLabView: View {
                     .id("catalog")
             }
         }
+        .supportScreen()
         .navigationTitle("Insight Lab")
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
@@ -46,6 +47,8 @@ struct InsightLabView: View {
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
+                    .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                    .accessibilityLabel("More options")
                 }
             }
         }
@@ -95,38 +98,39 @@ struct CompletedExperimentsView: View {
                         Button {
                             selectedExperimentId = experiment.id
                         } label: {
-                            HStack(spacing: 12) {
+                            HStack(spacing: SupportTheme.Spacing.s) {
                                 if let actionType = experiment.actionTypeEnum {
                                     Image(systemName: actionType.icon)
                                         .font(.title3)
-                                        .foregroundStyle(.white)
+                                        .foregroundStyle(SupportTheme.onAccent)
                                         .frame(width: 40, height: 40)
-                                        .background(Color.accentColor)
-                                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                                        .background(SupportTheme.accent)
+                                        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
                                 }
 
-                                VStack(alignment: .leading, spacing: 4) {
+                                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                                     Text(experiment.title)
                                         .font(.headline)
-                                        .foregroundStyle(.primary)
+                                        .foregroundStyle(SupportTheme.textPrimary)
 
                                     if let endedAt = experiment.endedAt {
                                         Text("Completed \(endedAt, style: .relative) ago")
                                             .font(.caption)
-                                            .foregroundStyle(.secondary)
+                                            .foregroundStyle(SupportTheme.textSecondary)
                                     }
                                 }
 
                                 Spacer()
 
                                 Image(systemName: "chevron.right")
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(SupportTheme.textSecondary)
                             }
                         }
                         .buttonStyle(.plain)
                     }
                 }
             }
+            .supportScreen()
             .navigationTitle("Past Experiments")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

@@ -2,6 +2,7 @@ import SwiftUI
 
 /// Movement exercise player with step-by-step instructions
 struct LibraryMovementPlayerView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject var viewModel: LibraryExercisePlayerViewModel
 
     var body: some View {
@@ -23,35 +24,35 @@ struct LibraryMovementPlayerView: View {
             // Controls
             controlsSection
         }
-        .background(Color(.systemBackground))
+        .background(SupportTheme.canvas)
     }
 
     // MARK: - Header
 
     private var headerSection: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: SupportTheme.Spacing.s) {
             // Overall progress
             StepProgressBar(
                 progress: viewModel.progress,
-                color: .pink
+                color: SupportTheme.accent
             )
-            .padding(.horizontal)
+            .padding(.horizontal, SupportTheme.Spacing.m)
 
             // Time display
             HStack {
                 if let movement = viewModel.movementInstructions {
                     Text("Step \(viewModel.currentMovementIndex + 1) of \(movement.movements.count)")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
 
                 Spacer()
 
                 TimerDisplay(seconds: viewModel.timeRemaining, style: .medium)
             }
-            .padding(.horizontal)
+            .padding(.horizontal, SupportTheme.Spacing.m)
         }
-        .padding(.vertical, 16)
+        .padding(.vertical, SupportTheme.Spacing.m)
     }
 
     // MARK: - Movement Content
@@ -59,7 +60,7 @@ struct LibraryMovementPlayerView: View {
     private func movementContent(_ movement: MovementInstructions) -> some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(spacing: 16) {
+                LazyVStack(spacing: SupportTheme.Spacing.m) {
                     ForEach(Array(movement.movements.enumerated()), id: \.offset) { index, step in
                         MovementStepCard(
                             step: step,
@@ -69,10 +70,10 @@ struct LibraryMovementPlayerView: View {
                         .id(index)
                     }
                 }
-                .padding()
+                .padding(SupportTheme.Spacing.m)
             }
             .onChange(of: viewModel.currentMovementIndex) { _, newIndex in
-                withAnimation(.easeInOut) {
+                withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .easeInOut) {
                     proxy.scrollTo(newIndex, anchor: .center)
                 }
             }
@@ -82,14 +83,14 @@ struct LibraryMovementPlayerView: View {
     // MARK: - Fallback
 
     private var fallbackContent: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: SupportTheme.Spacing.l) {
             Spacer()
 
             // Animated figure
             Image(systemName: "figure.walk")
-                .font(.system(size: 80))
-                .foregroundStyle(.pink)
-                .symbolEffect(.pulse, isActive: viewModel.isPlaying)
+                .font(.system(.largeTitle))
+                .foregroundStyle(SupportTheme.accent)
+                .symbolEffect(.pulse, isActive: !reduceMotion && (viewModel.isPlaying))
 
             // Timer
             TimerDisplay(seconds: viewModel.timeRemaining, style: .large)
@@ -98,8 +99,8 @@ struct LibraryMovementPlayerView: View {
             Text(viewModel.exercise.description)
                 .font(.body)
                 .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 32)
+                .foregroundStyle(SupportTheme.textSecondary)
+                .padding(.horizontal, SupportTheme.Spacing.xl)
 
             Spacer()
         }
@@ -108,13 +109,15 @@ struct LibraryMovementPlayerView: View {
     // MARK: - Controls
 
     private var controlsSection: some View {
-        HStack(spacing: 32) {
+        HStack(spacing: SupportTheme.Spacing.xl) {
             // Reset
             Button {
                 viewModel.resetTimer()
             } label: {
                 Image(systemName: "arrow.counterclockwise")
                     .font(.title)
+                .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                .accessibilityLabel("Restart")
             }
             .disabled(!viewModel.isPlaying && viewModel.currentMovementIndex == 0)
 
@@ -127,8 +130,10 @@ struct LibraryMovementPlayerView: View {
                 }
             } label: {
                 Image(systemName: viewModel.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                    .font(.system(size: 64))
-                    .foregroundStyle(.pink)
+                    .font(.system(.largeTitle))
+                    .foregroundStyle(SupportTheme.accent)
+                    .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                    .accessibilityLabel(viewModel.isPlaying ? "Pause" : "Play")
             }
 
             // Skip / Complete
@@ -144,10 +149,12 @@ struct LibraryMovementPlayerView: View {
                     ? "checkmark.circle"
                     : "forward.fill")
                     .font(.title)
+                .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                .accessibilityLabel("Continue exercise")
             }
         }
-        .padding()
-        .padding(.bottom, 16)
+        .padding(SupportTheme.Spacing.m)
+        .padding(.bottom, SupportTheme.Spacing.m)
     }
 
     // MARK: - Actions

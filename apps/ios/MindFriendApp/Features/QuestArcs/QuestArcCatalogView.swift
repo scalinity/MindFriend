@@ -8,6 +8,7 @@
 import SwiftUI
 
 struct QuestArcCatalogView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @EnvironmentObject private var container: DependencyContainer
     @State private var arcs: [QuestArc] = []
     @State private var selectedCategory: String? = nil
@@ -28,7 +29,7 @@ struct QuestArcCatalogView: View {
     var body: some View {
         SupportRootNavigation(embedded: supportEmbedded) {
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: SupportTheme.Spacing.l) {
                     // Active Arc Banner (tappable to view details)
                     if let active = activeArc {
                         Button {
@@ -42,7 +43,7 @@ struct QuestArcCatalogView: View {
                             ActiveArcBanner(userArc: active)
                         }
                         .buttonStyle(.plain)
-                        .padding(.horizontal)
+                        .padding(.horizontal, SupportTheme.Spacing.m)
                     }
 
                     // Category Filter
@@ -58,8 +59,9 @@ struct QuestArcCatalogView: View {
                         arcGrid
                     }
                 }
-                .padding(.vertical)
+                .padding(.vertical, SupportTheme.Spacing.m)
             }
+            .supportScreen()
             .navigationTitle("Quest Journeys")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
@@ -72,6 +74,8 @@ struct QuestArcCatalogView: View {
                         }
                     } label: {
                         Image(systemName: "ellipsis.circle")
+                        .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                        .accessibilityLabel("More options")
                     }
                 }
             }
@@ -102,7 +106,7 @@ struct QuestArcCatalogView: View {
 
     private var categoryFilter: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 12) {
+            HStack(spacing: SupportTheme.Spacing.s) {
                 CategoryChip(
                     title: "All",
                     isSelected: selectedCategory == nil
@@ -121,19 +125,19 @@ struct QuestArcCatalogView: View {
                     }
                 }
             }
-            .padding(.horizontal)
+            .padding(.horizontal, SupportTheme.Spacing.m)
         }
     }
 
     private var arcGrid: some View {
-        LazyVGrid(columns: [GridItem(.flexible())], spacing: 16) {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), alignment: .top), count: dynamicTypeSize.isAccessibilitySize ? 1 : 1), spacing: SupportTheme.Spacing.m) {
             ForEach(filteredArcs) { arc in
                 QuestArcCard(arc: arc, isEnrolled: activeArc?.arcId == arc.id) {
                     selectedArc = arc
                 }
             }
         }
-        .padding(.horizontal)
+        .padding(.horizontal, SupportTheme.Spacing.m)
     }
 
     private var filteredArcs: [QuestArc] {
@@ -144,20 +148,20 @@ struct QuestArcCatalogView: View {
     }
 
     private func errorView(_ message: String) -> some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             Image(systemName: "exclamationmark.triangle")
                 .font(.largeTitle)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
             Text(message)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .multilineTextAlignment(.center)
             Button("Try Again") {
                 Task { await loadArcs() }
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.supportSecondary)
         }
         .frame(maxWidth: .infinity, minHeight: 200)
-        .padding()
+        .padding(SupportTheme.Spacing.m)
     }
 
     private func loadArcs() async {
@@ -226,10 +230,10 @@ private struct CategoryChip: View {
         Button(action: action) {
             Text(title)
                 .font(.subheadline.weight(.medium))
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(isSelected ? Color.accentColor : Color(.systemGray5))
-                .foregroundStyle(isSelected ? .white : .primary)
+                .padding(.horizontal, SupportTheme.Spacing.m)
+                .padding(.vertical, SupportTheme.Spacing.xs)
+                .background(isSelected ? SupportTheme.accent : SupportTheme.separator)
+                .foregroundStyle(isSelected ? SupportTheme.onAccent : SupportTheme.textPrimary)
                 .clipShape(Capsule())
         }
     }
@@ -242,7 +246,7 @@ private struct QuestArcCard: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                 HStack {
                     categoryIcon
                     Spacer()
@@ -256,13 +260,13 @@ private struct QuestArcCard: View {
 
                 Text(arc.title)
                     .font(.title3.weight(.semibold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(2)
+                    .foregroundStyle(SupportTheme.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 Text(arc.description)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(3)
+                    .foregroundStyle(SupportTheme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 HStack {
                     Label("\(arc.durationDays) days", systemImage: "calendar")
@@ -270,11 +274,9 @@ private struct QuestArcCard: View {
                     Label("\(arc.milestoneDays.count) milestones", systemImage: "flag.fill")
                 }
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
             }
-            .padding()
-            .background(Color(.secondarySystemBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .supportCard()
         }
         .buttonStyle(.plain)
     }
@@ -291,20 +293,20 @@ private struct QuestArcCard: View {
     private var premiumBadge: some View {
         Label("Premium", systemImage: "star.fill")
             .font(.caption2.weight(.medium))
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(Color.orange.opacity(0.15))
-            .foregroundStyle(.orange)
+            .padding(.horizontal, SupportTheme.Spacing.xs)
+            .padding(.vertical, SupportTheme.Spacing.xxs)
+            .background(SupportTheme.surface)
+            .foregroundStyle(SupportTheme.accent)
             .clipShape(Capsule())
     }
 
     private var enrolledBadge: some View {
         Label("Active", systemImage: "checkmark.circle.fill")
             .font(.caption2.weight(.medium))
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(Color.green.opacity(0.15))
-            .foregroundStyle(.green)
+            .padding(.horizontal, SupportTheme.Spacing.xs)
+            .padding(.vertical, SupportTheme.Spacing.xxs)
+            .background(SupportTheme.surface)
+            .foregroundStyle(SupportTheme.accent)
             .clipShape(Capsule())
     }
 }
@@ -314,37 +316,35 @@ private struct ActiveArcBanner: View {
 
     var body: some View {
         HStack {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                 HStack {
-                    Image(systemName: "flame.fill")
-                        .foregroundStyle(.orange)
+                    Image(systemName: "leaf.fill")
+                        .foregroundStyle(SupportTheme.accent)
                     Text("Active Journey")
                         .font(.headline)
                     Spacer()
                     Text("Day \(userArc.currentDay)/\(userArc.snapshotDurationDays)")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
 
                 if let arc = userArc.questArc {
                     Text(arc.title)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
 
                 ProgressView(value: userArc.progressPercentage)
-                    .tint(.orange)
+                    .tint(SupportTheme.accent)
             }
 
             // Chevron to indicate tappable
             Image(systemName: "chevron.right")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .padding(.leading, 8)
+                .foregroundStyle(SupportTheme.textSecondary)
+                .padding(.leading, SupportTheme.Spacing.xs)
         }
-        .padding()
-        .background(Color.orange.opacity(0.1))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .supportCard()
     }
 }
 

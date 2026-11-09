@@ -15,7 +15,7 @@ struct CrisisInterventionModal: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: SupportTheme.Spacing.l) {
                     // Header
                     headerSection
 
@@ -28,11 +28,12 @@ struct CrisisInterventionModal: View {
                     // Acknowledgment
                     acknowledgmentSection
 
-                    Spacer(minLength: 20)
+                    Spacer(minLength: SupportTheme.Spacing.xl)
                 }
-                .padding()
+                .padding(SupportTheme.Spacing.m)
             }
-            .background(Color(.systemBackground))
+            .background(SupportTheme.canvas)
+            .supportScreen()
             .navigationTitle("We're Here For You")
             .navigationBarTitleDisplayMode(.inline)
             .interactiveDismissDisabled(!hasAcknowledged)
@@ -42,41 +43,41 @@ struct CrisisInterventionModal: View {
     // MARK: - Header Section
 
     private var headerSection: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             Image(systemName: "heart.fill")
-                .font(.system(size: 48))
+                .font(.system(.largeTitle))
                 .foregroundStyle(.red)
 
             Text("Your Safety Matters")
                 .font(.title2)
                 .fontWeight(.bold)
         }
-        .padding(.top, 20)
+        .padding(.top, SupportTheme.Spacing.m)
     }
 
     // MARK: - Message Section
 
     private var messageSection: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             Text("Based on your responses, we want to make sure you're getting the support you need.")
                 .font(.body)
                 .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
 
             Text("You don't have to face this alone. There are people who care and want to help.")
                 .font(.body)
                 .multilineTextAlignment(.center)
         }
-        .padding(.horizontal)
+        .padding(.horizontal, SupportTheme.Spacing.m)
     }
 
     // MARK: - Crisis Resources Section
 
     private var crisisResourcesSection: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             Text("Immediate Support Available 24/7")
                 .font(.headline)
-                .padding(.top, 8)
+                .padding(.top, SupportTheme.Spacing.xs)
 
             // National Suicide Prevention Lifeline
             Button(action: onCallHotline) {
@@ -84,23 +85,23 @@ struct CrisisInterventionModal: View {
                     Image(systemName: "phone.fill")
                         .font(.title2)
 
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                         Text("988 Suicide & Crisis Lifeline")
                             .font(.headline)
                         Text("Call or text 988")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
 
                     Spacer()
 
                     Image(systemName: "chevron.right")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
-                .padding()
-                .background(Color.blue.opacity(0.1))
-                .foregroundStyle(.blue)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .padding(SupportTheme.Spacing.m)
+                .background(SupportTheme.surface)
+                .foregroundStyle(SupportTheme.accent)
+                .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
             }
             .buttonStyle(.plain)
 
@@ -110,23 +111,23 @@ struct CrisisInterventionModal: View {
                     Image(systemName: "message.fill")
                         .font(.title2)
 
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                         Text("Crisis Text Line")
                             .font(.headline)
                         Text("Text HOME to 741741")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
 
                     Spacer()
 
                     Image(systemName: "chevron.right")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
-                .padding()
-                .background(Color.green.opacity(0.1))
-                .foregroundStyle(.green)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .padding(SupportTheme.Spacing.m)
+                .background(SupportTheme.surface)
+                .foregroundStyle(SupportTheme.accent)
+                .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
             }
             .buttonStyle(.plain)
 
@@ -136,23 +137,23 @@ struct CrisisInterventionModal: View {
                     Image(systemName: "globe")
                         .font(.title2)
 
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                         Text("International Resources")
                             .font(.headline)
                         Text("Find help in your country")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
 
                     Spacer()
 
                     Image(systemName: "arrow.up.right")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
-                .padding()
-                .background(Color.purple.opacity(0.1))
-                .foregroundStyle(.purple)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .padding(SupportTheme.Spacing.m)
+                .background(SupportTheme.surface)
+                .foregroundStyle(SupportTheme.accent)
+                .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
             }
             .buttonStyle(.plain)
         }
@@ -161,13 +162,13 @@ struct CrisisInterventionModal: View {
     // MARK: - Acknowledgment Section
 
     private var acknowledgmentSection: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             Divider()
-                .padding(.vertical, 8)
+                .padding(.vertical, SupportTheme.Spacing.xs)
 
             Text("Please acknowledge that you've seen this information before continuing.")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .multilineTextAlignment(.center)
 
             Button(action: {
@@ -178,18 +179,18 @@ struct CrisisInterventionModal: View {
                 Text("I Understand")
                     .font(.headline)
                     .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.accentColor)
-                    .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .padding(SupportTheme.Spacing.m)
+                    .background(SupportTheme.accent)
+                    .foregroundStyle(SupportTheme.onAccent)
+                    .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
             }
 
             Text("This doesn't replace professional help. If you're in immediate danger, please call emergency services (911).")
                 .font(.caption2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .multilineTextAlignment(.center)
         }
-        .padding(.top, 8)
+        .padding(.top, SupportTheme.Spacing.xs)
     }
 }
 

@@ -44,7 +44,7 @@ struct QuestArcDetailView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.l) {
                     // Header
                     headerSection
 
@@ -80,8 +80,9 @@ struct QuestArcDetailView: View {
                     // Action Button
                     actionSection
                 }
-                .padding()
+                .padding(SupportTheme.Spacing.m)
             }
+            .supportScreen()
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -118,7 +119,7 @@ struct QuestArcDetailView: View {
     // MARK: - Header
 
     private var headerSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
             HStack {
                 categoryIcon
                 Spacer()
@@ -130,12 +131,12 @@ struct QuestArcDetailView: View {
             Text(arc.title)
                 .font(.title.weight(.bold))
 
-            HStack(spacing: 16) {
+            HStack(spacing: SupportTheme.Spacing.m) {
                 Label("\(arc.durationDays) days", systemImage: "calendar")
                 Label("\(arc.milestoneDays.count) milestones", systemImage: "flag.fill")
             }
             .font(.subheadline)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(SupportTheme.textSecondary)
         }
     }
 
@@ -151,24 +152,25 @@ struct QuestArcDetailView: View {
     private var premiumBadge: some View {
         Label("Premium", systemImage: "star.fill")
             .font(.subheadline.weight(.medium))
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(Color.orange.opacity(0.15))
-            .foregroundStyle(.orange)
+            .padding(.horizontal, SupportTheme.Spacing.s)
+            .padding(.vertical, SupportTheme.Spacing.xxs)
+            .background(SupportTheme.surface)
+            .foregroundStyle(SupportTheme.accent)
             .clipShape(Capsule())
     }
 
     // MARK: - Progress Section
 
     private func progressSection(_ userArc: UserQuestArc) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             HStack {
                 Text("Your Progress")
                     .font(.headline)
+                .accessibilityAddTraits(.isHeader)
                 Spacer()
                 Text("Day \(userArc.currentDay) of \(userArc.snapshotDurationDays)")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
 
             ProgressView(value: userArc.progressPercentage)
@@ -177,13 +179,13 @@ struct QuestArcDetailView: View {
             if userArc.status == .paused {
                 HStack {
                     Image(systemName: "pause.circle.fill")
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(SupportTheme.accent)
                     Text("Paused")
                         .font(.subheadline.weight(.medium))
                     if let _ = userArc.pausedAt {
                         Text("- Resume within 30 days")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                 }
             }
@@ -192,34 +194,32 @@ struct QuestArcDetailView: View {
             if let nextMilestone = userArc.nextMilestoneDay {
                 HStack {
                     Image(systemName: "flag.fill")
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(SupportTheme.accent)
                     Text("Next milestone in \(nextMilestone - userArc.currentDay) days")
                         .font(.subheadline)
                 }
             }
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .supportCard()
     }
 
     // MARK: - Description
 
     private var descriptionSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             Text("About This Journey")
                 .font(.headline)
 
             Text(arc.description)
                 .font(.body)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
     }
 
     // MARK: - Milestones
 
     private var milestonesSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             HStack {
                 Text("Milestones")
                     .font(.headline)
@@ -242,52 +242,52 @@ struct QuestArcDetailView: View {
     }
 
     private func milestoneRow(index: Int, day: Int) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: SupportTheme.Spacing.s) {
             let isCompleted = isEnrolled && (activeArc?.currentDay ?? 0) >= day
 
             ZStack {
                 Circle()
-                    .fill(isCompleted ? QuestArcCategory.color(for: arc.category) : Color(.systemGray4))
+                    .fill(isCompleted ? QuestArcCategory.color(for: arc.category) : SupportTheme.separator)
                     .frame(width: 32, height: 32)
 
                 if isCompleted {
                     Image(systemName: "checkmark")
                         .font(.caption.weight(.bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(SupportTheme.textPrimary)
                 } else {
                     Text("\(index)")
                         .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
             }
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text("Milestone \(index)")
                     .font(.subheadline.weight(.medium))
                 Text("Day \(day)")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
 
             Spacer()
 
             if isCompleted {
                 Image(systemName: "star.fill")
-                    .foregroundStyle(.yellow)
+                    .foregroundStyle(SupportTheme.accent)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, SupportTheme.Spacing.xxs)
     }
 
     // MARK: - Benefits
 
     private var benefitsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("What You'll Experience")
                 .font(.headline)
 
             ForEach(QuestArcCategory.benefits(for: arc.category), id: \.self) { benefit in
-                HStack(spacing: 12) {
+                HStack(spacing: SupportTheme.Spacing.s) {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(QuestArcCategory.color(for: arc.category))
                     Text(benefit)
@@ -307,16 +307,16 @@ struct QuestArcDetailView: View {
             Text(message)
                 .font(.subheadline)
         }
-        .padding()
+        .padding(SupportTheme.Spacing.m)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.red.opacity(0.1))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
     }
 
     // MARK: - Action Section
 
     private var actionSection: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: SupportTheme.Spacing.s) {
             if isEnrolled {
                 enrolledActions
             } else if hasOtherActiveArc {
@@ -325,11 +325,11 @@ struct QuestArcDetailView: View {
                 startButton
             }
         }
-        .padding(.top)
+        .padding(.top, SupportTheme.Spacing.m)
     }
 
     private var enrolledActions: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: SupportTheme.Spacing.s) {
             if activeArc?.status == .paused {
                 Button {
                     Task { await resumeArc() }
@@ -337,18 +337,15 @@ struct QuestArcDetailView: View {
                     HStack {
                         if isPausing {
                             ProgressView()
-                                .tint(.white)
+                                .tint(SupportTheme.accent)
                         } else {
                             Image(systemName: "play.fill")
                         }
                         Text("Resume Journey")
                     }
                     .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(QuestArcCategory.color(for: arc.category))
-                    .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
+                .buttonStyle(.supportPrimary)
                 .disabled(isPausing)
             } else {
                 Button {
@@ -363,10 +360,10 @@ struct QuestArcDetailView: View {
                         Text("Pause Journey")
                     }
                     .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color(.secondarySystemBackground))
-                    .foregroundStyle(.primary)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .padding(SupportTheme.Spacing.m)
+                    .background(SupportTheme.surface)
+                    .foregroundStyle(SupportTheme.textPrimary)
+                    .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
                 }
                 .disabled(isPausing)
             }
@@ -383,7 +380,7 @@ struct QuestArcDetailView: View {
                     Text("Exit Journey")
                 }
                 .frame(maxWidth: .infinity)
-                .padding()
+                .padding(SupportTheme.Spacing.m)
                 .foregroundStyle(.red)
             }
             .disabled(isExiting)
@@ -391,24 +388,24 @@ struct QuestArcDetailView: View {
     }
 
     private var otherArcActiveMessage: some View {
-        VStack(spacing: 12) {
-            VStack(spacing: 8) {
+        VStack(spacing: SupportTheme.Spacing.s) {
+            VStack(spacing: SupportTheme.Spacing.xs) {
                 Text("You have an active journey")
                     .font(.subheadline.weight(.medium))
                 if let currentTitle = activeArc?.arc?.title ?? activeArc?.questArc?.title {
                     Text("Currently enrolled in \"\(currentTitle)\"")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
                 Text("Complete or exit your current journey to start this one.")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .multilineTextAlignment(.center)
             }
-            .padding()
+            .padding(SupportTheme.Spacing.m)
             .frame(maxWidth: .infinity)
-            .background(Color(.secondarySystemBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .background(SupportTheme.surface)
+            .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
 
             Button {
                 showExitConfirmation = true
@@ -422,10 +419,10 @@ struct QuestArcDetailView: View {
                     Text("Exit Current Journey")
                 }
                 .frame(maxWidth: .infinity)
-                .padding()
+                .padding(SupportTheme.Spacing.m)
                 .foregroundStyle(.red)
                 .background(Color.red.opacity(0.1))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
             }
             .disabled(isExiting)
         }
@@ -438,18 +435,15 @@ struct QuestArcDetailView: View {
             HStack {
                 if isEnrolling {
                     ProgressView()
-                        .tint(.white)
+                        .tint(SupportTheme.accent)
                 } else {
                     Image(systemName: "play.fill")
                 }
                 Text("Start Journey")
             }
             .frame(maxWidth: .infinity)
-            .padding()
-            .background(QuestArcCategory.color(for: arc.category))
-            .foregroundStyle(.white)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
         }
+        .buttonStyle(.supportPrimary)
         .disabled(isEnrolling)
     }
 
@@ -525,10 +519,10 @@ struct QuestArcDetailView: View {
     // MARK: - Today's Quest Section
 
     private var todaysQuestSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
             HStack {
                 Image(systemName: "sparkles")
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(SupportTheme.accent)
                 Text("Today's Quest")
                     .font(.headline)
             }
@@ -538,56 +532,54 @@ struct QuestArcDetailView: View {
                     ProgressView()
                     Text("Loading today's quest...")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
                 .frame(maxWidth: .infinity)
-                .padding()
-                .background(Color(.secondarySystemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .supportCard()
             } else if let quest = todayQuest {
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                     // Quest info
                     Text(quest.template.title)
                         .font(.title3.weight(.semibold))
 
                     Text(quest.template.description)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
+                        .foregroundStyle(SupportTheme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
 
                     // Coaching message
                     if let coaching = quest.arcContext?.coachingMessage {
-                        HStack(alignment: .top, spacing: 8) {
+                        HStack(alignment: .top, spacing: SupportTheme.Spacing.xs) {
                             Image(systemName: "lightbulb.fill")
-                                .foregroundStyle(.yellow)
+                                .foregroundStyle(SupportTheme.accent)
                                 .font(.subheadline)
                             Text(coaching)
                                 .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                                 .italic()
                         }
-                        .padding(12)
-                        .background(Color.yellow.opacity(0.1))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .padding(SupportTheme.Spacing.s)
+                        .background(SupportTheme.surface)
+                        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
                     }
 
                     // Estimated time
                     HStack {
                         Image(systemName: "clock")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                         Text("~\(quest.template.estimatedMinutes) min")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
 
                     // Milestone indicator
                     if quest.arcContext?.isMilestoneDay == true {
                         HStack {
                             Image(systemName: "star.fill")
-                                .foregroundStyle(.yellow)
+                                .foregroundStyle(SupportTheme.accent)
                             Text("Milestone Day!")
                                 .font(.subheadline.weight(.medium))
-                                .foregroundStyle(.orange)
+                                .foregroundStyle(SupportTheme.accent)
                         }
                     }
 
@@ -600,23 +592,16 @@ struct QuestArcDetailView: View {
                             Text("Start Today's Quest")
                         }
                         .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(QuestArcCategory.color(for: arc.category))
-                        .foregroundStyle(.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
                     }
+                    .buttonStyle(.supportPrimary)
                 }
-                .padding()
-                .background(Color(.secondarySystemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .supportCard()
             } else {
                 Text("No quest available for today")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color(.secondarySystemBackground))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .supportCard()
             }
         }
     }
@@ -624,7 +609,7 @@ struct QuestArcDetailView: View {
     // MARK: - Curriculum Preview Section
 
     private var curriculumPreviewSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("Your Journey")
                 .font(.headline)
 
@@ -638,8 +623,8 @@ struct QuestArcDetailView: View {
             if arcSteps.count > stepsToShow.count {
                 Text("+ \(arcSteps.count - stepsToShow.count) more days")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .padding(.leading, 44)
+                    .foregroundStyle(SupportTheme.textSecondary)
+                    .padding(.leading, SupportTheme.Spacing.xl)
             }
         }
     }
@@ -649,45 +634,45 @@ struct QuestArcDetailView: View {
         let isCurrent = isEnrolled && (currentDay + 1) == step.dayNumber
         let isLocked = !isEnrolled || currentDay < step.dayNumber - 1
 
-        return HStack(spacing: 12) {
+        return HStack(spacing: SupportTheme.Spacing.s) {
             // Day indicator
             ZStack {
                 Circle()
                     .fill(isCompleted ? QuestArcCategory.color(for: arc.category) :
                           isCurrent ? QuestArcCategory.color(for: arc.category).opacity(0.3) :
-                          Color(.systemGray5))
+                          SupportTheme.separator)
                     .frame(width: 32, height: 32)
 
                 if isCompleted {
                     Image(systemName: "checkmark")
                         .font(.caption.weight(.bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(SupportTheme.textPrimary)
                 } else {
                     Text("\(step.dayNumber)")
                         .font(.caption.weight(.medium))
-                        .foregroundStyle(isCurrent ? QuestArcCategory.color(for: arc.category) : .secondary)
+                        .foregroundStyle(isCurrent ? QuestArcCategory.color(for: arc.category) : SupportTheme.textSecondary)
                 }
             }
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 HStack {
                     Text(step.customTitle ?? "Day \(step.dayNumber)")
                         .font(.subheadline.weight(isCurrent ? .semibold : .regular))
-                        .foregroundStyle(isLocked && !isCurrent ? .secondary : .primary)
+                        .foregroundStyle(isLocked && !isCurrent ? .secondary : SupportTheme.textPrimary)
 
                     if step.isMilestone {
                         Image(systemName: "flag.fill")
                             .font(.caption2)
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(SupportTheme.accent)
                     }
 
                     if isCurrent {
                         Text("Today")
                             .font(.caption2.weight(.medium))
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
+                            .padding(.horizontal, SupportTheme.Spacing.xxs)
+                            .padding(.vertical, SupportTheme.Spacing.xxs)
                             .background(QuestArcCategory.color(for: arc.category))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(SupportTheme.textPrimary)
                             .clipShape(Capsule())
                     }
                 }
@@ -695,14 +680,14 @@ struct QuestArcDetailView: View {
                 if let description = step.customDescription {
                     Text(description)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                        .foregroundStyle(SupportTheme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
 
             Spacer()
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, SupportTheme.Spacing.xxs)
         .opacity(isLocked && !isCurrent ? 0.6 : 1.0)
     }
 
@@ -760,10 +745,10 @@ private struct MilestonePreviewSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.l) {
                     Text("When you reach a milestone, you'll see a celebration and can share your achievement with your circles.")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
 
                     // Preview of milestone celebration
                     QuestArcMilestoneView(
@@ -775,8 +760,9 @@ private struct MilestonePreviewSheet: View {
                         onShare: { dismiss() }
                     )
                 }
-                .padding()
+                .padding(SupportTheme.Spacing.m)
             }
+            .supportScreen()
             .navigationTitle("Milestone Preview")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

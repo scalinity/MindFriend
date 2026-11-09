@@ -14,7 +14,7 @@ struct TherapistProfileView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 24) {
+            VStack(spacing: SupportTheme.Spacing.l) {
                 // Header
                 headerSection
 
@@ -35,12 +35,13 @@ struct TherapistProfileView: View {
                 // Reviews placeholder
                 reviewsSection
 
-                Spacer(minLength: 100)
+                Spacer(minLength: SupportTheme.Spacing.xl)
             }
-            .padding()
+            .padding(SupportTheme.Spacing.m)
         }
         .navigationBarTitleDisplayMode(.inline)
-        .overlay(alignment: .bottom) {
+        // An inset, not an overlay: the scroll view reserves the footer's height at every text size.
+        .safeAreaInset(edge: .bottom) {
             bookingButton
         }
     }
@@ -48,7 +49,7 @@ struct TherapistProfileView: View {
     // MARK: - Header Section
 
     private var headerSection: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             // Photo
             AsyncImage(url: URL(string: therapist.photoUrl ?? "")) { phase in
                 switch phase {
@@ -59,70 +60,70 @@ struct TherapistProfileView: View {
                 default:
                     Image(systemName: "person.circle.fill")
                         .resizable()
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
             }
             .frame(width: 120, height: 120)
             .clipShape(Circle())
-            .shadow(color: .black.opacity(0.1), radius: 8, y: 4)
+            .shadow(color: SupportTheme.canvas.opacity(0.1), radius: 8, y: 4)
 
             // Name and Credentials
-            VStack(spacing: 4) {
-                HStack(spacing: 8) {
+            VStack(spacing: SupportTheme.Spacing.xxs) {
+                HStack(spacing: SupportTheme.Spacing.xs) {
                     Text(therapist.displayName)
                         .font(.title2.bold())
 
                     if therapist.verified {
                         Image(systemName: "checkmark.seal.fill")
-                            .foregroundStyle(.blue)
+                            .foregroundStyle(SupportTheme.accent)
                             .accessibilityLabel("Verified")
                     }
                 }
 
                 Text(therapist.displayCredentials)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
 
                 if let location = therapist.displayLocation {
-                    HStack(spacing: 4) {
+                    HStack(spacing: SupportTheme.Spacing.xxs) {
                         Image(systemName: "mappin.circle.fill")
                         Text(location)
                     }
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                 }
             }
 
             // Stats Row
-            HStack(spacing: 32) {
+            HStack(spacing: SupportTheme.Spacing.xl) {
                 statItem(
                     value: therapist.displayRating,
                     label: "Rating",
                     icon: "star.fill",
-                    iconColor: .yellow
+                    iconColor: SupportTheme.accent
                 )
 
                 statItem(
                     value: "\(therapist.ratingCount)",
                     label: "Reviews",
                     icon: "text.bubble.fill",
-                    iconColor: .blue
+                    iconColor: SupportTheme.accent
                 )
 
                 statItem(
                     value: "\(therapist.sessionsCompleted)",
                     label: "Sessions",
                     icon: "video.fill",
-                    iconColor: .green
+                    iconColor: SupportTheme.accent
                 )
             }
-            .padding(.top, 8)
+            .padding(.top, SupportTheme.Spacing.xs)
         }
     }
 
     private func statItem(value: String, label: String, icon: String, iconColor: Color) -> some View {
-        VStack(spacing: 4) {
-            HStack(spacing: 4) {
+        VStack(spacing: SupportTheme.Spacing.xxs) {
+            HStack(spacing: SupportTheme.Spacing.xxs) {
                 Image(systemName: icon)
                     .foregroundStyle(iconColor)
                 Text(value)
@@ -132,59 +133,57 @@ struct TherapistProfileView: View {
 
             Text(label)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
     }
 
     // MARK: - About Section
 
     private var aboutSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("About")
                 .font(.headline)
 
             Text(therapist.bio)
                 .font(.body)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .lineLimit(nil)
 
             // Languages
             if !therapist.languages.isEmpty {
-                HStack(spacing: 8) {
+                HStack(spacing: SupportTheme.Spacing.xs) {
                     Image(systemName: "globe")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                     Text("Speaks: \(therapist.languages.joined(separator: ", "))")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
-                .padding(.top, 4)
+                .padding(.top, SupportTheme.Spacing.xxs)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
-        .background(Color(.systemGray6))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .supportCard()
     }
 
     // MARK: - Specialties Section
 
     private var specialtiesSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("Specialties")
                 .font(.headline)
 
-            FlowLayout(spacing: 8) {
+            FlowLayout(spacing: SupportTheme.Spacing.xs) {
                 ForEach(therapist.displaySpecialties, id: \.self) { specialty in
-                    HStack(spacing: 6) {
+                    HStack(spacing: SupportTheme.Spacing.xxs) {
                         Image(systemName: specialty.icon)
                             .font(.caption)
                         Text(specialty.displayName)
                             .font(.subheadline)
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(Color.accentColor.opacity(0.1))
-                    .foregroundStyle(Color.accentColor)
+                    .padding(.horizontal, SupportTheme.Spacing.s)
+                    .padding(.vertical, SupportTheme.Spacing.xs)
+                    .background(SupportTheme.surface)
+                    .foregroundStyle(SupportTheme.accent)
                     .clipShape(Capsule())
                 }
             }
@@ -195,17 +194,17 @@ struct TherapistProfileView: View {
     // MARK: - Approaches Section
 
     private func approachesSection(_ approaches: [String]) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("Therapeutic Approaches")
                 .font(.headline)
 
-            FlowLayout(spacing: 8) {
+            FlowLayout(spacing: SupportTheme.Spacing.xs) {
                 ForEach(approaches, id: \.self) { approach in
                     Text(approach)
                         .font(.subheadline)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(Color(.systemGray6))
+                        .padding(.horizontal, SupportTheme.Spacing.s)
+                        .padding(.vertical, SupportTheme.Spacing.xs)
+                        .background(SupportTheme.separator)
                         .clipShape(Capsule())
                 }
             }
@@ -216,11 +215,11 @@ struct TherapistProfileView: View {
     // MARK: - Rates Section
 
     private var ratesSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("Session Rates")
                 .font(.headline)
 
-            VStack(spacing: 8) {
+            VStack(spacing: SupportTheme.Spacing.xs) {
                 if let rate30 = therapist.rate30Min {
                     rateRow(duration: "30 min", rate: rate30)
                 }
@@ -231,9 +230,7 @@ struct TherapistProfileView: View {
                     rateRow(duration: "60 min", rate: rate60)
                 }
             }
-            .padding()
-            .background(Color(.systemGray6))
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .supportCard()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -241,7 +238,7 @@ struct TherapistProfileView: View {
     private func rateRow(duration: String, rate: Decimal) -> some View {
         HStack {
             Text(duration)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
             Spacer()
             Text(formatRate(rate))
                 .font(.headline)
@@ -260,7 +257,7 @@ struct TherapistProfileView: View {
     // MARK: - Reviews Section
 
     private var reviewsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             HStack {
                 Text("Reviews")
                     .font(.headline)
@@ -270,27 +267,23 @@ struct TherapistProfileView: View {
                 if therapist.ratingCount > 0 {
                     Text("See all \(therapist.ratingCount)")
                         .font(.subheadline)
-                        .foregroundStyle(Color.accentColor)
+                        .foregroundStyle(SupportTheme.accent)
                 }
             }
 
             if therapist.ratingCount == 0 {
                 Text("No reviews yet")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color(.systemGray6))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .supportCard()
             } else {
                 // Placeholder for reviews - would fetch from therapy_sessions
                 Text("Reviews will appear here once the booking system is implemented.")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color(.systemGray6))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .supportCard()
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -302,13 +295,13 @@ struct TherapistProfileView: View {
         VStack(spacing: 0) {
             Divider()
 
-            HStack(spacing: 16) {
+            HStack(spacing: SupportTheme.Spacing.m) {
                 VStack(alignment: .leading) {
                     Text(therapist.displayRate)
                         .font(.headline)
                     Text("per session")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
 
                 Spacer()
@@ -318,15 +311,15 @@ struct TherapistProfileView: View {
                 } label: {
                     Text("Book Session")
                         .font(.headline)
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 24)
-                        .padding(.vertical, 12)
-                        .background(Color.accentColor)
+                        .foregroundStyle(SupportTheme.onAccent)
+                        .padding(.horizontal, SupportTheme.Spacing.l)
+                        .padding(.vertical, SupportTheme.Spacing.s)
+                        .background(SupportTheme.accent)
                         .clipShape(Capsule())
                 }
             }
-            .padding()
-            .background(.ultraThinMaterial)
+            .padding(SupportTheme.Spacing.m)
+            .background(SupportTheme.elevated)
         }
     }
 }

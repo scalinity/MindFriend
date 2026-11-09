@@ -2,6 +2,7 @@ import SwiftUI
 
 /// Player view for template-based micro-moment exercises
 struct MicroMomentPlayerView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let template: MicroMomentTemplate
     let onComplete: (MicroCompletionData) -> Void
 
@@ -23,14 +24,10 @@ struct MicroMomentPlayerView: View {
         NavigationStack {
             ZStack {
                 // Background gradient
-                LinearGradient(
-                    colors: [template.type.color.opacity(0.1), Color(.systemBackground)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
+                SupportTheme.canvas
                 .ignoresSafeArea()
 
-                VStack(spacing: 32) {
+                VStack(spacing: SupportTheme.Spacing.xl) {
                     // Animation area
                     animationView
                         .frame(height: 250)
@@ -48,8 +45,9 @@ struct MicroMomentPlayerView: View {
                     // Controls
                     controlsView
                 }
-                .padding()
+                .padding(SupportTheme.Spacing.m)
             }
+            .supportScreen()
             .navigationTitle(template.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -91,24 +89,19 @@ struct MicroMomentPlayerView: View {
         ZStack {
             Circle()
                 .fill(
-                    RadialGradient(
-                        colors: [template.type.color.opacity(0.4), template.type.color.opacity(0.1)],
-                        center: .center,
-                        startRadius: 0,
-                        endRadius: 120
-                    )
+                    SupportTheme.surface
                 )
                 .frame(width: 240, height: 240)
-                .scaleEffect(circleScale)
+                .scaleEffect(reduceMotion ? 1 : (circleScale))
 
             Circle()
-                .stroke(template.type.color.opacity(0.5), lineWidth: 2)
+                .stroke(SupportTheme.accent.opacity(0.5), lineWidth: 2)
                 .frame(width: 240, height: 240)
-                .scaleEffect(circleScale)
+                .scaleEffect(reduceMotion ? 1 : (circleScale))
 
             Image(systemName: template.type.icon)
-                .font(.system(size: 40))
-                .foregroundStyle(template.type.color)
+                .font(.system(.largeTitle))
+                .foregroundStyle(SupportTheme.accent)
         }
         .accessibilityLabel("Breathing animation")
     }
@@ -116,14 +109,8 @@ struct MicroMomentPlayerView: View {
     private var bodyScanAnimation: some View {
         VStack {
             Image(systemName: "figure.stand")
-                .font(.system(size: 100))
-                .foregroundStyle(
-                    LinearGradient(
-                        colors: [template.type.color, template.type.color.opacity(0.3)],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
+                .font(.system(.largeTitle))
+                .foregroundStyle(SupportTheme.accent)
         }
         .accessibilityLabel("Body scan visualization")
     }
@@ -131,18 +118,18 @@ struct MicroMomentPlayerView: View {
     private var countdownAnimation: some View {
         ZStack {
             Circle()
-                .stroke(Color.gray.opacity(0.2), lineWidth: 8)
+                .stroke(SupportTheme.textSecondary.opacity(0.2), lineWidth: 8)
                 .frame(width: 180, height: 180)
 
             Circle()
                 .trim(from: 0, to: progressFraction)
-                .stroke(template.type.color, style: StrokeStyle(lineWidth: 8, lineCap: .round))
+                .stroke(SupportTheme.accent, style: StrokeStyle(lineWidth: 8, lineCap: .round))
                 .frame(width: 180, height: 180)
                 .rotationEffect(.degrees(-90))
 
             Text("\(remainingSeconds)")
-                .font(.system(size: 60, weight: .light, design: .rounded))
-                .foregroundStyle(template.type.color)
+                .font(.system(.largeTitle, design: .rounded).weight(.light))
+                .foregroundStyle(SupportTheme.accent)
         }
         .accessibilityLabel("\(remainingSeconds) seconds remaining")
     }
@@ -151,10 +138,10 @@ struct MicroMomentPlayerView: View {
         ZStack {
             ForEach(0..<3, id: \.self) { index in
                 Circle()
-                    .stroke(template.type.color.opacity(0.3 - Double(index) * 0.1), lineWidth: 2)
+                    .stroke(SupportTheme.accent.opacity(0.3 - Double(index) * 0.1), lineWidth: 2)
                     .frame(width: 120 + CGFloat(index) * 40, height: 120 + CGFloat(index) * 40)
-                    .scaleEffect(phase == .playing ? 1.1 : 1.0)
-                    .animation(
+                    .scaleEffect(reduceMotion ? 1 : (phase == .playing ? 1.1 : 1.0))
+                    .animation(reduceMotion ? nil :
                         .easeInOut(duration: 1.5)
                         .repeatForever(autoreverses: true)
                         .delay(Double(index) * 0.3),
@@ -163,8 +150,8 @@ struct MicroMomentPlayerView: View {
             }
 
             Image(systemName: template.type.icon)
-                .font(.system(size: 40))
-                .foregroundStyle(template.type.color)
+                .font(.system(.largeTitle))
+                .foregroundStyle(SupportTheme.accent)
         }
         .accessibilityLabel("Pulse animation")
     }
@@ -177,7 +164,7 @@ struct MicroMomentPlayerView: View {
                     frequency: 2,
                     phase: phase == .playing ? Double(index) * 0.5 : 0
                 )
-                .stroke(template.type.color.opacity(0.6 - Double(index) * 0.1), lineWidth: 2)
+                .stroke(SupportTheme.accent.opacity(0.6 - Double(index) * 0.1), lineWidth: 2)
                 .frame(height: 60)
                 .offset(y: CGFloat(index) * 15 - 30)
             }
@@ -189,7 +176,7 @@ struct MicroMomentPlayerView: View {
     // MARK: - Instruction View
 
     private var instructionView: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: SupportTheme.Spacing.s) {
             if currentStep < template.instructions.count {
                 let instruction = template.instructions[currentStep]
 
@@ -197,19 +184,19 @@ struct MicroMomentPlayerView: View {
                     .font(.title3)
                     .fontWeight(.medium)
                     .multilineTextAlignment(.center)
-                    .foregroundStyle(.primary)
-                    .transition(.opacity.combined(with: .scale))
+                    .foregroundStyle(SupportTheme.textPrimary)
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale))
                     .id(instruction.id)
 
                 if let action = instruction.action {
                     Label(action.rawValue.capitalized, systemImage: iconForAction(action))
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
             }
         }
-        .padding(.horizontal)
-        .animation(.easeInOut, value: currentStep)
+        .padding(.horizontal, SupportTheme.Spacing.m)
+        .animation(reduceMotion ? nil : .easeInOut, value: currentStep)
     }
 
     private func iconForAction(_ action: InstructionAction) -> String {
@@ -227,32 +214,32 @@ struct MicroMomentPlayerView: View {
     // MARK: - Progress View
 
     private var progressView: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: SupportTheme.Spacing.xs) {
             // Step indicators
-            HStack(spacing: 4) {
+            HStack(spacing: SupportTheme.Spacing.xxs) {
                 ForEach(0..<template.instructions.count, id: \.self) { index in
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(index <= currentStep ? template.type.color : Color.gray.opacity(0.3))
+                    RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                        .fill(index <= currentStep ? SupportTheme.accent : SupportTheme.textSecondary.opacity(0.3))
                         .frame(height: 4)
                 }
             }
-            .padding(.horizontal)
+            .padding(.horizontal, SupportTheme.Spacing.m)
 
             // Time
             HStack {
                 Text(formatTime(elapsedSeconds))
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .monospacedDigit()
 
                 Spacer()
 
                 Text(formatTime(template.durationSeconds))
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .monospacedDigit()
             }
-            .padding(.horizontal)
+            .padding(.horizontal, SupportTheme.Spacing.m)
         }
         .accessibilityLabel("Step \(currentStep + 1) of \(template.instructions.count)")
     }
@@ -275,14 +262,15 @@ struct MicroMomentPlayerView: View {
     // MARK: - Controls View
 
     private var controlsView: some View {
-        HStack(spacing: 40) {
+        HStack(spacing: SupportTheme.Spacing.xl) {
             if phase == .playing {
                 Button {
                     pauseExercise()
                 } label: {
                     Image(systemName: "pause.circle.fill")
-                        .font(.system(size: 64))
-                        .foregroundStyle(template.type.color)
+                        .font(.system(.largeTitle))
+                        .foregroundStyle(SupportTheme.accent)
+                        .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                 }
                 .accessibilityLabel("Pause")
             } else {
@@ -294,22 +282,23 @@ struct MicroMomentPlayerView: View {
                     }
                 } label: {
                     Image(systemName: "play.circle.fill")
-                        .font(.system(size: 64))
-                        .foregroundStyle(template.type.color)
+                        .font(.system(.largeTitle))
+                        .foregroundStyle(SupportTheme.accent)
+                        .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                 }
                 .accessibilityLabel(phase == .ready ? "Start" : "Resume")
             }
         }
-        .padding(.bottom, 20)
+        .padding(.bottom, SupportTheme.Spacing.m)
     }
 
     // MARK: - Completion Sheet
 
     private var completionSheet: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: SupportTheme.Spacing.l) {
             Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 60))
-                .foregroundStyle(.green)
+                .font(.system(.largeTitle))
+                .foregroundStyle(SupportTheme.accent)
 
             Text("Well done!")
                 .font(.title)
@@ -317,28 +306,28 @@ struct MicroMomentPlayerView: View {
 
             Text("You completed \(template.title)")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
 
             // Feedback question
-            VStack(spacing: 12) {
+            VStack(spacing: SupportTheme.Spacing.s) {
                 Text("Did this help?")
                     .font(.headline)
 
-                HStack(spacing: 20) {
+                HStack(spacing: SupportTheme.Spacing.m) {
                     Button {
                         feltHelpful = true
                         saveAndDismiss()
                     } label: {
-                        VStack(spacing: 8) {
+                        VStack(spacing: SupportTheme.Spacing.xs) {
                             Image(systemName: "hand.thumbsup.fill")
                                 .font(.title)
                             Text("Yes")
                                 .font(.caption)
                         }
-                        .foregroundStyle(feltHelpful == true ? .white : template.type.color)
+                        .foregroundStyle(feltHelpful == true ? SupportTheme.onAccent : SupportTheme.accent)
                         .frame(width: 80, height: 80)
-                        .background(feltHelpful == true ? template.type.color : Color(.secondarySystemBackground))
-                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                        .background(feltHelpful == true ? SupportTheme.accent : SupportTheme.surface)
+                        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Yes, this helped")
@@ -347,16 +336,16 @@ struct MicroMomentPlayerView: View {
                         feltHelpful = false
                         saveAndDismiss()
                     } label: {
-                        VStack(spacing: 8) {
+                        VStack(spacing: SupportTheme.Spacing.xs) {
                             Image(systemName: "hand.thumbsdown.fill")
                                 .font(.title)
                             Text("Not really")
                                 .font(.caption)
                         }
-                        .foregroundStyle(feltHelpful == false ? .white : .gray)
+                        .foregroundStyle(feltHelpful == false ? SupportTheme.onAccent : SupportTheme.textSecondary)
                         .frame(width: 80, height: 80)
-                        .background(feltHelpful == false ? Color.gray : Color(.secondarySystemBackground))
-                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                        .background(feltHelpful == false ? SupportTheme.textSecondary : SupportTheme.surface)
+                        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("No, this didn't help")
@@ -366,10 +355,10 @@ struct MicroMomentPlayerView: View {
             Button("Skip") {
                 saveAndDismiss()
             }
-            .foregroundStyle(.secondary)
-            .padding(.top)
+            .foregroundStyle(SupportTheme.textSecondary)
+            .padding(.top, SupportTheme.Spacing.m)
         }
-        .padding()
+        .padding(SupportTheme.Spacing.m)
         .presentationDetents([.medium])
     }
 
@@ -462,7 +451,7 @@ struct MicroMomentPlayerView: View {
         let targetScale: CGFloat = instruction.action == .inhale ? 1.0 : 0.5
         let duration = Double(instruction.durationSeconds)
 
-        withAnimation(.easeInOut(duration: duration)) {
+        withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .easeInOut(duration: duration)) {
             circleScale = targetScale
         }
     }

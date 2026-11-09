@@ -44,6 +44,7 @@ struct PersonalizationSettingsView: View {
                 }
             }
         }
+        .supportScreen()
         .navigationTitle("Personalization")
         .navigationBarTitleDisplayMode(.inline)
         .task {
@@ -74,8 +75,8 @@ struct PersonalizationSettingsView: View {
                     Text("Content Types")
                     Spacer()
                     Text(profile.preferredContentTypes.map { $0.displayName }.joined(separator: ", "))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                        .foregroundStyle(SupportTheme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
 
@@ -90,10 +91,10 @@ struct PersonalizationSettingsView: View {
                     Spacer()
                     if profile.preferredCategories.isEmpty {
                         Text("None selected")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     } else {
                         Text("\(profile.preferredCategories.count) selected")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                 }
             }
@@ -142,7 +143,7 @@ struct PersonalizationSettingsView: View {
                     Text("Quiet Hours")
                     Spacer()
                     Text("\(profile.quietHoursStart) - \(profile.quietHoursEnd)")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
             }
 
@@ -186,24 +187,24 @@ struct PersonalizationSettingsView: View {
     private var learnedPreferencesSection: some View {
         ForEach(personalizationService.learnedPreferences.prefix(5)) { pref in
             HStack {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     Text(pref.displayName)
                         .font(.subheadline)
                     Text(pref.preferenceType.capitalized)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
 
                 Spacer()
 
-                VStack(alignment: .trailing, spacing: 4) {
+                VStack(alignment: .trailing, spacing: SupportTheme.Spacing.xxs) {
                     ConfidenceIndicator(confidence: pref.confidenceScore)
                     Text("\(Int(pref.preferenceScore * 100))% match")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
             }
-            .padding(.vertical, 4)
+            .padding(.vertical, SupportTheme.Spacing.xxs)
         }
     }
 
@@ -348,9 +349,9 @@ struct CountBadge: View {
         Text("\(count)")
             .font(.caption2)
             .fontWeight(.bold)
-            .foregroundStyle(.white)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
+            .foregroundStyle(SupportTheme.textPrimary)
+            .padding(.horizontal, SupportTheme.Spacing.xxs)
+            .padding(.vertical, SupportTheme.Spacing.xxs)
             .background(.red)
             .clipShape(Capsule())
     }

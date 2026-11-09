@@ -40,6 +40,7 @@ struct JournalSettingsView: View {
                     dangerZoneSection
                 }
             }
+            .supportScreen()
             .navigationTitle("Journal Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -56,12 +57,20 @@ struct JournalSettingsView: View {
                     .disabled(isSaving)
                 }
             }
-            .alert("Error", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
-                Button("OK") {
-                    errorMessage = nil
+            .safeAreaInset(edge: .bottom) {
+                if errorMessage != nil {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
+                        Text(errorMessage ?? "")
+
+                        Button("OK") {
+                            errorMessage = nil
+                        }
+                    }
+                    .foregroundStyle(SupportTheme.textSecondary)
+                    .buttonStyle(.supportSecondary)
+                    .supportCard()
+                    .padding(SupportTheme.Spacing.m)
                 }
-            } message: {
-                Text(errorMessage ?? "")
             }
             .sheet(isPresented: $showingExportOptions) {
                 ExportOptionsSheet()
@@ -209,8 +218,8 @@ struct DayToggle: View {
                 .font(.caption2)
                 .fontWeight(.medium)
                 .frame(width: 36, height: 36)
-                .background(isSelected ? Color.accentColor : Color(.systemGray5))
-                .foregroundStyle(isSelected ? .white : .primary)
+                .background(isSelected ? SupportTheme.accent : SupportTheme.separator)
+                .foregroundStyle(isSelected ? SupportTheme.onAccent : SupportTheme.textPrimary)
                 .clipShape(Circle())
         }
         .buttonStyle(.plain)
@@ -228,12 +237,12 @@ struct ExportOptionsSheet: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 24) {
+            VStack(spacing: SupportTheme.Spacing.l) {
                 Text("Choose Export Format")
                     .font(.title3)
                     .fontWeight(.semibold)
 
-                VStack(spacing: 12) {
+                VStack(spacing: SupportTheme.Spacing.s) {
                     ExportFormatOption(
                         format: .markdown,
                         title: "Markdown",
@@ -278,10 +287,11 @@ struct ExportOptionsSheet: View {
                             .frame(maxWidth: .infinity)
                     }
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.supportPrimary)
                 .disabled(isExporting)
             }
-            .padding()
+            .padding(SupportTheme.Spacing.m)
+            .supportScreen()
             .navigationTitle("Export Journal")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -334,19 +344,19 @@ struct ExportFormatOption: View {
                         .font(.headline)
                     Text(description)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
 
                 Spacer()
 
                 if isSelected {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(Color.accentColor)
+                        .foregroundStyle(SupportTheme.accent)
                 }
             }
-            .padding()
-            .background(isSelected ? Color.accentColor.opacity(0.1) : Color(.systemGray6))
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .padding(SupportTheme.Spacing.m)
+            .background(isSelected ? SupportTheme.accent.opacity(0.1) : SupportTheme.separator)
+            .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
         }
         .buttonStyle(.plain)
     }

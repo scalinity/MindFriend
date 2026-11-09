@@ -27,6 +27,7 @@ struct EfficacyDashboardView: View {
                     errorView(message: message)
                 }
             }
+            .supportScreen()
             .navigationTitle("Efficacy Insights")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
@@ -48,46 +49,46 @@ struct EfficacyDashboardView: View {
     // MARK: - Loading State
 
     private var loadingView: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             ProgressView()
             Text("Loading insights...")
                 .font(.subheadline)
-                .foregroundColor(.secondary)
+                .foregroundColor(SupportTheme.textSecondary)
         }
     }
 
     // MARK: - Error State
 
     private func errorView(message: String) -> some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 48))
-                .foregroundColor(.orange)
+                .font(.system(.largeTitle))
+                .foregroundColor(SupportTheme.accent)
 
             Text("Failed to Load Insights")
                 .font(.headline)
 
             Text(message)
                 .font(.subheadline)
-                .foregroundColor(.secondary)
+                .foregroundColor(SupportTheme.textSecondary)
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
+                .padding(.horizontal, SupportTheme.Spacing.xl)
 
             Button("Try Again") {
                 Task {
                     await viewModel.loadDashboard()
                 }
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.supportSecondary)
         }
-        .padding()
+        .padding(SupportTheme.Spacing.m)
     }
 
     // MARK: - Dashboard Content
 
     private func dashboardContent(data: EfficacyDashboardData) -> some View {
         ScrollView {
-            VStack(spacing: 24) {
+            VStack(spacing: SupportTheme.Spacing.l) {
                 if data.recentSessions.isEmpty {
                     ContentUnavailableView(
                         "Efficacy unavailable",
@@ -108,59 +109,57 @@ struct EfficacyDashboardView: View {
                     recentSessionsSection(sessions: data.recentSessions)
                 }
             }
-            .padding()
+            .padding(SupportTheme.Spacing.m)
         }
     }
 
     // MARK: - Insights Summary
 
     private func insightsSummary(insights: DashboardInsights) -> some View {
-        VStack(spacing: 12) {
-            HStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.s) {
+            HStack(spacing: SupportTheme.Spacing.m) {
                 insightCard(
                     title: "Avg Efficacy",
                     value: String(format: "%.0f", insights.averageEfficacy),
                     icon: "chart.line.uptrend.xyaxis",
-                    color: .blue
+                    color: SupportTheme.accent
                 )
 
                 insightCard(
                     title: "Breakthroughs",
                     value: "\(insights.totalBreakthroughs)",
                     icon: "sparkles",
-                    color: .purple
+                    color: SupportTheme.accent
                 )
             }
 
             if let context = insights.mostEffectiveContext {
                 HStack {
                     Image(systemName: "star.fill")
-                        .foregroundColor(.yellow)
+                        .foregroundColor(SupportTheme.accent)
                     Text("Most effective: \(context)")
                         .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(SupportTheme.textSecondary)
                     Spacer()
                 }
-                .padding(.horizontal)
+                .padding(.horizontal, SupportTheme.Spacing.m)
             }
 
             ForEach(insights.messages, id: \.self) { message in
                 HStack {
                     Image(systemName: "lightbulb.fill")
-                        .foregroundColor(.orange)
+                        .foregroundColor(SupportTheme.accent)
                     Text(message)
                         .font(.subheadline)
                     Spacer()
                 }
-                .padding()
-                .background(Color(.systemGray6))
-                .cornerRadius(12)
+                .supportCard()
             }
         }
     }
 
     private func insightCard(title: String, value: String, icon: String, color: Color) -> some View {
-        VStack(spacing: 8) {
+        VStack(spacing: SupportTheme.Spacing.xs) {
             Image(systemName: icon)
                 .font(.title2)
                 .foregroundColor(color)
@@ -171,21 +170,19 @@ struct EfficacyDashboardView: View {
 
             Text(title)
                 .font(.caption)
-                .foregroundColor(.secondary)
+                .foregroundColor(SupportTheme.textSecondary)
         }
         .frame(maxWidth: .infinity)
-        .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(12)
+        .supportCard()
     }
 
     // MARK: - Top Exercises Section
 
     private func topExercisesSection(exercises: [EfficacyDashboardData.TopExercise]) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("Top Exercises")
                 .font(.headline)
-                .padding(.horizontal)
+                .padding(.horizontal, SupportTheme.Spacing.m)
 
             ForEach(exercises, id: \.exerciseId) { exercise in
                 topExerciseRow(exercise: exercise)
@@ -194,29 +191,29 @@ struct EfficacyDashboardView: View {
     }
 
     private func topExerciseRow(exercise: EfficacyDashboardData.TopExercise) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             HStack {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     Text(exercise.exerciseName)
                         .font(.headline)
 
                     if let context = exercise.bestContext {
                         Text(context)
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(SupportTheme.textSecondary)
                     }
                 }
 
                 Spacer()
 
-                VStack(alignment: .trailing, spacing: 4) {
+                VStack(alignment: .trailing, spacing: SupportTheme.Spacing.xxs) {
                     efficacyStars(score: exercise.efficacyScore)
 
-                    HStack(spacing: 4) {
+                    HStack(spacing: SupportTheme.Spacing.xxs) {
                         trendIndicator(trend: exercise.trend)
                         Text("\(exercise.completionCount)×")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(SupportTheme.textSecondary)
                     }
                 }
             }
@@ -224,18 +221,16 @@ struct EfficacyDashboardView: View {
             ProgressView(value: exercise.efficacyScore / 100)
                 .tint(efficacyColor(score: exercise.efficacyScore))
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+        .supportCard()
+        .shadow(color: SupportTheme.canvas.opacity(0.05), radius: 4, x: 0, y: 2)
     }
 
     private func efficacyStars(score: Double) -> some View {
-        HStack(spacing: 2) {
+        HStack(spacing: SupportTheme.Spacing.xxs) {
             ForEach(0..<5) { index in
                 Image(systemName: "star.fill")
                     .font(.caption)
-                    .foregroundColor(index < Int(score / 20) ? .yellow : .gray.opacity(0.3))
+                    .foregroundColor(index < Int(score / 20) ? .yellow : SupportTheme.textSecondary.opacity(0.3))
             }
         }
     }
@@ -245,10 +240,10 @@ struct EfficacyDashboardView: View {
             switch trend {
             case .improving:
                 Image(systemName: "arrow.up.circle.fill")
-                    .foregroundColor(.green)
+                    .foregroundColor(SupportTheme.accent)
             case .stable:
                 Image(systemName: "minus.circle.fill")
-                    .foregroundColor(.orange)
+                    .foregroundColor(SupportTheme.accent)
             case .declining:
                 Image(systemName: "arrow.down.circle.fill")
                     .foregroundColor(.red)
@@ -258,19 +253,20 @@ struct EfficacyDashboardView: View {
     }
 
     private func efficacyColor(score: Double) -> Color {
-        if score >= 80 { return .green }
-        else if score >= 60 { return .blue }
-        else if score >= 40 { return .orange }
+        if score >= 80 { return SupportTheme.accent }
+        else if score >= 60 { return SupportTheme.accent }
+        else if score >= 40 { return SupportTheme.accent }
         else { return .red }
     }
 
     // MARK: - Recent Sessions Section
 
     private func recentSessionsSection(sessions: [EfficacyDashboardData.RecentSession]) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("Recent Sessions")
                 .font(.headline)
-                .padding(.horizontal)
+                .accessibilityAddTraits(.isHeader)
+                .padding(.horizontal, SupportTheme.Spacing.m)
 
             ForEach(sessions, id: \.sessionId) { session in
                 recentSessionRow(session: session)
@@ -280,24 +276,24 @@ struct EfficacyDashboardView: View {
 
     private func recentSessionRow(session: EfficacyDashboardData.RecentSession) -> some View {
         HStack {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text(session.exerciseName)
                     .font(.subheadline)
                     .fontWeight(.medium)
 
                 Text(session.completedAt, style: .relative)
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(SupportTheme.textSecondary)
             }
 
             Spacer()
 
-            VStack(alignment: .trailing, spacing: 4) {
-                HStack(spacing: 4) {
+            VStack(alignment: .trailing, spacing: SupportTheme.Spacing.xxs) {
+                HStack(spacing: SupportTheme.Spacing.xxs) {
                     if session.breakthroughDetected {
                         Image(systemName: "sparkles")
                             .font(.caption)
-                            .foregroundColor(.purple)
+                            .foregroundColor(SupportTheme.accent)
                     }
 
                     Text(String(format: "%.0f", session.efficacyScore))
@@ -310,10 +306,8 @@ struct EfficacyDashboardView: View {
                     .foregroundColor(session.netChange >= 0 ? .green : .red)
             }
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+        .supportCard()
+        .shadow(color: SupportTheme.canvas.opacity(0.05), radius: 4, x: 0, y: 2)
     }
 }
 
