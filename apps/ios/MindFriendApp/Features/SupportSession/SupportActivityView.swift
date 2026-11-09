@@ -338,14 +338,14 @@ struct SupportActivityView: View {
     }
 
     private func saveForBackground() {
-        perform {
-            guard let activity else { return }
-            if activity.kind == .chooseStep {
-                var value = activity.checkpoint; value.responses["action"] = answer
-                try await coordinator.checkpoint(activity.id, value: value)
-            } else if let value = checkpoint() { try await coordinator.checkpoint(activity.id, value: value) }
-            activeSince = nil
-        }
+        guard let activity else { return }
+        // Capture the step and stop the clock now: if the app returns before the write lands,
+        // reactivation restarts the clock and the write's completion must not stop it again.
+        var value = activity.checkpoint
+        if activity.kind == .chooseStep { value.responses["action"] = answer }
+        else if let current = checkpoint() { value = current }
+        activeSince = nil
+        perform { try await coordinator.checkpoint(activity.id, value: value) }
     }
 
     private func finish(stopped: String) {
