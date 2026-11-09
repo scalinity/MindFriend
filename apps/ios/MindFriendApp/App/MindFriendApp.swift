@@ -430,26 +430,20 @@ struct SupportLoadedShell: View {
     }
 }
 
+/// Continues the launch screen: the same canvas with the logo at the same size and centre,
+/// so the hand-off from the system launch screen does not jump.
 struct SplashView: View {
     var body: some View {
         ZStack {
-            Color.accentColor.opacity(0.1)
-                .ignoresSafeArea()
-
-            VStack(spacing: 16) {
-                Image("AppLogo")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 120, height: 120)
-
-                Text("MindFriend")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
-
-                ProgressView()
-                    .padding(.top, 20)
-            }
+            SupportTheme.canvas
+            Image("LaunchLogo")
+                .accessibilityLabel("MindFriend")
+            ProgressView()
+                .tint(SupportTheme.textSecondary)
+                .offset(y: 110)
+                .accessibilityLabel("Loading")
         }
+        .ignoresSafeArea()
     }
 }
 
