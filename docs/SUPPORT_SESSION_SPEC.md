@@ -140,7 +140,7 @@ Use the native tab bar on compact iPhone layouts: **Today**, **Chat**, **Explore
 
 | Destination | Order and responsibilities | Primary action |
 |---|---|---|
-| Today | Greeting; primary start/resume card; optional mood shortcut; compact active work/pins; a quiet route to all history | Start or resume one session |
+| Today | Greeting; primary start/resume card; quick ways in (mood check-in, breathing, an activity); a little progress (today's quest, level); pins; a quiet route to all history | Start or resume one session |
 | Chat | Current conversation/session; new conversation action; searchable conversation/session history sheet; context control | Talk or continue typing |
 | Explore | Search; active program; Practices; Programs and Pathways; Tools and Experiments; People and Circles | Choose an existing capability |
 | You | Progress summary; History; Saved steps; What MindFriend remembers; optional measurements; profile/privacy/settings/subscription | Review, correct, and manage |
@@ -190,11 +190,12 @@ At default text size on a 375 × 667-point iPhone, the greeting, primary card, p
 
 | Slot | Exact behavior and representative content |
 |---|---|
-| Navigation/header | “Today”; optional first-name greeting without emotional inference; Help button with accessible label “Support and crisis resources” |
-| Primary card: no unfinished work | Heading “What would help right now?”; one sentence “We can talk it through or try one small thing.”; primary “Start a conversation”; three optional text choices “Settle for a moment”, “Untangle a thought”, “Choose a next step” |
+| Navigation/header | Inline “Today” title; the greeting is the page's large heading (first name, no emotional inference) over “A little room for what matters to you.”; Help button with accessible label “Support and crisis resources” |
+| Primary card: no unfinished work | Heading “What would help right now?”; one sentence “We can talk it through or try one small thing.”; primary “Start a conversation” |
 | Primary card: unfinished work | Heading “Continue where you left off”; neutral status “Grounding · step 3 of 5” or “Conversation draft saved”; primary “Continue”; secondary “Start something else”; overflow “View session”, “Close session” |
-| Optional mood | A compact “Check in with yourself” row. Opens the existing mood interface. No required score before chat/practice. Never preselect a score from sensors |
-| Active work | At most three user-chosen pins, including an active program, saved practical step, circle, or existing tool. A first active program can be suggested as a pin, never added through unlimited recommender insertion |
+| Quick ways in | Three secondary tiles of equal height: “Check in” (accessible label “Check in with yourself”; opens the existing mood interface), “1-minute breathing”, “Untangle a thought”. They stack at accessibility sizes. “Settle for a moment” and “Choose a next step” follow as text rows. No required score before chat/practice; never preselect a score from sensors |
+| A little progress | Card with today's quest (a quest cached from an earlier day is not shown), then level, total XP and progress to the next level. No streak counts |
+| Pinned to Today | At most three user-chosen pins, including an active program, saved practical step, circle, or existing tool. An Edit/Done mode shows Move up, Move down and Unpin for each pin. A first active program can be suggested as a pin, never added through unlimited recommender insertion |
 | Footer | “View your history” and last-sync status only when materially stale/pending; no empty rows for absent features |
 
 The default primary card chooses the most recently intentionally active unfinished session. It does not rank people by predicted distress. If several sessions are paused, add “Other unfinished sessions (N)” beneath it. Do not silently merge them. After 14 days without an explicit return, use “Previous session available” instead of an imperative continue prompt; retain the record until the person closes/deletes it. This is a display rule, not deletion or a diagnosis.
