@@ -70,9 +70,6 @@ BEGIN
 END;
 $function$;
 REVOKE ALL ON FUNCTION public.cleanup_old_capacity() FROM PUBLIC, anon, authenticated, service_role;
-GRANT EXECUTE ON FUNCTION public.cleanup_old_capacity() TO PUBLIC;
-GRANT EXECUTE ON FUNCTION public.cleanup_old_capacity() TO anon;
-GRANT EXECUTE ON FUNCTION public.cleanup_old_capacity() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.cleanup_old_capacity() TO service_role;
 CREATE OR REPLACE FUNCTION public.decrypt_message_content(p_encrypted bytea, p_key_id text)
  RETURNS text
@@ -98,9 +95,6 @@ BEGIN
 END;
 $function$;
 REVOKE ALL ON FUNCTION public.decrypt_message_content(bytea,text) FROM PUBLIC, anon, authenticated, service_role;
-GRANT EXECUTE ON FUNCTION public.decrypt_message_content(bytea,text) TO PUBLIC;
-GRANT EXECUTE ON FUNCTION public.decrypt_message_content(bytea,text) TO anon;
-GRANT EXECUTE ON FUNCTION public.decrypt_message_content(bytea,text) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.decrypt_message_content(bytea,text) TO service_role;
 CREATE OR REPLACE FUNCTION public.decrypt_messages_batch(p_message_ids uuid[])
  RETURNS TABLE(message_id uuid, decryption_success boolean, decrypted_content text, error_message text)
@@ -150,9 +144,6 @@ BEGIN
 END;
 $function$;
 REVOKE ALL ON FUNCTION public.decrypt_messages_batch(uuid[]) FROM PUBLIC, anon, authenticated, service_role;
-GRANT EXECUTE ON FUNCTION public.decrypt_messages_batch(uuid[]) TO PUBLIC;
-GRANT EXECUTE ON FUNCTION public.decrypt_messages_batch(uuid[]) TO anon;
-GRANT EXECUTE ON FUNCTION public.decrypt_messages_batch(uuid[]) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.decrypt_messages_batch(uuid[]) TO service_role;
 CREATE OR REPLACE FUNCTION public.delete_mentorship_message(p_message_id uuid)
  RETURNS boolean
@@ -214,9 +205,6 @@ BEGIN
 END;
 $function$;
 REVOKE ALL ON FUNCTION public.encrypt_message_content(text) FROM PUBLIC, anon, authenticated, service_role;
-GRANT EXECUTE ON FUNCTION public.encrypt_message_content(text) TO PUBLIC;
-GRANT EXECUTE ON FUNCTION public.encrypt_message_content(text) TO anon;
-GRANT EXECUTE ON FUNCTION public.encrypt_message_content(text) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.encrypt_message_content(text) TO service_role;
 CREATE OR REPLACE FUNCTION public.flag_mentorship_message(p_message_id uuid, p_reason text)
  RETURNS boolean
@@ -292,9 +280,6 @@ BEGIN
 END;
 $function$;
 REVOKE ALL ON FUNCTION public.get_prediction_eligible_users(integer,integer) FROM PUBLIC, anon, authenticated, service_role;
-GRANT EXECUTE ON FUNCTION public.get_prediction_eligible_users(integer,integer) TO PUBLIC;
-GRANT EXECUTE ON FUNCTION public.get_prediction_eligible_users(integer,integer) TO anon;
-GRANT EXECUTE ON FUNCTION public.get_prediction_eligible_users(integer,integer) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.get_prediction_eligible_users(integer,integer) TO service_role;
 CREATE OR REPLACE FUNCTION public.get_prediction_features(p_user_id uuid)
  RETURNS jsonb
@@ -405,9 +390,6 @@ BEGIN
 END;
 $function$;
 REVOKE ALL ON FUNCTION public.get_prediction_features(uuid) FROM PUBLIC, anon, authenticated, service_role;
-GRANT EXECUTE ON FUNCTION public.get_prediction_features(uuid) TO PUBLIC;
-GRANT EXECUTE ON FUNCTION public.get_prediction_features(uuid) TO anon;
-GRANT EXECUTE ON FUNCTION public.get_prediction_features(uuid) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.get_prediction_features(uuid) TO service_role;
 CREATE OR REPLACE FUNCTION public.mark_messages_read(p_match_id uuid)
  RETURNS boolean
@@ -872,12 +854,13 @@ CREATE OR REPLACE FUNCTION public.get_social_vitality_dashboard(p_user_id uuid)
  RETURNS json
  LANGUAGE plpgsql
  SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
 AS $function$
 DECLARE
     v_result JSON;
 BEGIN
-    -- SECURITY: Validate that the requesting user can only access their own dashboard
-    IF p_user_id != auth.uid() THEN
+    -- Only the signed-in owner may read the dashboard; an anonymous caller has no uid.
+    IF auth.uid() IS NULL OR p_user_id IS DISTINCT FROM auth.uid() THEN
         RAISE EXCEPTION 'Unauthorized: Cannot access another user''s dashboard'
             USING ERRCODE = 'PAUTH';
     END IF;
@@ -952,8 +935,6 @@ BEGIN
 END;
 $function$;
 REVOKE ALL ON FUNCTION public.get_social_vitality_dashboard(uuid) FROM PUBLIC, anon, authenticated, service_role;
-GRANT EXECUTE ON FUNCTION public.get_social_vitality_dashboard(uuid) TO PUBLIC;
-GRANT EXECUTE ON FUNCTION public.get_social_vitality_dashboard(uuid) TO anon;
 GRANT EXECUTE ON FUNCTION public.get_social_vitality_dashboard(uuid) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.get_social_vitality_dashboard(uuid) TO service_role;
 CREATE OR REPLACE FUNCTION public.check_message_rate_limit(p_match_id uuid)
@@ -1034,6 +1015,9 @@ GRANT EXECUTE ON FUNCTION public.enforce_profiles_insert_defaults() TO anon;
 GRANT EXECUTE ON FUNCTION public.enforce_profiles_insert_defaults() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.enforce_profiles_insert_defaults() TO service_role;
 
+-- 3b. No client calls the prediction or message-encryption functions; the predict-mood job and
+-- the definer-owned mentorship trigger and RPCs do. The grants above leave them service-role only.
+
 -- 9. Two functions where production's definition is the safer one; the fresh chain adopts it.
 -- The repository version created a key on demand but ignored revoked_at; production ignored
 -- revoked keys but never created one. Keep both behaviors. Only definer functions call it.
@@ -1108,3 +1092,81 @@ END;
 $function$;
 REVOKE ALL ON FUNCTION public.increment_shield_count(uuid) FROM PUBLIC, anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.increment_shield_count(uuid) TO service_role;
+
+-- 10. Direct client updates on mentorship rows. Released clients update mentorship_matches
+-- directly (accept: status=active; end: status, ended_at, end_reason), so the UPDATE policies
+-- above are needed. Policies cannot restrict columns, so this guard limits what an API caller
+-- (anon/authenticated) may change. Definer RPCs run as their owner and are not affected.
+CREATE OR REPLACE FUNCTION public.guard_mentorship_match_client_update()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = public, pg_temp
+AS $function$
+BEGIN
+    IF current_user NOT IN ('anon', 'authenticated') THEN
+        RETURN NEW;
+    END IF;
+    IF NEW.mentor_id IS DISTINCT FROM OLD.mentor_id OR NEW.mentee_id IS DISTINCT FROM OLD.mentee_id
+       OR NEW.matched_at IS DISTINCT FROM OLD.matched_at OR NEW.created_at IS DISTINCT FROM OLD.created_at
+       OR NEW.mentor_alias IS DISTINCT FROM OLD.mentor_alias OR NEW.mentee_alias IS DISTINCT FROM OLD.mentee_alias
+       OR NEW.introduction_message IS DISTINCT FROM OLD.introduction_message
+       OR NEW.match_reason IS DISTINCT FROM OLD.match_reason
+       OR NEW.compatibility_score IS DISTINCT FROM OLD.compatibility_score
+       OR NEW.expertise_match_score IS DISTINCT FROM OLD.expertise_match_score
+       OR NEW.language_match_score IS DISTINCT FROM OLD.language_match_score
+       OR NEW.timezone_match_score IS DISTINCT FROM OLD.timezone_match_score
+       OR NEW.availability_match_score IS DISTINCT FROM OLD.availability_match_score
+       OR NEW.duration_weeks IS DISTINCT FROM OLD.duration_weeks THEN
+        RAISE EXCEPTION 'Only the match status and its end details can be changed' USING ERRCODE = '42501';
+    END IF;
+    IF OLD.status IN ('completed', 'declined', 'ended', 'suspended') THEN
+        RAISE EXCEPTION 'This mentorship is closed' USING ERRCODE = '42501';
+    END IF;
+    IF NEW.status IS DISTINCT FROM OLD.status THEN
+        IF NEW.status IN ('accepted', 'active', 'declined') THEN
+            IF auth.uid() IS DISTINCT FROM OLD.mentor_id OR OLD.status NOT IN ('pending', 'accepted') THEN
+                RAISE EXCEPTION 'Only the mentor can respond to a pending request' USING ERRCODE = '42501';
+            END IF;
+        ELSIF NEW.status NOT IN ('completed', 'ended') THEN
+            RAISE EXCEPTION 'Status change not allowed' USING ERRCODE = '42501';
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$function$;
+REVOKE ALL ON FUNCTION public.guard_mentorship_match_client_update() FROM PUBLIC, anon, authenticated;
+DROP TRIGGER IF EXISTS guard_mentorship_match_client_update ON public.mentorship_matches;
+CREATE TRIGGER guard_mentorship_match_client_update
+    BEFORE UPDATE ON public.mentorship_matches
+    FOR EACH ROW EXECUTE FUNCTION public.guard_mentorship_match_client_update();
+
+-- A participant may mark a message read or flag it; content, authorship and review fields stay fixed.
+CREATE OR REPLACE FUNCTION public.guard_mentorship_message_client_update()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = public, pg_temp
+AS $function$
+BEGIN
+    IF current_user NOT IN ('anon', 'authenticated') THEN
+        RETURN NEW;
+    END IF;
+    IF NEW.match_id IS DISTINCT FROM OLD.match_id OR NEW.sender_id IS DISTINCT FROM OLD.sender_id
+       OR NEW.content IS DISTINCT FROM OLD.content OR NEW.sent_at IS DISTINCT FROM OLD.sent_at
+       OR NEW.created_at IS DISTINCT FROM OLD.created_at
+       OR NEW.encrypted_content IS DISTINCT FROM OLD.encrypted_content
+       OR NEW.encryption_key_id IS DISTINCT FROM OLD.encryption_key_id OR NEW.iv IS DISTINCT FROM OLD.iv
+       OR NEW.reviewed IS DISTINCT FROM OLD.reviewed OR NEW.reviewed_at IS DISTINCT FROM OLD.reviewed_at
+       OR NEW.reviewed_by IS DISTINCT FROM OLD.reviewed_by THEN
+        RAISE EXCEPTION 'Only read and flag state can be changed' USING ERRCODE = '42501';
+    END IF;
+    IF NEW.read_at IS DISTINCT FROM OLD.read_at AND auth.uid() IS NOT DISTINCT FROM OLD.sender_id THEN
+        RAISE EXCEPTION 'Only the recipient can mark a message read' USING ERRCODE = '42501';
+    END IF;
+    RETURN NEW;
+END;
+$function$;
+REVOKE ALL ON FUNCTION public.guard_mentorship_message_client_update() FROM PUBLIC, anon, authenticated;
+DROP TRIGGER IF EXISTS guard_mentorship_message_client_update ON public.mentorship_messages;
+CREATE TRIGGER guard_mentorship_message_client_update
+    BEFORE UPDATE ON public.mentorship_messages
+    FOR EACH ROW EXECUTE FUNCTION public.guard_mentorship_message_client_update();
