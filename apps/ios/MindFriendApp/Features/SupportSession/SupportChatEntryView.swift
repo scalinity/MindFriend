@@ -113,7 +113,7 @@ struct SupportChatEntryView: View {
 
     private func start(_ template: SupportActivityTemplateKey, sessionID: UUID) {
         Task {
-            do { try await coordinator.flushDraft(text, sessionID: sessionID); _ = try await coordinator.start(template, in: sessionID, origin: .today) }
+            do { try await coordinator.flushDraft(text, sessionID: sessionID); _ = try await coordinator.start(template, in: sessionID, origin: .chatDraft) }
             catch { self.error = SupportSessionCoordinator.message(for: error) }
         }
     }
@@ -131,6 +131,12 @@ struct SupportChatEntryView: View {
         Task { @MainActor in
             defer { sending = false }
             do {
+                // A session closed elsewhere (History, Today) cannot take a message; continue in a new one.
+                var sessionID = sessionID
+                if coordinator.journal.sessions[sessionID]?.status != .open {
+                    sessionID = try await coordinator.createSession().id
+                    self.sessionID = sessionID
+                }
                 try await coordinator.flushDraft(content, sessionID: sessionID)
                 _ = try await container.supabaseDataService.supportChatCapabilities(owner: .init(userId: owner, epoch: accountEpoch), ownerProof: proof)
                 let id = try await coordinator.repository.reserveConversationID(epoch: coordinator.identity.epochID, sessionID: sessionID)
@@ -142,6 +148,7 @@ struct SupportChatEntryView: View {
                 conversation = saved
             } catch {
                 guard await proof() != nil else { return }
+                error.report(context: ["action": "support_chat_first_send"])
                 self.error = (error as? ChatRequestFailure)?.localizedDescription ?? "The message has not been sent. Your draft is saved; retry when ready."
             }
         }

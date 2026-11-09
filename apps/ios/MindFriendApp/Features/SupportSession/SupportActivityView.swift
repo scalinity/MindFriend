@@ -96,7 +96,7 @@ struct SupportActivityView: View {
                     Button("Discard this reflection", role: .destructive) {
                         perform {
                             try await coordinator.discardAnswers(presentation.id)
-                            try await coordinator.doneForNow(presentation.sessionID)
+                            try await coordinator.leaveActivity(presentation)
                             dismiss()
                         }
                     }
@@ -231,8 +231,10 @@ struct SupportActivityView: View {
     }
 
     private var returnTitle: String {
-        if case .chat = presentation.origin { return "Back to conversation" }
-        return "Done for now"
+        switch presentation.origin {
+        case .chat, .chatDraft: return "Back to conversation"
+        case .today, .explore, .onboarding: return "Done for now"
+        }
     }
 
     private func loadAnswer() {
@@ -324,12 +326,12 @@ struct SupportActivityView: View {
         perform {
             try await coordinator.chooseStep(presentation.id, choice: choice, text: answer)
             if choice == .didIt { appState.celebrateCompletion(String(localized: "Step done")) }
-            if choice == .saveForLater { try await coordinator.doneForNow(presentation.sessionID); dismiss() }
+            if choice == .saveForLater { try await coordinator.leaveActivity(presentation); dismiss() }
         }
     }
 
     private func leave() {
-        perform { try await coordinator.doneForNow(presentation.sessionID); dismiss() }
+        perform { try await coordinator.leaveActivity(presentation); dismiss() }
     }
 
     private func perform(_ body: @escaping @MainActor () async throws -> Void) {

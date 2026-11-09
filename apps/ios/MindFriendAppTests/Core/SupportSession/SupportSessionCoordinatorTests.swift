@@ -19,6 +19,23 @@ final class SupportSessionCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.journal.sessions[session.id]?.status, .open)
     }
 
+    func testLeavingAnActivityStartedFromChatKeepsTheConversationSessionOpen() async throws {
+        let coordinator = try await make(FaultyJournalIO())
+        let session = try await coordinator.createSession()
+        let activity = try await coordinator.start(.groundPresentV1, in: session.id, origin: .chatDraft)
+        try await coordinator.finish(activity.id, checkpoint: nil, stoppedReason: "user_ended")
+        try await coordinator.leaveActivity(SupportActivityPresentation(id: activity.id, sessionID: session.id, origin: .chatDraft))
+        XCTAssertEqual(coordinator.journal.sessions[session.id]?.status, .open)
+    }
+
+    func testLeavingAnActivityStartedFromTodayClosesItsEmptySession() async throws {
+        let coordinator = try await make(FaultyJournalIO())
+        let activity = try await coordinator.start(.groundPresentV1, origin: .today)
+        try await coordinator.finish(activity.id, checkpoint: nil, stoppedReason: "user_ended")
+        try await coordinator.leaveActivity(SupportActivityPresentation(id: activity.id, sessionID: activity.sessionID, origin: .today))
+        XCTAssertEqual(coordinator.journal.sessions[activity.sessionID]?.status, .closed)
+    }
+
     func testNavigationFlushCannotBeOverwrittenByOlderDebounce() async throws {
         let coordinator = try await make(FaultyJournalIO())
         let session = try await coordinator.createSession()
