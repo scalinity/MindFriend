@@ -432,7 +432,7 @@ struct SupportHistoryDetailView: View {
         } message: { Text("Up to \(SupportSessionLimits.titleMaxCharacters) characters.") }
         .alert("Close this session?", isPresented: $showClose) {
             Button("Save and leave") { run(leaveAfter: true) { try await coordinator.doneForNow(sessionID) } }
-            Button("End unfinished work and close", role: .destructive) { run { try await coordinator.close(sessionID) } }
+            Button("End unfinished work and close", role: .destructive) { run { try await closeSession(sessionID) } }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Saving keeps unfinished work waiting. Ending stops or dismisses it; it is not marked completed.")
@@ -602,11 +602,16 @@ struct SupportHistoryDetailView: View {
         }
     }
 
+    private func closeSession(_ id: UUID) async throws {
+        try await coordinator.close(id)
+        appState.celebrateCompletion(String(localized: "Session closed"), soft: true)
+    }
+
     private func requestClose(_ session: SupportSession) {
         if SupportHistorySessionRules.hasUnfinishedWork(session, journal: coordinator.journal) {
             showClose = true
         } else {
-            run { try await coordinator.close(session.id) }
+            run { try await closeSession(session.id) }
         }
     }
 

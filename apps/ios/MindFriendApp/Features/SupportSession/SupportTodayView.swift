@@ -73,7 +73,10 @@ struct SupportTodayView: View {
                 get: { closeCandidate != nil }, set: { if !$0 { closeCandidate = nil } }), presenting: closeCandidate) { candidate in
                 Button("Save and leave", role: .cancel) { self.closeCandidate = nil }
                 Button("End unfinished work and close", role: .destructive) {
-                    run { try await coordinator.close(candidate.id); self.closeCandidate = nil }
+                    run {
+                        try await coordinator.close(candidate.id); self.closeCandidate = nil
+                        appState.celebrateCompletion(String(localized: "Session closed"), soft: true)
+                    }
                 }
             } message: { _ in Text("Unfinished activities and saved steps will be stopped or dismissed. They will not be marked completed.") }
         }
