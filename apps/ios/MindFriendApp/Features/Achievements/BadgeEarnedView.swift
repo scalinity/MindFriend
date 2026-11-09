@@ -19,7 +19,7 @@ struct BadgeEarnedView: View {
         static let dismissDuration: Double = 0.2
         static let dismissDelayNanos: UInt64 = 200_000_000  // Pre-computed: 0.2s in nanoseconds
         static let nextBadgeDelay: UInt64 = 500_000_000     // 0.5s between badges
-        
+
         // Animation durations for withAnimation calls
         static let fadeInDuration: Double = 0.3
         static let springResponse: Double = 0.4
@@ -39,7 +39,7 @@ struct BadgeEarnedView: View {
 
     var body: some View {
         ZStack {
-            SupportTheme.canvas.opacity(0.97)
+            SupportTheme.canvas
                 .ignoresSafeArea()
                 .onTapGesture { dismiss() }
                 .accessibilityHidden(true)
@@ -48,62 +48,65 @@ struct BadgeEarnedView: View {
                 CelebrationParticles().ignoresSafeArea()
             }
 
-            VStack(spacing: SupportTheme.Spacing.m) {
-                Spacer()
+            ScrollView {
+                VStack(spacing: SupportTheme.Spacing.m) {
 
-                if showBadge {
-                    CelebrationEmblem(.symbol(badge.sfSymbolName), tint: SupportTheme.Celebration.gold, diameter: 120)
-                        .padding(.bottom, SupportTheme.Spacing.s)
-                }
-
-                Text("Badge earned")
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(SupportTheme.textSecondary)
-                    .opacity(showTitle ? 1 : 0)
-
-                VStack(spacing: SupportTheme.Spacing.xs) {
-                    Text(badge.name)
-                        .font(.title.bold())
-                        .foregroundStyle(SupportTheme.textPrimary)
-                        .accessibilityAddTraits(.isHeader)
-                    if let tier = badge.tier {
-                        Label(tier.displayName, systemImage: "circle.fill")
-                            .font(.subheadline)
-                            .foregroundStyle(SupportTheme.textSecondary)
-                            .labelStyle(TierLabelStyle(color: tierColor))
+                    if showBadge {
+                        CelebrationEmblem(.symbol(badge.sfSymbolName), tint: SupportTheme.Celebration.gold, diameter: 120)
+                            .padding(.bottom, SupportTheme.Spacing.s)
                     }
-                    Text(badge.description)
-                        .font(.body)
+
+                    Text("Badge earned")
+                        .font(.title3.weight(.semibold))
                         .foregroundStyle(SupportTheme.textSecondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, SupportTheme.Spacing.xl)
+                        .opacity(showTitle ? 1 : 0)
+
+                    VStack(spacing: SupportTheme.Spacing.xs) {
+                        Text(badge.name)
+                            .font(.title.bold())
+                            .foregroundStyle(SupportTheme.textPrimary)
+                            .accessibilityAddTraits(.isHeader)
+                        if let tier = badge.tier {
+                            Label(tier.displayName, systemImage: "circle.fill")
+                                .font(.subheadline)
+                                .foregroundStyle(SupportTheme.textSecondary)
+                                .labelStyle(TierLabelStyle(color: tierColor))
+                        }
+                        Text(badge.description)
+                            .font(.body)
+                            .foregroundStyle(SupportTheme.textSecondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, SupportTheme.Spacing.xl)
+                    }
+                    .opacity(showDetails ? 1 : 0)
+
+                    Label("+\(badge.xpReward) XP", systemImage: "sparkles")
+                        .font(.headline)
+                        .foregroundStyle(SupportTheme.Celebration.gold)
+                        .opacity(showXP ? 1 : 0)
+
+                    Button("Continue") { dismiss() }
+                        .buttonStyle(.supportPrimary)
+                        .frame(maxWidth: 360)
+                        .padding(.horizontal, SupportTheme.Spacing.l)
+                        .padding(.bottom, SupportTheme.Spacing.l)
+                        .opacity(showButton ? 1 : 0)
                 }
-                .opacity(showDetails ? 1 : 0)
-
-                Label("+\(badge.xpReward) XP", systemImage: "sparkles")
-                    .font(.headline)
-                    .foregroundStyle(SupportTheme.Celebration.gold)
-                    .opacity(showXP ? 1 : 0)
-
-                Spacer()
-
-                Button("Continue") { dismiss() }
-                    .buttonStyle(.supportPrimary)
-                    .frame(maxWidth: 360)
-                    .padding(.horizontal, SupportTheme.Spacing.l)
-                    .padding(.bottom, SupportTheme.Spacing.l)
-                    .opacity(showButton ? 1 : 0)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: SupportTheme.readableWidth)
+                .padding(SupportTheme.Spacing.l)
+                .frame(maxWidth: .infinity)
             }
-            .frame(maxWidth: SupportTheme.readableWidth)
         }
         .onAppear {
             if reduceMotion {
-                // Everything appears at once and cross-fades in with the cover.
-                showBadge = true
-                showTitle = true
-                showDetails = true
-                showXP = true
-                showButton = true
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    showBadge = true
+                    showTitle = true
+                    showDetails = true
+                    showXP = true
+                    showButton = true
+                }
                 HapticManager.celebrationSuccess()
                 UIAccessibility.post(notification: .announcement, argument: accessibilityDescription)
             } else {
@@ -192,19 +195,15 @@ struct BadgeEarnedView: View {
     private struct TierLabelStyle: LabelStyle {
         let color: Color
         func makeBody(configuration: LabelStyleConfiguration) -> some View {
-            HStack(spacing: 6) {
+            HStack(spacing: SupportTheme.Spacing.xs) {
                 configuration.icon.font(.caption2).foregroundStyle(color).accessibilityHidden(true)
                 configuration.title
             }
         }
     }
 
-    private var tierColor: Color {
-        if let tier = badge.tier {
-            return Color(hex: tier.color) ?? .purple
-        }
-        return .purple
-    }
+    private var tierColor: Color { SupportTheme.Celebration.gold }
+
 }
 
 // MARK: - Badge Earned Modifier
@@ -273,7 +272,7 @@ struct BadgeEarnedModifier: ViewModifier {
                 isProcessingQueue = false
             }
     }
-    
+
     /// Track a shown badge ID with memory cap to prevent unbounded growth.
     /// Uses FIFO eviction - oldest badges are removed first when cap is reached.
     /// O(n) contains() check is acceptable for n <= 50.

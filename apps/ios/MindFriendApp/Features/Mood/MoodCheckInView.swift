@@ -4,6 +4,9 @@ struct MoodCheckInView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var container: DependencyContainer
     @Environment(\.dismiss) var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var typeSize
+    @State private var saveError: String?
 
     var existingMood: MoodEntry?
 
@@ -24,6 +27,7 @@ struct MoodCheckInView: View {
     @State private var showMoodTutorial = false
 
     private let moodEmojis = ["😔", "😕", "😐", "🙂", "😁"]
+    private let moodLabels = ["Very Low", "Low", "Okay", "Good", "Great"]
     private let anxietyLabels = ["Very Low", "Low", "Moderate", "High", "Very High"]
     private let energyLabels = ["Exhausted", "Tired", "Okay", "Energetic", "Very High"]
 
@@ -58,25 +62,25 @@ struct MoodCheckInView: View {
     var body: some View {
         SupportRootNavigation(embedded: supportEmbedded) {
             ScrollView {
-                VStack(spacing: 32) {
+                VStack(spacing: SupportTheme.Spacing.l) {
                     // Mood slider with emoji
-                    VStack(spacing: 16) {
+                    VStack(spacing: SupportTheme.Spacing.m) {
                         Text("How are you feeling?")
                             .font(.title2)
                             .fontWeight(.semibold)
+                            .accessibilityAddTraits(.isHeader)
 
                         Text(currentMoodEmoji)
                             .font(.system(size: 80))
 
-                        MoodSlider(value: Binding(
-                            get: { Int(moodScore) },
-                            set: { moodScore = Double($0) }
-                        ), label: "How are you feeling?")
+                        moodChoices
                     }
+                    .frame(maxWidth: .infinity)
+                    .supportCard()
 
                     // Advanced options toggle
                     Button {
-                        withAnimation {
+                        withAnimation(.easeInOut(duration: reduceMotion ? 0.2 : 0.3)) {
                             showAdvanced.toggle()
                             if showAdvanced { includesAdvancedDetails = true }
                         }
@@ -86,19 +90,19 @@ struct MoodCheckInView: View {
                             Image(systemName: showAdvanced ? "chevron.up" : "chevron.down")
                         }
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                     }
+                    .frame(minHeight: SupportTheme.minimumTarget)
 
                     if showAdvanced {
-                        VStack(spacing: 24) {
+                        VStack(spacing: SupportTheme.Spacing.l) {
                             // Anxiety
-                            VStack(spacing: 8) {
-                                HStack {
-                                    Text("Anxiety Level")
+                            VStack(spacing: SupportTheme.Spacing.xs) {
+                                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
+                                    Text("Anxiety level")
                                         .font(.headline)
-                                    Spacer()
                                     Text(currentAnxietyLabel)
-                                        .foregroundStyle(.secondary)
+                                        .foregroundStyle(SupportTheme.textSecondary)
                                 }
                                 Slider(value: $anxietyScore, in: 1...5, step: 1)
                                     .accessibilityLabel("Anxiety level")
@@ -106,13 +110,12 @@ struct MoodCheckInView: View {
                             }
 
                             // Energy
-                            VStack(spacing: 8) {
-                                HStack {
-                                    Text("Energy Level")
+                            VStack(spacing: SupportTheme.Spacing.xs) {
+                                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
+                                    Text("Energy level")
                                         .font(.headline)
-                                    Spacer()
                                     Text(currentEnergyLabel)
-                                        .foregroundStyle(.secondary)
+                                        .foregroundStyle(SupportTheme.textSecondary)
                                 }
                                 Slider(value: $energyScore, in: 1...5, step: 1)
                                     .accessibilityLabel("Energy level")
@@ -120,7 +123,7 @@ struct MoodCheckInView: View {
                             }
 
                             // Note
-                            VStack(alignment: .leading, spacing: 8) {
+                            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                                 Text("Notes (optional)")
                                     .font(.headline)
 
@@ -142,14 +145,18 @@ struct MoodCheckInView: View {
                                 if note.count > maxNoteLength - 100 {
                                     Text("\(note.count)/\(maxNoteLength)")
                                         .font(.caption2)
-                                        .foregroundStyle(note.count >= maxNoteLength ? .red : .secondary)
+                                        .foregroundStyle(note.count >= maxNoteLength ? .red : SupportTheme.textSecondary)
                                 }
                             }
                         }
-                        .transition(.opacity.combined(with: .move(edge: .top)))
+                        .supportCard()
+                        .transition(.opacity)
                     }
 
-                    Spacer(minLength: 32)
+                    if let saveError {
+                        Label(saveError, systemImage: "exclamationmark.circle")
+                            .font(.subheadline).foregroundStyle(SupportTheme.textPrimary)
+                    }
 
                     // Save button
                     Button {
@@ -157,24 +164,23 @@ struct MoodCheckInView: View {
                     } label: {
                         if isSaving {
                             ProgressView()
-                                .tint(.white)
+                                .tint(SupportTheme.onAccent)
                         } else {
                             Text("Save Mood")
                         }
                     }
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.accentColor)
-                    .foregroundStyle(.white)
-                    .cornerRadius(12)
+                    .buttonStyle(.supportPrimary)
                     .disabled(isSaving)
                 }
-                .padding()
+                .frame(maxWidth: SupportTheme.readableWidth)
+                .padding(SupportTheme.Spacing.m)
+                .frame(maxWidth: .infinity)
             }
+            .supportScreen()
+            .foregroundStyle(SupportTheme.textPrimary)
             .scrollDismissesKeyboard(.interactively)
             .sentryMaskMood()
-            .navigationTitle("Mood Check-In")
+            .navigationTitle("Mood check-in")
             .navigationBarTitleDisplayMode(.inline)
             .onAppear {
                 // Show tutorial on first mood check-in
@@ -210,6 +216,28 @@ struct MoodCheckInView: View {
         }
     }
 
+    private var moodChoices: some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: typeSize.isAccessibilitySize ? 1 : (typeSize >= .xxLarge ? 2 : 5)),
+                  spacing: SupportTheme.Spacing.xs) {
+            ForEach(0..<moodEmojis.count, id: \.self) { index in
+                Button {
+                    withAnimation(.easeInOut(duration: reduceMotion ? 0.2 : 0.3)) { moodScore = Double(index + 1) }
+                } label: {
+                    VStack(spacing: SupportTheme.Spacing.xxs) {
+                        Text(moodEmojis[index]).font(.title2)
+                        Text(moodLabels[index]).font(.caption).fixedSize(horizontal: false, vertical: true)
+                        Image(systemName: Int(moodScore) == index + 1 ? "checkmark.circle.fill" : "circle")
+                            .font(.caption).accessibilityHidden(true)
+                    }
+                }
+                .buttonStyle(.supportSecondary)
+                .accessibilityLabel("How are you feeling?, \(moodLabels[index])")
+                .accessibilityValue("\(index + 1) of 5")
+                .accessibilityAddTraits(Int(moodScore) == index + 1 ? .isSelected : [])
+            }
+        }
+    }
+
     private func saveMood() {
         guard !isSaving else { return }
         guard let userID = appState.currentUser?.id else { return }
@@ -220,6 +248,7 @@ struct MoodCheckInView: View {
         }
         Log.ui.debug("[MoodCheckIn] Saving check-in")
         isSaving = true
+        saveError = nil
 
         let recordedAt = Date()
         let localDate = existingMood?.localDate ?? OfflineLocalDay.string(for: recordedAt)
@@ -243,21 +272,12 @@ struct MoodCheckInView: View {
                 guard let savedMoodID = reward.moodID else { throw OfflineMutationError.malformedReceipt }
                 if reward.outcome == "kept_existing" {
                     isSaving = false
-                    appState.showError(.apiError("A newer check-in was kept. Your entry is still here. Review it and save again if you want to replace that version."))
+                    saveError = "A newer check-in was kept. Your entry is still here. Review it and save again if you want to replace that version."
                     return
                 }
 
                 // Award XP for mood check-in (only for new entries, not edits)
                 if reward.xpAwarded > 0 {
-
-                    // Trigger XP gain toast IMMEDIATELY for instant gratification
-                    await MainActor.run {
-                        guard appState.currentUser?.id == owner.userId, appState.accountEpoch == owner.epoch else { return }
-                        container.achievementService.triggerXPGainAnimation(
-                            amount: reward.xpAwarded,
-                            activity: .moodCheckin
-                        )
-                    }
 
                     // Fire-and-forget: badge check and activation record run in background
                     // These are slow operations that shouldn't block the UI
@@ -266,7 +286,7 @@ struct MoodCheckInView: View {
                     Task.detached(priority: .utility) {
                         guard await ownerProof() == owner else { return }
                         do {
-                            _ = try await achievementService.checkBadgeProgress()
+                            _ = try await achievementService.checkBadgeProgress(presentCelebration: false)
                             guard await ownerProof() == owner else { return }
                             try await activationService.recordMoodLog()
                         } catch {
@@ -284,11 +304,6 @@ struct MoodCheckInView: View {
                     }
                     DebtSourceChanges.saved(date: localDate)
 
-                    // Show level-up celebration if leveled up
-                    if reward.levelUp, let level = reward.newLevel, let title = reward.newTitle {
-                        appState.showLevelUpCelebration(level: level, title: title)
-                    }
-
                     Log.ui.info("[MoodCheckIn] Saved successfully")
                     // A disclosure gets a quiet acknowledgement only: no haptic, no particles.
                     appState.celebrateCompletion(String(localized: "Check-in saved"), soft: true)
@@ -300,7 +315,7 @@ struct MoodCheckInView: View {
                 Log.data.warning("[MoodCheckIn] Check-in save failed")
                 await MainActor.run {
                     guard appState.currentUser?.id == owner.userId, appState.accountEpoch == owner.epoch else { return }
-                    appState.showError(.apiError("Unable to save mood. Please try again."))
+                    saveError = "Unable to save mood. Please try again."
                 }
             }
 

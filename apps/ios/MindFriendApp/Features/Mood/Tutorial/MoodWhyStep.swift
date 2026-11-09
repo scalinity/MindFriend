@@ -12,56 +12,48 @@ struct MoodWhyStep: View {
     let onNext: () -> Void
     let onSkip: () -> Void
 
-    @State private var showBenefits = false
-
     private let benefits: [(icon: String, color: Color, title: String, description: String)] = [
-        ("chart.line.uptrend.xyaxis", .green, "Spot Patterns", "See what affects your mood over time"),
-        ("lightbulb.fill", .yellow, "Get Insights", "AI analyzes your data for personalized tips"),
-        ("bell.fill", .orange, "Early Warnings", "Know when you might need extra support"),
-        ("sparkles", .purple, "Better Recommendations", "More accurate quest and exercise suggestions")
+        ("chart.line.uptrend.xyaxis", SupportTheme.accent, "Spot patterns", "See what affects your mood over time"),
+        ("lightbulb.fill", SupportTheme.Celebration.gold, "Get insights", "AI analyzes your data for personalized tips"),
+        ("bell.fill", SupportTheme.Celebration.gold, "Early warnings", "Know when you might need extra support"),
+        ("sparkles", SupportTheme.accent, "Better recommendations", "More accurate quest and exercise suggestions")
     ]
 
     var body: some View {
         TutorialStepView(
             icon: "face.smiling.fill",
-            iconColor: .pink,
-            headline: "Why Track Mood?",
+            iconColor: SupportTheme.accent,
+            headline: "Why track mood?",
             subheadline: "Your mood data powers personalized insights and predictions.",
             primaryAction: onNext,
             skipAction: onSkip
         ) {
-            VStack(spacing: 8) {
+            VStack(spacing: SupportTheme.Spacing.xs) {
                 ForEach(Array(benefits.enumerated()), id: \.element.title) { index, benefit in
-                    HStack(spacing: 12) {
+                    HStack(spacing: SupportTheme.Spacing.s) {
                         Image(systemName: benefit.icon)
                             .font(.title3)
                             .foregroundStyle(benefit.color)
                             .frame(width: 28)
 
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                             Text(benefit.title)
                                 .font(.subheadline.weight(.medium))
                             Text(benefit.description)
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
 
                         Spacer()
                     }
-                    .padding(12)
-                    .background(Color(.secondarySystemBackground))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .opacity(showBenefits ? 1 : 0)
-                    .offset(x: showBenefits ? 0 : 20)
-                    .animation(
-                        .easeOut(duration: 0.3).delay(0.3 + Double(index) * 0.1),
-                        value: showBenefits
-                    )
+                    .padding(SupportTheme.Spacing.s)
+                    .background(SupportTheme.surface)
+                    .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
+                    .celebrationReveal(delay: Double(index) * 0.1)
                 }
             }
-            .padding(.horizontal, 20)
-            .onAppear { showBenefits = true }
+            .padding(.horizontal, SupportTheme.Spacing.l)
         }
     }
 }

@@ -12,52 +12,51 @@ struct ShareCardSheet: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 24) {
-                // Card preview
-                ShareCardPreview(celebration: celebration)
-                    .padding(.horizontal, 40)
-                    .padding(.top, 20)
+            ScrollView {
+                VStack(spacing: SupportTheme.Spacing.l) {
+                    // Card preview
+                    ShareCardPreview(celebration: celebration)
+                        .padding(.horizontal, SupportTheme.Spacing.m)
+                        .padding(.top, SupportTheme.Spacing.l)
 
-                Spacer()
+                    Spacer()
 
-                // Share options
-                VStack(spacing: 16) {
-                    if let image = generatedImage {
-                        ShareLink(
-                            item: Image(uiImage: image),
-                            preview: SharePreview(celebration.shareMessage, image: Image(uiImage: image))
-                        ) {
-                            HStack(spacing: 8) {
-                                Image(systemName: "photo.fill")
-                                Text("Share Image")
+                    // Share options
+                    VStack(spacing: SupportTheme.Spacing.m) {
+                        if let image = generatedImage {
+                            ShareLink(
+                                item: Image(uiImage: image),
+                                preview: SharePreview(celebration.supportShareMessage, image: Image(uiImage: image))
+                            ) {
+                                HStack(spacing: SupportTheme.Spacing.xs) {
+                                    Image(systemName: "photo.fill")
+                                    Text("Share Image")
+                                }
                             }
-                            .font(.headline)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
-                            .background(Color.accentColor)
-                            .foregroundStyle(.white)
-                            .cornerRadius(14)
+                            .buttonStyle(.supportPrimary)
+                            .simultaneousGesture(TapGesture().onEnded { onShare() })
+                        } else if isGenerating {
+                            ProgressView("Generating card...")
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, SupportTheme.Spacing.m)
                         }
-                        .simultaneousGesture(TapGesture().onEnded { onShare() })
-                    } else if isGenerating {
-                        ProgressView("Generating card...")
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
-                    }
 
-                    ShareLink(item: celebration.shareMessage) {
-                        HStack(spacing: 8) {
-                            Image(systemName: "text.bubble.fill")
-                            Text("Share Text Only")
+                        ShareLink(item: celebration.supportShareMessage) {
+                            HStack(spacing: SupportTheme.Spacing.xs) {
+                                Image(systemName: "text.bubble.fill")
+                                Text("Share Text Only")
+                            }
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(SupportTheme.accent)
                         }
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.tint)
+                        .buttonStyle(.supportSecondary)
+                        .simultaneousGesture(TapGesture().onEnded { onShare() })
                     }
-                    .simultaneousGesture(TapGesture().onEnded { onShare() })
+                    .padding(.horizontal, SupportTheme.Spacing.l)
+                    .padding(.bottom, SupportTheme.Spacing.xl)
                 }
-                .padding(.horizontal, 24)
-                .padding(.bottom, 40)
             }
+            .supportSheet()
             .navigationTitle("Share Achievement")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -78,7 +77,7 @@ struct ShareCardSheet: View {
         // Small delay for view to render
         try? await Task.sleep(nanoseconds: 100_000_000)
 
-        let renderer = ImageRenderer(content: ShareCardPreview(celebration: celebration))
+        let renderer = ImageRenderer(content: ShareCardPreview(celebration: celebration).frame(width: 320))
         renderer.scale = 3.0
         generatedImage = renderer.uiImage
         isGenerating = false
@@ -92,60 +91,40 @@ struct ShareCardPreview: View {
     let celebration: CelebrationEvent
 
     var body: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: SupportTheme.Spacing.l) {
             Spacer()
 
-            // Icon
-            ZStack {
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: celebration.celebrationType.confettiColors,
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 80, height: 80)
-                    .shadow(color: celebration.celebrationType.confettiColors.first?.opacity(0.4) ?? .clear, radius: 15)
-
-                Image(systemName: celebration.displayIconName)
-                    .font(.system(size: 40))
-                    .foregroundStyle(.white)
-            }
+            CelebrationEmblem(.symbol(celebration.supportIcon), tint: SupportTheme.Celebration.gold, diameter: 80, animated: false)
 
             // Title
-            Text(celebration.title)
+            Text(celebration.supportTitle)
                 .font(.title.bold())
-                .foregroundStyle(.primary)
+                .foregroundStyle(SupportTheme.textPrimary)
                 .multilineTextAlignment(.center)
 
             // Share message
-            Text(celebration.shareMessage)
+            Text(celebration.supportShareMessage)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 16)
+                .padding(.horizontal, SupportTheme.Spacing.m)
 
             Spacer()
 
             // Branding
-            HStack(spacing: 6) {
+            HStack(spacing: SupportTheme.Spacing.xs) {
                 Image(systemName: "heart.fill")
                     .font(.caption)
-                    .foregroundStyle(.tint)
+                    .foregroundStyle(SupportTheme.accent)
                 Text("MindFriend")
                     .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
-            .padding(.bottom, 12)
+            .padding(.bottom, SupportTheme.Spacing.s)
         }
-        .padding(24)
-        .frame(width: 320, height: 420)
-        .background(
-            RoundedRectangle(cornerRadius: 24)
-                .fill(Color(.systemBackground))
-                .shadow(color: .black.opacity(0.1), radius: 20, x: 0, y: 10)
-        )
+        .padding(SupportTheme.Spacing.l)
+        .frame(maxWidth: .infinity)
+        .background(SupportTheme.surface, in: RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
     }
 }
 
@@ -156,7 +135,7 @@ struct ShareCardPreview: View {
         celebration: CelebrationEvent(
             id: UUID(),
             userId: UUID(),
-            celebrationType: .streakMilestone,
+            celebrationType: .levelUp,
             value: 30,
             badgeId: nil,
             shownAt: nil,
@@ -184,6 +163,6 @@ struct ShareCardPreview: View {
             createdAt: Date()
         )
     )
-    .padding()
-    .background(Color.gray.opacity(0.2))
+    .padding(SupportTheme.Spacing.m)
+    .background(SupportTheme.textSecondary.opacity(0.2))
 }

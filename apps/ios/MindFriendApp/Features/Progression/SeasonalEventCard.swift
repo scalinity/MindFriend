@@ -7,13 +7,13 @@ struct SeasonalEventCard: View {
     let onJoin: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             // Header
             HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 6) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
+                    HStack(spacing: SupportTheme.Spacing.xs) {
                         Image(systemName: eventIcon)
-                            .foregroundColor(.yellow)
+                            .foregroundColor(SupportTheme.Celebration.gold)
 
                         Text(event.name)
                             .font(.headline)
@@ -21,7 +21,7 @@ struct SeasonalEventCard: View {
 
                     Text(event.timeRemainingText)
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(SupportTheme.textSecondary)
                 }
 
                 Spacer()
@@ -30,11 +30,11 @@ struct SeasonalEventCard: View {
                     Text("\(Int(event.xpMultiplier))x XP")
                         .font(.caption)
                         .fontWeight(.semibold)
-                        .foregroundColor(.accentColor)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color.accentColor.opacity(0.15))
-                        .cornerRadius(8)
+                        .foregroundColor(SupportTheme.accent)
+                        .padding(.horizontal, SupportTheme.Spacing.xs)
+                        .padding(.vertical, SupportTheme.Spacing.xxs)
+                        .background(SupportTheme.accent.opacity(0.15))
+                        .cornerRadius(SupportTheme.controlRadius)
                 }
             }
 
@@ -42,21 +42,21 @@ struct SeasonalEventCard: View {
             if let description = event.description {
                 Text(description)
                     .font(.subheadline)
-                    .foregroundColor(.secondary)
-                    .lineLimit(2)
+                    .foregroundColor(SupportTheme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             // Progress or Join button
             if let participation = participation {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                     // Progress bar
                     GeometryReader { geometry in
                         ZStack(alignment: .leading) {
-                            RoundedRectangle(cornerRadius: 4)
-                                .fill(Color(.systemGray5))
+                            RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                                .fill(SupportTheme.separator)
                                 .frame(height: 8)
 
-                            RoundedRectangle(cornerRadius: 4)
+                            RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
                                 .fill(progressColor)
                                 .frame(
                                     width: geometry.size.width * progressPercentage,
@@ -70,18 +70,18 @@ struct SeasonalEventCard: View {
                     HStack {
                         Text("\(participation.progress)/\(event.targetCount)")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(SupportTheme.textSecondary)
 
                         Spacer()
 
                         if participation.isCompleted {
-                            Label("Completed!", systemImage: "checkmark.circle.fill")
+                            Label("Completed", systemImage: "checkmark.circle.fill")
                                 .font(.caption)
-                                .foregroundColor(.green)
+                                .foregroundColor(SupportTheme.accent)
                         } else {
                             Text("\(event.targetCount - participation.progress) remaining")
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(SupportTheme.textSecondary)
                         }
                     }
                 }
@@ -91,20 +91,11 @@ struct SeasonalEventCard: View {
                         Image(systemName: "plus.circle.fill")
                         Text("Join Challenge")
                     }
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .background(Color.accentColor)
-                    .foregroundColor(.white)
-                    .cornerRadius(8)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.supportPrimary)
             }
         }
-        .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(12)
+        .supportCard()
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityDescription)
     }
@@ -129,9 +120,9 @@ struct SeasonalEventCard: View {
 
     private var progressColor: Color {
         if participation?.isCompleted == true {
-            return .green
+            return SupportTheme.accent
         }
-        return .accentColor
+        return SupportTheme.accent
     }
 
     private var accessibilityDescription: String {
@@ -139,7 +130,7 @@ struct SeasonalEventCard: View {
         if let participation = participation {
             description += " Progress: \(participation.progress) of \(event.targetCount)."
             if participation.isCompleted {
-                description += " Completed!"
+                description += " Completed"
             }
         } else {
             description += " Not joined. Double tap to join."
@@ -155,9 +146,9 @@ struct EventIndicatorView: View {
     let targetCount: Int
 
     var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "flame.fill")
-                .foregroundColor(.orange)
+        HStack(spacing: SupportTheme.Spacing.xs) {
+            Image(systemName: "leaf")
+                .foregroundColor(SupportTheme.Celebration.gold)
 
             Text(event.name)
                 .font(.caption)
@@ -166,22 +157,22 @@ struct EventIndicatorView: View {
             if let progress = progress {
                 Text("\(progress)/\(targetCount)")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(SupportTheme.textSecondary)
             }
 
             Text(event.timeRemainingText)
                 .font(.caption2)
-                .foregroundColor(.secondary)
+                .foregroundColor(SupportTheme.textSecondary)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background(Color.orange.opacity(0.1))
-        .cornerRadius(20)
+        .padding(.horizontal, SupportTheme.Spacing.s)
+        .padding(.vertical, SupportTheme.Spacing.xs)
+        .background(SupportTheme.Celebration.gold.opacity(0.1))
+        .cornerRadius(SupportTheme.cardRadius)
     }
 }
 
 #Preview {
-    VStack(spacing: 16) {
+    VStack(spacing: SupportTheme.Spacing.m) {
         // Not joined
         SeasonalEventCard(
             event: SeasonalEvent(
@@ -271,5 +262,5 @@ struct EventIndicatorView: View {
             targetCount: 30
         )
     }
-    .padding()
+    .padding(SupportTheme.Spacing.m)
 }

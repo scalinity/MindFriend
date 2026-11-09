@@ -11,6 +11,7 @@ import SwiftUI
 /// Main container for the Mood tutorial walkthrough
 struct MoodTutorialFlow: View {
     @EnvironmentObject var container: DependencyContainer
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let onComplete: () -> Void
 
@@ -25,9 +26,9 @@ struct MoodTutorialFlow: View {
         VStack(spacing: 0) {
             ProgressView(value: currentStep.progress)
                 .progressViewStyle(.linear)
-                .tint(.pink)
-                .padding(.horizontal)
-                .padding(.top, 60)
+                .tint(SupportTheme.accent)
+                .padding(.horizontal, SupportTheme.Spacing.m)
+                .padding(.top, SupportTheme.Spacing.xl)
 
             Group {
                 switch currentStep {
@@ -37,18 +38,16 @@ struct MoodTutorialFlow: View {
                     MoodHowStep(onComplete: completeTutorial)
                 }
             }
-            .transition(.asymmetric(
-                insertion: .move(edge: .trailing).combined(with: .opacity),
-                removal: .move(edge: .leading).combined(with: .opacity)
-            ))
+            .id(currentStep)
+            .transition(.opacity)
         }
-        .background(Color(.systemBackground))
-        .animation(.easeInOut(duration: 0.3), value: currentStep)
+        .background(SupportTheme.canvas)
+        .animation(.easeInOut(duration: reduceMotion ? 0.2 : 0.3), value: currentStep)
     }
 
     private func advanceStep() {
         if let nextStep = TutorialStep(rawValue: currentStep.rawValue + 1) {
-            withAnimation { currentStep = nextStep }
+            withAnimation(.easeInOut(duration: reduceMotion ? 0.2 : 0.3)) { currentStep = nextStep }
         }
     }
 

@@ -1,110 +1,25 @@
-//
-//  QuestShieldStep.swift
-//  MindFriendApp
-//
-//  Tutorial Step 4: Explain streak shields (premium feature)
-//
-
 import SwiftUI
 
-/// Step 4: Show how streak shields protect your progress
+/// The final step leaves room for pauses without presenting streak mechanics.
 struct QuestShieldStep: View {
     let onComplete: () -> Void
 
-    @State private var showShield = false
-    @State private var shieldActive = false
-
     var body: some View {
         TutorialStepView(
-            icon: "shield.fill",
-            iconColor: .blue,
-            headline: "Streak Shields",
-            subheadline: "Life happens. Shields protect your streak when you can't complete a quest.",
+            icon: "heart",
+            iconColor: SupportTheme.accent,
+            headline: "Room for a pause",
+            subheadline: "A busy day does not erase the work you've done. Your progress is here when you return.",
             primaryLabel: "Start Your Journey",
             primaryAction: onComplete
         ) {
-            VStack(spacing: 16) {
-                // Shield animation
-                ZStack {
-                    // Background glow
-                    Circle()
-                        .fill(Color.blue.opacity(0.1))
-                        .frame(width: 100, height: 100)
-                        .scaleEffect(shieldActive ? 1.2 : 1.0)
-                        .opacity(shieldActive ? 0.5 : 0)
-
-                    // Shield icon
-                    Image(systemName: "shield.fill")
-                        .font(.system(size: 48))
-                        .foregroundStyle(
-                            LinearGradient(
-                                colors: [.blue, .cyan],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .scaleEffect(showShield ? 1.0 : 0.5)
-                        .opacity(showShield ? 1 : 0)
-
-                    // Checkmark overlay
-                    if shieldActive {
-                        Image(systemName: "checkmark")
-                            .font(.title.weight(.bold))
-                            .foregroundStyle(.white)
-                            .offset(y: 5)
-                            .transition(.scale.combined(with: .opacity))
-                    }
-                }
-
-                // Shield info
-                VStack(spacing: 8) {
-                    HStack(spacing: 12) {
-                        shieldFeature(icon: "calendar.badge.clock", text: "Skip a day without losing your streak")
-                        shieldFeature(icon: "crown.fill", text: "Premium members get shields monthly")
-                    }
-                }
-                .padding(12)
-                .background(Color(.secondarySystemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .padding(.horizontal, 16)
-                .opacity(showShield ? 1 : 0)
-
-                // Tip
-                Text("Don't worry - you'll build up shields as you maintain your streak!")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 24)
-                    .opacity(shieldActive ? 1 : 0)
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
+                SupportRowLabel(title: "Choose what fits", subtitle: "A shorter quest is an option on a full day", icon: "clock")
+                SupportRowLabel(title: "Keep what you've learned", subtitle: "Completed quests and earned XP remain part of your journey", icon: "checkmark.circle")
             }
-            .onAppear {
-                withAnimation(.easeOut(duration: 0.5).delay(0.3)) {
-                    showShield = true
-                }
-                withAnimation(.easeInOut(duration: 0.6).delay(1.0).repeatForever(autoreverses: true)) {
-                    shieldActive = true
-                }
-            }
+            .supportCard()
+            .padding(.horizontal, SupportTheme.Spacing.m)
+            .celebrationReveal()
         }
     }
-
-    private func shieldFeature(icon: String, text: String) -> some View {
-        VStack(spacing: 8) {
-            Image(systemName: icon)
-                .font(.title3)
-                .foregroundStyle(.blue)
-
-            Text(text)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity)
-    }
-}
-
-#Preview {
-    QuestShieldStep(onComplete: {})
 }

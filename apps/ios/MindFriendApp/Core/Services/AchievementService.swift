@@ -234,7 +234,9 @@ final class AchievementService: ObservableObject {
         }
     }
 
-    func checkBadgeProgress() async throws -> CheckBadgeProgressResponse {
+    /// `presentCelebration: false` still awards and reloads badges but queues no celebration,
+    /// for moments that stay quiet (a mood check-in gets a quiet acknowledgement only).
+    func checkBadgeProgress(presentCelebration: Bool = true) async throws -> CheckBadgeProgressResponse {
         // Empty request body for this endpoint
         do {
             let response: CheckBadgeProgressResponse = try await supabase.functions
@@ -245,7 +247,7 @@ final class AchievementService: ObservableObject {
             try await loadUserBadgeProgress()
             
             // Only update celebration state after successful reload
-            if !response.newlyEarned.isEmpty {
+            if presentCelebration && !response.newlyEarned.isEmpty {
                 let earnedIds = Set(response.newlyEarned.map { $0.id })
                 self.newlyEarnedBadges = badges.filter { earnedIds.contains($0.id) }
             }

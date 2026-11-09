@@ -13,93 +13,85 @@ struct QuestChoiceStep: View {
     let onSkip: () -> Void
 
     @State private var selectedQuest: Int? = nil
-    @State private var showQuests = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         TutorialStepView(
             icon: "hand.tap.fill",
-            iconColor: .blue,
-            headline: "Choose Your Quest",
+            iconColor: SupportTheme.accent,
+            headline: "Choose your quest",
             subheadline: "Each day, you can pick from three options. Choose what feels right for your energy level.",
             primaryAction: onNext,
             skipAction: onSkip
         ) {
-            VStack(spacing: 8) {
+            VStack(spacing: SupportTheme.Spacing.xs) {
                 ForEach(Array(questOptions.enumerated()), id: \.element.title) { index, quest in
                     Button {
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        withAnimation(.easeInOut(duration: reduceMotion ? 0.2 : 0.3)) {
                             selectedQuest = index
                         }
                     } label: {
-                        HStack(spacing: 12) {
+                        HStack(spacing: SupportTheme.Spacing.s) {
                             Image(systemName: quest.icon)
                                 .font(.title3)
                                 .foregroundStyle(quest.color)
                                 .frame(width: 28)
 
-                            VStack(alignment: .leading, spacing: 2) {
+                            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                                 Text(quest.title)
                                     .font(.subheadline.weight(.medium))
-                                    .foregroundStyle(.primary)
+                                    .foregroundStyle(SupportTheme.textPrimary)
 
-                                HStack(spacing: 8) {
+                                HStack(spacing: SupportTheme.Spacing.xs) {
                                     Label(quest.duration, systemImage: "clock")
                                     Label(quest.difficulty, systemImage: "leaf")
                                 }
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                             }
 
                             Spacer()
 
                             if selectedQuest == index {
                                 Image(systemName: "checkmark.circle.fill")
-                                    .foregroundStyle(.green)
-                                    .transition(.scale.combined(with: .opacity))
+                                    .foregroundStyle(SupportTheme.accent)
+                                    .transition(.opacity)
                             }
                         }
-                        .padding(12)
+                        .padding(SupportTheme.Spacing.s)
                         .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(Color(.secondarySystemBackground))
+                            RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                                .fill(SupportTheme.surface)
                                 .overlay(
-                                    RoundedRectangle(cornerRadius: 12)
+                                    RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
                                         .strokeBorder(
-                                            selectedQuest == index ? Color.green : Color.clear,
+                                            selectedQuest == index ? SupportTheme.accent : SupportTheme.border,
                                             lineWidth: 2
                                         )
                                 )
                         )
                     }
                     .buttonStyle(.plain)
-                    .opacity(showQuests ? 1 : 0)
-                    .offset(y: showQuests ? 0 : 15)
-                    .animation(
-                        .easeOut(duration: 0.4).delay(0.2 + Double(index) * 0.1),
-                        value: showQuests
-                    )
+                    .celebrationReveal(delay: Double(index) * 0.1)
                 }
 
                 // Tip text
                 Text("Tap a quest above to see how selection works")
                     .font(.caption)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(.top, 6)
+                    .padding(.top, SupportTheme.Spacing.xs)
                     .opacity(selectedQuest == nil ? 1 : 0)
             }
-            .padding(.horizontal, 20)
-            .onAppear {
-                showQuests = true
-            }
+            .padding(.horizontal, SupportTheme.Spacing.l)
         }
     }
 
     private var questOptions: [(icon: String, color: Color, title: String, duration: String, difficulty: String)] {
         [
-            ("figure.walk", .green, "Take a mindful walk", "10 min", "Easy"),
-            ("drop.fill", .blue, "Practice deep breathing", "5 min", "Easy"),
-            ("pencil.and.outline", .purple, "Journal 3 gratitudes", "5 min", "Medium")
+            ("figure.walk", SupportTheme.accent, "Take a mindful walk", "10 min", "Easy"),
+            ("drop.fill", SupportTheme.accent, "Practice deep breathing", "5 min", "Easy"),
+            ("pencil.and.outline", SupportTheme.accent, "Journal 3 gratitudes", "5 min", "Medium")
         ]
     }
 }

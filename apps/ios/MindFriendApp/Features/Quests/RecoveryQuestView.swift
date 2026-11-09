@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Full-screen view for completing a recovery quest to restore a broken streak
+/// A gentle return to quest practice.
 struct RecoveryQuestView: View {
     @EnvironmentObject var container: DependencyContainer
     @EnvironmentObject var appState: AppState
@@ -19,12 +19,16 @@ struct RecoveryQuestView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: SupportTheme.Spacing.l) {
                     headerSection
                     questContentSection
+                    if let errorMessage {
+                        Label(errorMessage, systemImage: "exclamationmark.circle")
+                            .foregroundStyle(SupportTheme.textPrimary)
+                    }
                     completeButton
                 }
-                .padding()
+                .padding(SupportTheme.Spacing.m)
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -32,11 +36,8 @@ struct RecoveryQuestView: View {
                     Button("Cancel") { dismiss() }
                 }
             }
-            .alert("Error", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
-                Button("OK") { errorMessage = nil }
-            } message: {
-                Text(errorMessage ?? "")
-            }
+            .supportScreen()
+            .foregroundStyle(SupportTheme.textPrimary)
             .sheet(isPresented: $showCompletionCelebration) {
                 RecoveryCompletionView(restoredStreak: restoredStreak ?? streakToRecover) {
                     dismiss()
@@ -48,74 +49,73 @@ struct RecoveryQuestView: View {
     // MARK: - Header Section
 
     private var headerSection: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: SupportTheme.Spacing.xs) {
             Image(systemName: "arrow.counterclockwise.circle.fill")
                 .font(.system(size: 60))
-                .foregroundStyle(.orange)
+                .foregroundStyle(SupportTheme.Celebration.gold)
 
-            Text("Recovery Quest")
-                .font(.title2.bold())
+            Text("Recovery quest")
+                .font(.title2.bold()).accessibilityAddTraits(.isHeader)
 
-            Text("Complete this quest to restore your \(streakToRecover)-day streak")
+            Text("Take one small step back into your practice.")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .multilineTextAlignment(.center)
         }
-        .padding(.top)
+        .padding(.top, SupportTheme.Spacing.m)
     }
 
     // MARK: - Quest Content Section
 
     private var questContentSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text(quest.title ?? "Recovery Quest")
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
+            Text(quest.title ?? "Recovery quest")
                 .font(.headline)
 
-            Text(quest.description ?? "Complete this quest to restore your streak.")
-                .foregroundStyle(.secondary)
+            Text(quest.description ?? "A small practice to help you begin again.")
+                .foregroundStyle(SupportTheme.textSecondary)
 
             Divider()
 
             // Steps
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                 Text("Steps")
                     .font(.subheadline.bold())
 
                 if let instructions = quest.instructions {
                     ForEach(Array(instructions.enumerated()), id: \.offset) { index, step in
-                        HStack(alignment: .top, spacing: 12) {
+                        Button {
+                            if index == currentStep + 1 { currentStep = index }
+                        } label: {
+                            HStack(alignment: .top, spacing: SupportTheme.Spacing.s) {
                             Image(systemName: index <= currentStep ? "checkmark.circle.fill" : "circle")
-                                .foregroundStyle(index <= currentStep ? .green : .gray)
+                                .foregroundStyle(index <= currentStep ? SupportTheme.accent : SupportTheme.textSecondary)
 
                             Text(step)
-                                .foregroundStyle(index <= currentStep ? .primary : .secondary)
+                                .foregroundStyle(index <= currentStep ? SupportTheme.textPrimary : SupportTheme.textSecondary)
                         }
-                        .onTapGesture {
-                            if index == currentStep + 1 {
-                                withAnimation { currentStep = index }
-                            }
+                            .frame(maxWidth: .infinity, minHeight: SupportTheme.minimumTarget, alignment: .leading)
                         }
+                        .buttonStyle(.plain)
                     }
                 } else {
                     // Fallback if no instructions
-                    Text("Complete the quest activities to restore your streak.")
-                        .foregroundStyle(.secondary)
+                    Text("Work through the activities at your own pace.")
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
             }
 
             // Estimated time
             HStack {
                 Image(systemName: "clock")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                 Text("\(quest.estimatedMinutes ?? 10) minutes")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
-            .padding(.top, 8)
+            .padding(.top, SupportTheme.Spacing.xs)
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .cornerRadius(16)
+        .supportCard()
     }
 
     // MARK: - Complete Button
@@ -126,17 +126,13 @@ struct RecoveryQuestView: View {
         } label: {
             if isCompleting {
                 ProgressView()
-                    .tint(.white)
+                    .tint(SupportTheme.onAccent)
             } else {
-                Text("Complete & Restore Streak")
+                Text("Complete quest")
                     .font(.headline)
             }
         }
-        .frame(maxWidth: .infinity)
-        .padding()
-        .background(canComplete ? Color.orange : Color.gray)
-        .foregroundStyle(.white)
-        .cornerRadius(12)
+        .buttonStyle(.supportPrimary)
         .disabled(!canComplete || isCompleting)
     }
 
@@ -171,45 +167,32 @@ struct RecoveryQuestView: View {
     }
 }
 
-/// Celebration view shown after successfully restoring a streak
+/// Acknowledges a completed recovery quest without showing server streak data.
 struct RecoveryCompletionView: View {
     let restoredStreak: Int
     let onDismiss: () -> Void
 
     var body: some View {
-        VStack(spacing: 24) {
-            Spacer()
-
-            Image(systemName: "flame.fill")
-                .font(.system(size: 80))
-                .foregroundStyle(.orange)
-
-            Text("Streak Restored!")
-                .font(.largeTitle.bold())
-
-            Text("Your \(restoredStreak)-day streak is back!")
-                .font(.title3)
-                .foregroundStyle(.secondary)
-
-            Text("Great job completing the recovery quest. Keep up the momentum!")
+        ZStack {
+            SupportTheme.canvas.ignoresSafeArea()
+            CelebrationParticles().ignoresSafeArea()
+            ScrollView {
+                VStack(spacing: SupportTheme.Spacing.l) {
+                    CelebrationEmblem(.symbol("checkmark.seal"), tint: SupportTheme.Celebration.gold, diameter: 112)
+                    Text("A fresh start").font(.largeTitle.bold()).accessibilityAddTraits(.isHeader)
+                    Text("Your recovery quest is complete.").font(.title3)
+                    Text("You've made time for yourself. Come back when it feels right.")
+                        .foregroundStyle(SupportTheme.textSecondary)
+                    Button("Continue", action: onDismiss).buttonStyle(.supportPrimary)
+                }
                 .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal)
-
-            Spacer()
-
-            Button(action: onDismiss) {
-                Text("Continue")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.orange)
-                    .foregroundStyle(.white)
-                    .cornerRadius(12)
+                .foregroundStyle(SupportTheme.textPrimary)
+                .frame(maxWidth: SupportTheme.readableWidth)
+                .padding(SupportTheme.Spacing.l)
+                .frame(maxWidth: .infinity)
             }
-            .padding(.horizontal)
-            .padding(.bottom, 32)
         }
+        .supportSheet()
     }
 }
 

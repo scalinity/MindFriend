@@ -24,54 +24,62 @@ struct SupportActivityDiscussionView: View {
                 Section {
                     Text("Choose which answers to include. Nothing is sent or billed until you select Send in Chat.")
                     Text("The activity stays in this account. This choice does not turn on sharing for other answers or later replies.")
-                        .font(.subheadline).foregroundStyle(.secondary)
+                        .font(.subheadline).foregroundStyle(SupportTheme.textSecondary)
                     Text("Once you send it, this text is part of the conversation and later replies in it can use it.")
                     if snapshot.sessionIsClosed {
                         Text("This session is closed. Reviewing the draft starts a new linked session. A new conversation is created only when you select Send.")
                     }
                 }
+                .listRowBackground(SupportTheme.surface)
                 Section("Answers to include") {
                     if snapshot.fields.isEmpty { Text("There are no written answers to include. You can still ask a question.") }
                     ForEach(snapshot.fields) { field in
                         Toggle(isOn: Binding(get: { selected.contains(field.id) }, set: { include in
                             if include { selected.insert(field.id) } else { selected.remove(field.id) }
                         })) {
-                            VStack(alignment: .leading, spacing: 8) {
+                            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                                 Text(field.label).font(.headline)
                                 Text(field.text).textSelection(.enabled)
                             }
                         }
                         .accessibilityIdentifier("support-share-" + field.id)
                     }
+                    .listRowBackground(SupportTheme.surface)
                 }
+                .listRowBackground(SupportTheme.surface)
                 if !snapshot.existingDraft.isEmpty {
                     Section("Your existing unsent draft") {
                         Text(snapshot.existingDraft).textSelection(.enabled)
                         Text("This stays at the start of the message. Nothing in your draft is replaced.")
-                            .font(.subheadline).foregroundStyle(.secondary)
+                            .font(.subheadline).foregroundStyle(SupportTheme.textSecondary)
                     }
+                    .listRowBackground(SupportTheme.surface)
                 }
                 Section("What would you like to ask?") {
-                    TextField("Your question", text: $question, axis: .vertical).lineLimit(3...8)
+                    TextField("Your question", text: $question, axis: .vertical).lineLimit(3...8).supportField()
                 }
+                .listRowBackground(SupportTheme.surface)
                 Section("Message preview") {
                     Text(preview.isEmpty ? "No message yet" : preview).textSelection(.enabled)
                     Text("Message size: \(preview.utf16.count) of \(SupportSessionLimits.draftMaxCharacters). Emoji and some characters count as more than one.")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.caption).foregroundStyle(SupportTheme.textSecondary)
                     if preview.utf16.count > SupportSessionLimits.draftMaxCharacters {
                         Text("Choose fewer answers or shorten the question. Your original answers stay unchanged.")
                     }
                 }
+                .listRowBackground(SupportTheme.surface)
                 Section {
                     Button("Review message in Chat") { prepareDraft() }
-                        .frame(minHeight: 44)
+                        .buttonStyle(.supportPrimary)
                         .disabled(isSaving || preview.isEmpty || preview.utf16.count > SupportSessionLimits.draftMaxCharacters)
                     if isSaving { ProgressView("Saving your draft…") }
-                    if let error { Text(error).foregroundStyle(.primary) }
+                    if let error { Text(error).foregroundStyle(SupportTheme.textPrimary) }
                 }
+                .listRowBackground(SupportTheme.surface)
             }
+            .foregroundStyle(SupportTheme.textPrimary)
             .disabled(isSaving)
-            .supportCanvas()
+            .supportSheet()
             .navigationTitle("Choose what to share")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(isSaving) } }

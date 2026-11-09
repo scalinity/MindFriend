@@ -8,34 +8,38 @@ struct LevelUpCelebration: View {
 
     var body: some View {
         ZStack {
-            SupportTheme.canvas.opacity(0.97)
+            SupportTheme.canvas
                 .ignoresSafeArea()
                 .onTapGesture(perform: onDismiss)
                 .accessibilityHidden(true)
             CelebrationParticles().ignoresSafeArea()
-            VStack(spacing: SupportTheme.Spacing.l) {
-                CelebrationEmblem(.text("\(newLevel)"), tint: SupportTheme.Celebration.gold, diameter: 120)
-                VStack(spacing: SupportTheme.Spacing.xs) {
-                    Text("Level \(newLevel)")
-                        .font(.largeTitle.bold())
-                        .foregroundStyle(SupportTheme.textPrimary)
-                        .accessibilityAddTraits(.isHeader)
-                    Text(newTitle)
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(SupportTheme.Celebration.gold)
-                    Text("Every small step counted toward this.")
-                        .font(.subheadline)
-                        .foregroundStyle(SupportTheme.textSecondary)
+            ScrollView {
+                VStack(spacing: SupportTheme.Spacing.l) {
+                    CelebrationEmblem(.text("\(newLevel)"), tint: SupportTheme.Celebration.gold, diameter: 120)
+                    VStack(spacing: SupportTheme.Spacing.xs) {
+                        Text("Level \(newLevel)")
+                            .font(.largeTitle.bold())
+                            .foregroundStyle(SupportTheme.textPrimary)
+                            .accessibilityAddTraits(.isHeader)
+                        Text(newTitle)
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(SupportTheme.Celebration.gold)
+                        Text("Every small step counted toward this.")
+                            .font(.subheadline)
+                            .foregroundStyle(SupportTheme.textSecondary)
+                    }
+                    .multilineTextAlignment(.center)
+                    .celebrationReveal(delay: 0.2)
+                    Button("Continue", action: onDismiss)
+                        .buttonStyle(.supportPrimary)
+                        .frame(maxWidth: 320)
+                        .padding(.top, SupportTheme.Spacing.s)
+                        .celebrationReveal(delay: 0.35)
                 }
-                .multilineTextAlignment(.center)
-                .celebrationReveal(delay: 0.2)
-                Button("Continue", action: onDismiss)
-                    .buttonStyle(.supportPrimary)
-                    .frame(maxWidth: 320)
-                    .padding(.top, SupportTheme.Spacing.s)
-                    .celebrationReveal(delay: 0.35)
+                .frame(maxWidth: SupportTheme.readableWidth)
+                .padding(SupportTheme.Spacing.l)
+                .frame(maxWidth: .infinity)
             }
-            .padding(SupportTheme.Spacing.l)
         }
         .onAppear {
             HapticManager.levelUpPattern()
@@ -86,11 +90,11 @@ extension View {
 #Preview {
     ZStack {
         // Background content
-        LinearGradient(colors: [.blue, .purple], startPoint: .top, endPoint: .bottom)
+        SupportTheme.canvas
             .ignoresSafeArea()
 
         Text("Main Content")
-            .foregroundColor(.white)
+            .foregroundStyle(SupportTheme.textPrimary)
     }
     .levelUpCelebration(
         isPresented: .constant(true),

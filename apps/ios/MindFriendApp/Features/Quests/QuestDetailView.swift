@@ -17,7 +17,7 @@ struct QuestDetailView: View {
     var body: some View {
         VStack(spacing: 0) {
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: SupportTheme.Spacing.l) {
                     // Quest header
                     QuestHeader(quest: quest)
 
@@ -31,36 +31,34 @@ struct QuestDetailView: View {
                         )
                     }
                 }
-                .padding()
+                .padding(SupportTheme.Spacing.m)
             }
 
             // Bottom action
             if quest.status != .completed {
-                VStack(spacing: 12) {
+                VStack(spacing: SupportTheme.Spacing.s) {
                     Button {
                         showReflection = true
                     } label: {
                         Text("Complete Quest")
-                            .font(.headline)
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.accentColor)
-                            .foregroundStyle(.white)
-                            .cornerRadius(12)
                     }
+                    .buttonStyle(.supportPrimary)
 
                     Button {
                         skipQuest()
                     } label: {
                         Text("Skip for today")
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
+                    .frame(minHeight: SupportTheme.minimumTarget)
                 }
-                .padding()
-                .background(Color(.systemBackground))
+                .padding(SupportTheme.Spacing.m)
+                .background(SupportTheme.canvas)
             }
         }
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle(quest.template.type.rawValue.capitalized)
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showReflection) {
@@ -280,158 +278,43 @@ struct QuestDetailView: View {
 struct QuestHeader: View {
     let quest: Quest
 
-    /// Color for the journey category
-    private var journeyColor: Color {
-        guard let arc = quest.arcContext else { return .accentColor }
-        switch arc.arcCategory.lowercased() {
-        case "stress": return .blue
-        case "sleep": return .indigo
-        case "confidence": return .purple
-        case "focus": return .teal
-        case "resilience": return .green
-        default: return .accentColor
-        }
-    }
-
     var body: some View {
-        VStack(spacing: 16) {
-            // Journey context banner (if part of a journey)
+        VStack(spacing: SupportTheme.Spacing.m) {
             if let arc = quest.arcContext {
-                VStack(spacing: 12) {
-                    // Journey header
-                    HStack {
-                        Image(systemName: "map.fill")
-                            .foregroundStyle(journeyColor)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(arc.arcTitle)
-                                .font(.subheadline)
-                                .fontWeight(.semibold)
-                                .foregroundStyle(journeyColor)
-                            Text("Day \(arc.currentDay + 1) of \(arc.durationDays)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-
-                        // Next milestone indicator
-                        if let nextMilestone = arc.nextMilestone {
-                            VStack(alignment: .trailing, spacing: 2) {
-                                Text("Next Milestone")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                                HStack(spacing: 4) {
-                                    Image(systemName: "flag.fill")
-                                        .font(.caption)
-                                    Text("Day \(nextMilestone)")
-                                        .font(.caption)
-                                        .fontWeight(.medium)
-                                }
-                                .foregroundStyle(.orange)
-                            }
-                        }
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
+                    SupportRowLabel(title: arc.arcTitle,
+                        subtitle: "Day \(arc.currentDay + 1) of \(arc.durationDays)", icon: "map")
+                    ProgressView(value: min(1, max(0, arc.progressPercentage)))
+                        .tint(SupportTheme.accent).accessibilityLabel("Journey progress")
+                    if let milestone = arc.nextMilestone {
+                        Label("Next milestone: day \(milestone)", systemImage: "flag")
+                            .font(.caption).foregroundStyle(SupportTheme.textSecondary)
                     }
-
-                    // Progress bar
-                    GeometryReader { geometry in
-                        ZStack(alignment: .leading) {
-                            RoundedRectangle(cornerRadius: 4)
-                                .fill(Color(.systemGray5))
-                                .frame(height: 8)
-
-                            RoundedRectangle(cornerRadius: 4)
-                                .fill(journeyColor)
-                                .frame(width: geometry.size.width * arc.progressPercentage, height: 8)
-
-                            // Milestone markers
-                            ForEach(arc.milestoneDays, id: \.self) { milestone in
-                                let position = Double(milestone) / Double(arc.durationDays)
-                                Circle()
-                                    .fill(milestone <= arc.currentDay ? journeyColor : Color(.systemGray4))
-                                    .frame(width: 12, height: 12)
-                                    .overlay(
-                                        Image(systemName: "flag.fill")
-                                            .font(.system(size: 6))
-                                            .foregroundStyle(.white)
-                                    )
-                                    .offset(x: (geometry.size.width * position) - 6)
-                            }
-                        }
-                    }
-                    .frame(height: 12)
-
-                    // Coaching message
                     if let coaching = arc.coachingMessage {
-                        HStack(spacing: 6) {
-                            Image(systemName: "lightbulb.fill")
-                                .font(.caption)
-                                .foregroundStyle(journeyColor)
-                            Text(coaching)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .italic()
-                        }
-                        .padding(.vertical, 8)
-                        .padding(.horizontal, 12)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(journeyColor.opacity(0.1))
-                        .cornerRadius(8)
+                        Text(coaching).font(.subheadline).foregroundStyle(SupportTheme.textSecondary)
                     }
-
-                    // Milestone day banner
                     if arc.isMilestoneDay {
-                        HStack(spacing: 8) {
-                            Image(systemName: "flag.fill")
-                                .foregroundStyle(.yellow)
-                            Text("Milestone Day!")
-                                .font(.subheadline)
-                                .fontWeight(.semibold)
-                            Text("Complete to celebrate your progress")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding()
-                        .frame(maxWidth: .infinity)
-                        .background(
-                            LinearGradient(
-                                colors: [.yellow.opacity(0.2), .orange.opacity(0.1)],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
-                        .cornerRadius(8)
+                        Label("Milestone day", systemImage: "flag.fill").font(.headline)
+                        Text("Complete to celebrate your progress")
+                            .font(.subheadline).foregroundStyle(SupportTheme.textSecondary)
                     }
                 }
-                .padding()
-                .background(journeyColor.opacity(0.05))
-                .cornerRadius(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Divider().overlay(SupportTheme.separator)
             }
-
-            // Quest icon
             Image(systemName: quest.template.type.icon)
-                .font(.system(size: 50))
-                .foregroundStyle(quest.isPartOfJourney ? journeyColor : Color.accentColor)
-
-            Text(quest.template.title)
-                .font(.title2)
-                .fontWeight(.bold)
-                .multilineTextAlignment(.center)
-
-            Text(quest.template.description)
-                .font(.body)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-
-            HStack(spacing: 16) {
+                .font(.largeTitle).foregroundStyle(SupportTheme.accent).accessibilityHidden(true)
+            Text(quest.template.title).font(.title2.bold()).accessibilityAddTraits(.isHeader)
+            Text(quest.template.description).font(.body).foregroundStyle(SupportTheme.textSecondary)
+            VStack(spacing: SupportTheme.Spacing.xxs) {
                 Label("\(quest.template.estimatedMinutes) min", systemImage: "clock")
                 Label(quest.template.difficulty, systemImage: "speedometer")
             }
-            .font(.caption)
-            .foregroundStyle(.secondary)
+            .font(.caption).foregroundStyle(SupportTheme.textSecondary)
         }
-        .padding()
+        .multilineTextAlignment(.center)
         .frame(maxWidth: .infinity)
-        .background(Color(.secondarySystemBackground))
-        .cornerRadius(16)
+        .supportCard()
     }
 }
 
@@ -440,9 +323,9 @@ struct QuestInstructions: View {
     @Binding var currentStep: Int
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
             Text("Instructions")
-                .font(.headline)
+                .font(.headline).accessibilityAddTraits(.isHeader)
 
             ForEach(instructions.indices, id: \.self) { index in
                 InstructionRow(
@@ -464,43 +347,43 @@ struct InstructionRow: View {
 
     var body: some View {
         Button(action: onTap) {
-            HStack(alignment: .top, spacing: 16) {
+            HStack(alignment: .top, spacing: SupportTheme.Spacing.m) {
                 ZStack {
                     Circle()
-                        .fill(isCompleted ? Color.green : (isActive ? Color.accentColor : Color.secondary.opacity(0.3)))
+                        .fill(isCompleted || isActive ? SupportTheme.accent : SupportTheme.elevated)
                         .frame(width: 32, height: 32)
 
                     if isCompleted {
                         Image(systemName: "checkmark")
                             .font(.caption)
                             .fontWeight(.bold)
-                            .foregroundStyle(.white)
+                            .foregroundStyle(SupportTheme.onAccent)
                     } else {
                         Text("\(instruction.step)")
                             .font(.caption)
                             .fontWeight(.bold)
-                            .foregroundStyle(isActive ? .white : .secondary)
+                            .foregroundStyle(isActive ? SupportTheme.onAccent : SupportTheme.textSecondary)
                     }
                 }
 
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     Text(instruction.text)
                         .font(.body)
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(SupportTheme.textPrimary)
                         .multilineTextAlignment(.leading)
 
                     if let duration = instruction.durationSeconds {
                         Text(formatDuration(duration))
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                 }
 
                 Spacer()
             }
-            .padding()
-            .background(isActive ? Color.accentColor.opacity(0.1) : Color(.secondarySystemBackground))
-            .cornerRadius(12)
+            .padding(SupportTheme.Spacing.m)
+            .background(isActive ? SupportTheme.elevated : SupportTheme.surface)
+            .cornerRadius(SupportTheme.controlRadius)
         }
         .buttonStyle(.plain)
     }
@@ -524,14 +407,14 @@ struct CompletedBanner: View {
     var body: some View {
         HStack {
             Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(.green)
-            Text("Quest completed!")
+                .foregroundStyle(SupportTheme.accent)
+            Text("Quest completed")
                 .fontWeight(.semibold)
         }
         .frame(maxWidth: .infinity)
-        .padding()
-        .background(Color.green.opacity(0.1))
-        .cornerRadius(12)
+        .padding(SupportTheme.Spacing.m)
+        .background(SupportTheme.accent.opacity(0.1))
+        .cornerRadius(SupportTheme.controlRadius)
     }
 }
 
@@ -543,45 +426,52 @@ struct QuestReflectionSheet: View {
     let onComplete: () -> Void
 
     @Environment(\.dismiss) var dismiss
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 24) {
-                    Text("Great job completing your quest!")
+                VStack(spacing: SupportTheme.Spacing.l) {
+                    Text("A moment to reflect")
                         .font(.title2)
-                        .fontWeight(.semibold)
+                        .fontWeight(.semibold).accessibilityAddTraits(.isHeader)
 
                     // Rating
-                    VStack(spacing: 12) {
+                    VStack(spacing: SupportTheme.Spacing.s) {
                         Text("How was this quest?")
                             .font(.headline)
 
-                        HStack(spacing: 8) {
+                        let layout = typeSize.isAccessibilitySize
+                            ? AnyLayout(VStackLayout(spacing: SupportTheme.Spacing.xs))
+                            : AnyLayout(HStackLayout(spacing: SupportTheme.Spacing.xs))
+                        layout {
                             ForEach(1...5, id: \.self) { star in
                                 Button {
                                     rating = star
                                 } label: {
                                     Image(systemName: star <= rating ? "star.fill" : "star")
                                         .font(.title)
-                                        .foregroundStyle(star <= rating ? .yellow : .secondary)
+                                        .foregroundStyle(star <= rating ? SupportTheme.Celebration.gold : SupportTheme.textSecondary)
+                                        .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                                 }
+                                .accessibilityLabel("\(star) of 5 stars")
+                                .accessibilityAddTraits(star == rating ? .isSelected : [])
                             }
                         }
                     }
 
                     // Reflection
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                         Text("Reflection (optional)")
                             .font(.headline)
 
                         TextField("How do you feel after completing this?", text: $reflectionNote, axis: .vertical)
-                            .textFieldStyle(.roundedBorder)
+                            .supportField()
                             .lineLimit(3...6)
                     }
 
                     Text("\(reflectionNote.unicodeScalars.count) of 4,000 characters")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.caption).foregroundStyle(SupportTheme.textSecondary)
                     if reflectionNote.unicodeScalars.count > 4_000 {
                         Text("Shorten this reflection before saving. Your text is still here.")
                             .font(.subheadline)
@@ -590,24 +480,21 @@ struct QuestReflectionSheet: View {
                         Log.quests.debug("[Quest] Save & Complete button tapped")
                         onComplete()
                     } label: {
-                        HStack(spacing: 8) {
+                        HStack(spacing: SupportTheme.Spacing.xs) {
                             if isCompleting {
                                 ProgressView()
-                                    .tint(.white)
+                                    .tint(SupportTheme.onAccent)
                             }
                             Text(isCompleting ? "Completing..." : "Save & Complete")
                         }
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(isCompleting ? Color.accentColor.opacity(0.6) : Color.accentColor)
-                        .foregroundStyle(.white)
-                        .cornerRadius(12)
                     }
+                    .buttonStyle(.supportPrimary)
                     .disabled(isCompleting || reflectionNote.unicodeScalars.count > 4_000)
                 }
-                .padding()
+                .padding(SupportTheme.Spacing.m)
             }
+            .supportSheet()
+            .foregroundStyle(SupportTheme.textPrimary)
             .scrollDismissesKeyboard(.interactively)
             .navigationTitle("Reflection")
             .navigationBarTitleDisplayMode(.inline)
@@ -629,35 +516,39 @@ struct QuestCompletionCelebration: View {
         ZStack {
             SupportTheme.canvas.ignoresSafeArea()
             CelebrationParticles().ignoresSafeArea()
-            VStack(spacing: SupportTheme.Spacing.l) {
-                Spacer()
-                CelebrationEmblem(.symbol("checkmark.seal.fill"), tint: SupportTheme.Celebration.gold, diameter: 112)
-                Text("Quest complete")
-                    .font(.largeTitle.bold())
-                    .foregroundStyle(SupportTheme.textPrimary)
-                    .accessibilityAddTraits(.isHeader)
-                    .celebrationReveal(delay: 0.2)
-                if !result.badgesEarned.isEmpty {
-                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
-                        Text("New badges").font(.headline).foregroundStyle(SupportTheme.textPrimary)
-                        ForEach(result.badgesEarned) { badge in
-                            Label(badge.title, systemImage: badge.icon)
-                                .foregroundStyle(SupportTheme.textPrimary)
+            ScrollView {
+                VStack(spacing: SupportTheme.Spacing.l) {
+                    CelebrationEmblem(.symbol("checkmark.seal.fill"), tint: SupportTheme.Celebration.gold, diameter: 112)
+                    Text("Quest complete")
+                        .font(.largeTitle.bold())
+                        .foregroundStyle(SupportTheme.textPrimary)
+                        .accessibilityAddTraits(.isHeader)
+                        .celebrationReveal(delay: 0.2)
+                    if !result.badgesEarned.isEmpty {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
+                            Text("New badges").font(.headline).foregroundStyle(SupportTheme.textPrimary)
+                            ForEach(result.badgesEarned) { badge in
+                                Label(badge.title, systemImage: badge.icon)
+                                    .foregroundStyle(SupportTheme.textPrimary)
+                            }
                         }
+                        .supportCard()
+                        .padding(.horizontal, SupportTheme.Spacing.l)
+                        .celebrationReveal(delay: 0.3)
                     }
-                    .supportCard()
-                    .padding(.horizontal, SupportTheme.Spacing.l)
-                    .celebrationReveal(delay: 0.3)
+                    Button("Continue", action: onDismiss)
+                        .buttonStyle(.supportPrimary)
+                        .padding(.horizontal, SupportTheme.Spacing.l)
+                        .padding(.bottom, SupportTheme.Spacing.l)
+                        .celebrationReveal(delay: 0.4)
                 }
-                Spacer()
-                Button("Continue", action: onDismiss)
-                    .buttonStyle(.supportPrimary)
-                    .padding(.horizontal, SupportTheme.Spacing.l)
-                    .padding(.bottom, SupportTheme.Spacing.l)
-                    .celebrationReveal(delay: 0.4)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: SupportTheme.readableWidth)
+                .padding(.top, SupportTheme.Spacing.xl)
+                .frame(maxWidth: .infinity)
             }
-            .frame(maxWidth: SupportTheme.readableWidth)
         }
+        .supportSheet()
         .onAppear { AccessibilityNotification.Announcement(String(localized: "Quest complete")).post() }
     }
 }
