@@ -10,6 +10,7 @@ import SwiftUI
 struct BreakthroughCelebrationView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var isAnimating = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let breakthroughSecond: Int?
     let onDismiss: () -> Void
@@ -24,10 +25,7 @@ struct BreakthroughCelebrationView: View {
                     onDismiss()
                 }
 
-            // Confetti particles
-            ForEach(0..<50) { index in
-                BreakthroughConfettiParticle(index: index, isAnimating: $isAnimating)
-            }
+            CelebrationParticles().ignoresSafeArea()
 
             // Celebration card
             VStack(spacing: 24) {
@@ -42,14 +40,14 @@ struct BreakthroughCelebrationView: View {
                             )
                         )
                         .frame(width: 100, height: 100)
-                        .scaleEffect(isAnimating ? 1.2 : 1.0)
-                        .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: isAnimating)
+                        .scaleEffect(isAnimating && !reduceMotion ? 1.2 : 1.0)
+                        .animation(reduceMotion ? nil : .easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: isAnimating)
 
                     Image(systemName: "sparkles")
                         .font(.system(size: 48))
                         .foregroundColor(.white)
-                        .rotationEffect(.degrees(isAnimating ? 360 : 0))
-                        .animation(.linear(duration: 2).repeatForever(autoreverses: false), value: isAnimating)
+                        .rotationEffect(.degrees(isAnimating && !reduceMotion ? 360 : 0))
+                        .animation(reduceMotion ? nil : .linear(duration: 2).repeatForever(autoreverses: false), value: isAnimating)
                 }
 
                 // Title
@@ -97,11 +95,11 @@ struct BreakthroughCelebrationView: View {
                     .shadow(color: .black.opacity(0.2), radius: 20, x: 0, y: 10)
             )
             .padding(.horizontal, 32)
-            .scaleEffect(isAnimating ? 1.0 : 0.8)
+            .scaleEffect(isAnimating || reduceMotion ? 1.0 : 0.8)
             .opacity(isAnimating ? 1.0 : 0)
         }
         .onAppear {
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+            withAnimation(reduceMotion ? .easeInOut(duration: 0.3) : .spring(response: 0.5, dampingFraction: 0.7)) {
                 isAnimating = true
             }
 
@@ -122,45 +120,6 @@ struct BreakthroughCelebrationView: View {
         } else {
             return "\(seconds)s"
         }
-    }
-}
-
-// MARK: - Confetti Particle
-
-struct BreakthroughConfettiParticle: View {
-    let index: Int
-    @Binding var isAnimating: Bool
-
-    // Random properties for each particle
-    private let colors: [Color] = [.red, .orange, .yellow, .green, .blue, .purple, .pink]
-    private let size = CGFloat.random(in: 8...16)
-    private let startX = CGFloat.random(in: -UIScreen.main.bounds.width/2...UIScreen.main.bounds.width/2)
-    private let startY = -CGFloat.random(in: 100...300)
-    private let duration = Double.random(in: 2...4)
-    private let delay = Double.random(in: 0...0.5)
-
-    @State private var yOffset: CGFloat = 0
-    @State private var xOffset: CGFloat = 0
-    @State private var rotation: Double = 0
-    @State private var opacity: Double = 1
-
-    var body: some View {
-        RoundedRectangle(cornerRadius: size / 4)
-            .fill(colors[index % colors.count])
-            .frame(width: size, height: size)
-            .offset(x: startX + xOffset, y: startY + yOffset)
-            .rotationEffect(.degrees(rotation))
-            .opacity(opacity)
-            .onAppear {
-                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                    withAnimation(.easeOut(duration: duration)) {
-                        yOffset = UIScreen.main.bounds.height + 200
-                        xOffset = CGFloat.random(in: -100...100)
-                        rotation = Double.random(in: 0...720)
-                        opacity = 0
-                    }
-                }
-            }
     }
 }
 

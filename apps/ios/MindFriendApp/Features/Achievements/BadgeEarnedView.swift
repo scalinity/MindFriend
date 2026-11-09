@@ -39,115 +39,72 @@ struct BadgeEarnedView: View {
 
     var body: some View {
         ZStack {
-            // Background
-            Color.black.opacity(0.75)
+            SupportTheme.canvas.opacity(0.97)
                 .ignoresSafeArea()
-                .onTapGesture {
-                    dismiss()
-                }
+                .onTapGesture { dismiss() }
+                .accessibilityHidden(true)
 
-            // Shimmer particles (behind badge)
             if showShimmer {
-                BadgeShimmerParticles(tierColor: tierColor)
-                    .frame(width: 350, height: 350)
+                CelebrationParticles().ignoresSafeArea()
             }
 
-            // Content
-            VStack(spacing: 20) {
+            VStack(spacing: SupportTheme.Spacing.m) {
                 Spacer()
 
-                // Hexagonal Badge Stamp Effect
                 if showBadge {
-                    BadgeStampEffect(
-                        tierColor: tierColor,
-                        sfSymbol: badge.sfSymbolName,
-                        onImpact: {
-                            // Trigger shimmer after stamp impact
-                            withAnimation {
-                                showShimmer = true
-                            }
-                        }
-                    )
-                    .frame(height: 180)
+                    CelebrationEmblem(.symbol(badge.sfSymbolName), tint: SupportTheme.Celebration.gold, diameter: 120)
+                        .padding(.bottom, SupportTheme.Spacing.s)
                 }
 
-                // "BADGE EARNED!" Title
-                Text("BADGE EARNED!")
-                    .font(.title2)
-                    .fontWeight(.black)
-                    .foregroundStyle(.white)
-                    .tracking(2)
+                Text("Badge earned")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .opacity(showTitle ? 1 : 0)
-                    .offset(y: showTitle ? 0 : 20)
 
-                // Badge details
-                VStack(spacing: 10) {
+                VStack(spacing: SupportTheme.Spacing.xs) {
                     Text(badge.name)
-                        .font(.title3)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(tierColor)
-
+                        .font(.title.bold())
+                        .foregroundStyle(SupportTheme.textPrimary)
+                        .accessibilityAddTraits(.isHeader)
                     if let tier = badge.tier {
-                        Text(tier.displayName)
+                        Label(tier.displayName, systemImage: "circle.fill")
                             .font(.subheadline)
-                            .foregroundStyle(.white.opacity(0.8))
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 6)
-                            .background(tierColor.opacity(0.3))
-                            .clipShape(Capsule())
+                            .foregroundStyle(SupportTheme.textSecondary)
+                            .labelStyle(TierLabelStyle(color: tierColor))
                     }
-
                     Text(badge.description)
                         .font(.body)
-                        .foregroundStyle(.white.opacity(0.7))
+                        .foregroundStyle(SupportTheme.textSecondary)
                         .multilineTextAlignment(.center)
-                        .padding(.horizontal, 32)
+                        .padding(.horizontal, SupportTheme.Spacing.xl)
                 }
                 .opacity(showDetails ? 1 : 0)
-                .offset(y: showDetails ? 0 : 20)
 
-                // XP Reward
-                HStack(spacing: 6) {
-                    Image(systemName: "sparkles")
-                    Text("+\(badge.xpReward) XP")
-                }
-                .font(.headline)
-                .foregroundStyle(.yellow)
-                .opacity(showXP ? 1 : 0)
-                .scaleEffect(showXP ? 1 : 0.8)
-                .padding(.top, 8)
+                Label("+\(badge.xpReward) XP", systemImage: "sparkles")
+                    .font(.headline)
+                    .foregroundStyle(SupportTheme.Celebration.gold)
+                    .opacity(showXP ? 1 : 0)
 
                 Spacer()
 
-                // Continue Button
-                Button {
-                    dismiss()
-                } label: {
-                    Text("Continue")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(tierColor)
-                        .foregroundStyle(.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 14))
-                }
-                .padding(.horizontal, 32)
-                .padding(.bottom, 32)
-                .opacity(showButton ? 1 : 0)
-                .offset(y: showButton ? 0 : 30)
+                Button("Continue") { dismiss() }
+                    .buttonStyle(.supportPrimary)
+                    .frame(maxWidth: 360)
+                    .padding(.horizontal, SupportTheme.Spacing.l)
+                    .padding(.bottom, SupportTheme.Spacing.l)
+                    .opacity(showButton ? 1 : 0)
             }
+            .frame(maxWidth: SupportTheme.readableWidth)
         }
         .onAppear {
             if reduceMotion {
-                // Instant display for reduced motion
+                // Everything appears at once and cross-fades in with the cover.
                 showBadge = true
-                showShimmer = true
                 showTitle = true
                 showDetails = true
                 showXP = true
                 showButton = true
                 HapticManager.celebrationSuccess()
-                // Announce immediately for VoiceOver users
                 UIAccessibility.post(notification: .announcement, argument: accessibilityDescription)
             } else {
                 startAnimation()
@@ -159,8 +116,6 @@ struct BadgeEarnedView: View {
             dismissTask?.cancel()
             dismissTask = nil
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(accessibilityDescription)
         .accessibilityAddTraits(.isModal)
         .presentationBackground(.clear)
     }
@@ -196,8 +151,9 @@ struct BadgeEarnedView: View {
             try? await Task.sleep(nanoseconds: AnimationTiming.presentationDelay)
             guard !Task.isCancelled else { return }
 
-            // Badge stamps down
+            // The emblem settles into place and the particles begin.
             showBadge = true
+            showShimmer = true
 
             // Title after stamp impact
             try? await Task.sleep(nanoseconds: AnimationTiming.titleDelay)
@@ -230,6 +186,16 @@ struct BadgeEarnedView: View {
 
             // Announce to VoiceOver after all elements are visible
             UIAccessibility.post(notification: .announcement, argument: accessibilityDescription)
+        }
+    }
+
+    private struct TierLabelStyle: LabelStyle {
+        let color: Color
+        func makeBody(configuration: LabelStyleConfiguration) -> some View {
+            HStack(spacing: 6) {
+                configuration.icon.font(.caption2).foregroundStyle(color).accessibilityHidden(true)
+                configuration.title
+            }
         }
     }
 

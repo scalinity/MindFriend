@@ -13,6 +13,7 @@ struct FeatureUnlockView: View {
     @State private var showFeatures = false
     @State private var showButton = false
     @State private var particleOpacity: Double = 1.0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack {
@@ -29,7 +30,7 @@ struct FeatureUnlockView: View {
             .ignoresSafeArea()
 
             // Celebration particles
-            CelebrationParticles(opacity: particleOpacity)
+            CelebrationParticles().opacity(particleOpacity).ignoresSafeArea()
 
             // Main content
             VStack(spacing: 32) {
@@ -67,7 +68,7 @@ struct FeatureUnlockView: View {
                         .font(.system(size: 50, weight: .medium))
                         .foregroundStyle(.white)
                 }
-                .scaleEffect(showContent ? 1 : 0.5)
+                .scaleEffect(showContent || reduceMotion ? 1 : 0.5)
                 .opacity(showContent ? 1 : 0)
 
                 // Congratulations text
@@ -81,7 +82,7 @@ struct FeatureUnlockView: View {
                         .foregroundStyle(.white.opacity(0.8))
                 }
                 .opacity(showContent ? 1 : 0)
-                .offset(y: showContent ? 0 : 20)
+                .offset(y: showContent || reduceMotion ? 0 : 20)
 
                 Spacer()
 
@@ -91,8 +92,8 @@ struct FeatureUnlockView: View {
                         let feature = unlockedFeatures[index]
                         UnlockedFeatureRow(feature: feature)
                             .opacity(showFeatures ? 1 : 0)
-                            .offset(x: showFeatures ? 0 : -50)
-                            .animation(
+                            .offset(x: showFeatures || reduceMotion ? 0 : -50)
+                            .accessibleAnimation(
                                 .spring(response: 0.5, dampingFraction: 0.7)
                                     .delay(Double(index) * 0.15),
                                 value: showFeatures
@@ -123,7 +124,7 @@ struct FeatureUnlockView: View {
                 .padding(.horizontal, 24)
                 .padding(.bottom, 40)
                 .opacity(showButton ? 1 : 0)
-                .offset(y: showButton ? 0 : 30)
+                .offset(y: showButton || reduceMotion ? 0 : 30)
             }
         }
         .onAppear {
@@ -217,68 +218,6 @@ private struct UnlockedFeatureRow: View {
     }
 }
 
-// MARK: - Celebration Particles
-
-private struct CelebrationParticles: View {
-    let opacity: Double
-
-    @State private var particles: [CelebrationParticleData] = []
-    @State private var viewSize: CGSize = .zero
-
-    var body: some View {
-        GeometryReader { geometry in
-            ForEach(particles) { particle in
-                Circle()
-                    .fill(particle.color)
-                    .frame(width: particle.size, height: particle.size)
-                    .position(particle.position)
-                    .opacity(particle.opacity * opacity)
-            }
-            .onAppear {
-                viewSize = geometry.size
-                generateParticles(in: geometry.size)
-            }
-            .onChange(of: geometry.size) { _, newSize in
-                viewSize = newSize
-                generateParticles(in: newSize)
-            }
-        }
-    }
-
-    private func generateParticles(in size: CGSize) {
-        guard size.width > 0, size.height > 0 else { return }
-
-        particles = (0..<30).map { _ in
-            CelebrationParticleData(
-                position: CGPoint(
-                    x: CGFloat.random(in: 0...size.width),
-                    y: CGFloat.random(in: 0...size.height)
-                ),
-                color: [Color.blue, .purple, .pink, .cyan, .white].randomElement()!.opacity(0.6),
-                size: CGFloat.random(in: 4...12),
-                opacity: Double.random(in: 0.3...0.8)
-            )
-        }
-
-        // Animate particles
-        withAnimation(.easeInOut(duration: 3.0).repeatForever(autoreverses: true)) {
-            particles = particles.map { particle in
-                var newParticle = particle
-                newParticle.position.y += CGFloat.random(in: -50...50)
-                newParticle.position.x += CGFloat.random(in: -30...30)
-                return newParticle
-            }
-        }
-    }
-}
-
-private struct CelebrationParticleData: Identifiable {
-    let id = UUID()
-    var position: CGPoint
-    let color: Color
-    let size: CGFloat
-    let opacity: Double
-}
 
 // MARK: - Preview
 

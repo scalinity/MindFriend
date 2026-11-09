@@ -409,7 +409,7 @@ enum SupportDestination: String, Codable, CaseIterable, Hashable, Identifiable {
     var isPinnable: Bool {
         switch section {
         case .settings, .memory, .help, .history: return false
-        default: return self != .quote
+        default: return self != .quote && self != .streaks
         }
     }
 
@@ -482,8 +482,9 @@ enum SupportDestination: String, Codable, CaseIterable, Hashable, Identifiable {
         }
     }
 
+    /// Streak data stays on the server, but streaks are not shown anywhere in the app.
     static func destinations(in section: SupportSection) -> [SupportDestination] {
-        allCases.filter { $0.section == section }
+        allCases.filter { $0.section == section && $0 != .streaks }
     }
 
     /// Additional Explore rows that deliberately appear in a second place. Assessments live in
