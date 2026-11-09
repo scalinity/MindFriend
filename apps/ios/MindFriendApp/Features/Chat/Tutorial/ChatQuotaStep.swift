@@ -32,7 +32,7 @@ struct ChatQuotaStep: View {
                             .foregroundStyle(.secondary)
 
                         VStack(spacing: 8) {
-                            Text("5")
+                            Text("30")
                                 .font(.title.bold())
                             Text("messages/day")
                                 .font(.caption)

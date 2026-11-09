@@ -5,8 +5,8 @@ import Foundation
 enum Constants {
     // MARK: - Quotas & Limits
 
-    /// Free tier daily AI chat quota (reduced to drive conversions)
-    static let freeUserDailyAiQuota = 5
+    /// Free tier AI chat messages per server (UTC) day
+    static let freeUserDailyAiQuota = 30
 
     /// Premium tier effectively unlimited quota
     static let premiumUserDailyAiQuota = 9999

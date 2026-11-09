@@ -17,7 +17,7 @@ final class ChatViewModelTests: XCTestCase {
         let freeEntitlements = Entitlements.free
 
         XCTAssertEqual(freeEntitlements.tier, .free)
-        XCTAssertEqual(freeEntitlements.dailyAiQuota, 20)
+        XCTAssertEqual(freeEntitlements.dailyAiQuota, 30)
         XCTAssertEqual(freeEntitlements.dailyAiUsed, 0)
         XCTAssertFalse(freeEntitlements.isQuotaExceeded)
     }
@@ -41,7 +41,7 @@ final class ChatViewModelTests: XCTestCase {
         let entitlements = Entitlements(tier: .free, dailyAiQuota: 20, dailyAiUsed: 25)
 
         XCTAssertTrue(entitlements.isQuotaExceeded)
-        XCTAssertEqual(entitlements.remaining, -5)
+        XCTAssertEqual(entitlements.remaining, 0)
     }
 
     func testEntitlements_QuotaNotExceeded_WhenUsageUnderLimit() {

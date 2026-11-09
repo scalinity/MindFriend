@@ -41,7 +41,6 @@ struct ChatView: View {
     @State private var inputText = ""
     @State private var isLoading = true
     @State private var isSending = false
-    @State private var showQuotaWarning = false
     @State private var displayTitle: String = "Chat"
     @State private var sendTask: Task<Void, Never>?
     @State private var reconciliationTask: Task<Void, Never>?
@@ -218,9 +217,10 @@ struct ChatView: View {
                 }
             }
 
-            // Quota warning - tappable to show paywall
-            if showQuotaWarning && sendFailure == nil {
-                QuotaWarningBanner(remaining: appState.entitlements.remaining) {
+            // The server's count decides both whether the banner shows and what it says.
+            if sendFailure == nil, appState.entitlements.tier != .premium,
+               let remaining = appState.entitlementSnapshot?.remaining, remaining <= quotaWarningThreshold {
+                QuotaWarningBanner(remaining: remaining, resetsAt: EntitlementSnapshot.nextServerReset(after: Date())) {
                     appState.showPaywall = true
                 }
             }
@@ -241,6 +241,7 @@ struct ChatView: View {
             ChatInputBar(
                 text: $inputText,
                 isSending: isSending,
+                isOutOfMessages: appState.isOutOfFreeMessages,
                 onSend: sendMessage
             )
             .focused($isInputFocused)
@@ -586,13 +587,8 @@ struct ChatView: View {
                 latestSupport = response.support
 
                 // Update quota tracking from server (authoritative source)
-                if appState.entitlements.tier != .premium, let serverUsed = response.quotaUsed {
-                    // Sync from server-provided value (not local increment)
-                    if let quotaOwner { appState.recordChatQuota(ownerID: quotaOwner, used: serverUsed, limit: response.quotaLimit) }
-                    // Only show warning if not unlimited (Int.max) and near limit
-                    showQuotaWarning = response.quotaRemaining < Int.max && response.quotaRemaining <= quotaWarningThreshold
-                } else {
-                    showQuotaWarning = false
+                if appState.entitlements.tier != .premium, let serverUsed = response.quotaUsed, let quotaOwner {
+                    appState.recordChatQuota(ownerID: quotaOwner, used: serverUsed, limit: response.quotaLimit)
                 }
 
                 // Record first chat message for progressive disclosure activation
@@ -825,10 +821,11 @@ struct TypingIndicator: View {
 struct ChatInputBar: View {
     @Binding var text: String
     let isSending: Bool
+    var isOutOfMessages = false
     let onSend: () -> Void
 
     private var canSend: Bool {
-        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isSending
+        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isSending && !isOutOfMessages
     }
 
     var body: some View {
@@ -857,7 +854,7 @@ struct ChatInputBar: View {
             }
             .disabled(!canSend)
             .accessibilityLabel("Send message")
-            .accessibilityHint(canSend ? "Sends your message" : "Type a message first")
+            .accessibilityHint(isOutOfMessages ? "You're out of messages for today" : canSend ? "Sends your message" : "Type a message first")
         }
         .padding(.horizontal)
         .padding(.vertical, 8)
@@ -867,6 +864,7 @@ struct ChatInputBar: View {
 
 struct QuotaWarningBanner: View {
     let remaining: Int
+    let resetsAt: Date
     let onTap: () -> Void
 
     var body: some View {
@@ -875,9 +873,17 @@ struct QuotaWarningBanner: View {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundStyle(.orange)
 
-                Text("Only \(remaining) message\(remaining == 1 ? "" : "s") left today")
-                    .font(.caption)
-                    .foregroundStyle(.primary)
+                VStack(alignment: .leading, spacing: 2) {
+                    if remaining == 0 {
+                        Text("You're out of messages for today")
+                        Text("More messages at \(resetsAt, style: .time)")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("\(remaining) messages left today")
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.primary)
 
                 Spacer()
 
@@ -896,7 +902,6 @@ struct QuotaWarningBanner: View {
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Warning: Only \(remaining) message\(remaining == 1 ? "" : "s") left today. Tap to upgrade.")
         .accessibilityHint("Opens subscription options")
     }
 }
