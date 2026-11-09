@@ -77,7 +77,7 @@ struct YearlyOverviewView: View {
                                     ? SupportTheme.accent
                                     : SupportTheme.surface
                             )
-                            .foregroundStyle(selectedYear == year ? SupportTheme.textPrimary : SupportTheme.textPrimary)
+                            .foregroundStyle(selectedYear == year ? SupportTheme.onAccent : SupportTheme.textPrimary)
                             .clipShape(Capsule())
                     }
                     .buttonStyle(.plain)
