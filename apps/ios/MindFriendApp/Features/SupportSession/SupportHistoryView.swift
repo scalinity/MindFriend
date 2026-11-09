@@ -430,14 +430,14 @@ struct SupportHistoryDetailView: View {
             Button("Save") { rename() }
             Button("Cancel", role: .cancel) {}
         } message: { Text("Up to \(SupportSessionLimits.titleMaxCharacters) characters.") }
-        .confirmationDialog("Close this session?", isPresented: $showClose, titleVisibility: .visible) {
+        .alert("Close this session?", isPresented: $showClose) {
             Button("Save and leave") { run(leaveAfter: true) { try await coordinator.doneForNow(sessionID) } }
             Button("End unfinished work and close", role: .destructive) { run { try await coordinator.close(sessionID) } }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Saving keeps unfinished work waiting. Ending stops or dismisses it; it is not marked completed.")
         }
-        .confirmationDialog("Delete this session?", isPresented: $showDelete, titleVisibility: .visible) {
+        .alert("Delete this session?", isPresented: $showDelete) {
             Button("Delete session", role: .destructive) {
                 run(leaveAfter: true) { try await coordinator.delete(sessionID) }
             }

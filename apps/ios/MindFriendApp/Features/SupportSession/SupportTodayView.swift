@@ -64,15 +64,13 @@ struct SupportTodayView: View {
                         .accessibilityLabel("Support and crisis resources")
                 }
             }
-            .confirmationDialog("Close this session?", isPresented: Binding(
-                get: { closeCandidate != nil }, set: { if !$0 { closeCandidate = nil } }), titleVisibility: .visible) {
-                if let closeCandidate {
-                    Button("Save and leave", role: .cancel) { self.closeCandidate = nil }
-                    Button("End unfinished work and close", role: .destructive) {
-                        run { try await coordinator.close(closeCandidate.id); self.closeCandidate = nil }
-                    }
+            .alert("Close this session?", isPresented: Binding(
+                get: { closeCandidate != nil }, set: { if !$0 { closeCandidate = nil } }), presenting: closeCandidate) { candidate in
+                Button("Save and leave", role: .cancel) { self.closeCandidate = nil }
+                Button("End unfinished work and close", role: .destructive) {
+                    run { try await coordinator.close(candidate.id); self.closeCandidate = nil }
                 }
-            } message: { Text("Unfinished activities and saved steps will be stopped or dismissed. They will not be marked completed.") }
+            } message: { _ in Text("Unfinished activities and saved steps will be stopped or dismissed. They will not be marked completed.") }
         }
         .tint(SupportTheme.accent)
         .onAppear { simplerView = SupportSimplerViewPreference.isEnabled(ownerID: coordinator.identity.ownerID) }

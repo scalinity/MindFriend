@@ -122,7 +122,7 @@ struct SupportMemoryView: View {
                 submit(item, action: item.isSuggestion ? .approveCandidate : .edit, content: text)
             }
         }
-        .confirmationDialog("Forget this saved context?", isPresented: Binding(get: { forgetting != nil }, set: { if !$0 { forgetting = nil } })) {
+        .alert("Forget this saved context?", isPresented: Binding(get: { forgetting != nil }, set: { if !$0 { forgetting = nil } })) {
             if let item = forgetting {
                 Button("Forget", role: .destructive) {
                     submit(item, action: item.isSuggestion ? .forgetCandidate : .forgetMemory)

@@ -83,7 +83,7 @@ struct SupportActivityView: View {
                 }
             }
             .tint(SupportTheme.accent)
-            .confirmationDialog("Pause this activity?", isPresented: $showPause, titleVisibility: .visible) {
+            .alert("Pause this activity?", isPresented: $showPause) {
                 Button("Save and leave") { pause() }
                 Button("Keep going", role: .cancel) {}
                 Button("End this activity", role: .destructive) { finish(stopped: "user_ended") }
