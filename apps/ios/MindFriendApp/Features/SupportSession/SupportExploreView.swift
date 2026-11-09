@@ -269,3 +269,263 @@ struct ReplacePinSheet: View {
         .presentationDetents([.medium, .large])
     }
 }
+
+// Hubs that give retained capabilities a named home in Explore (SR-03…SR-07); You's hubs stay in
+// SupportRetainedHubs.swift.
+
+// MARK: - Journal chooser (Explore → Practices)
+
+/// Text and voice journals are separate existing tools; this chooser names both instead of hiding one.
+struct SupportJournalHub: View {
+    var body: some View {
+        List {
+            Section {
+                NavigationLink {
+                    JournalListView()
+                } label: {
+                    SupportRowLabel(
+                        title: String(localized: "Text journal"),
+                        subtitle: String(localized: "Write and revisit entries"),
+                        icon: "book.closed"
+                    )
+                }
+                NavigationLink {
+                    VoiceJournalRecorderView()
+                } label: {
+                    SupportRowLabel(
+                        title: String(localized: "Voice journal"),
+                        subtitle: String(localized: "Record an entry. The microphone starts only when you ask."),
+                        icon: "mic.fill"
+                    )
+                }
+                NavigationLink {
+                    CreativeGalleryView()
+                } label: {
+                    SupportRowLabel(
+                        title: String(localized: "Voice journal history"),
+                        subtitle: String(localized: "Saved recordings and other creative work"),
+                        icon: "waveform"
+                    )
+                }
+            } footer: {
+                Text("Text and voice entries are kept separately, and each list is searched on its own. Art and drawing tools are in Create.")
+            }
+        }
+        .supportCanvas()
+        .navigationTitle(SupportDestination.journal.title)
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+// MARK: - Pathways (Explore → Programs and Pathways)
+
+/// Your active pathways open their exact dashboards first; the catalog only starts a new one.
+struct SupportPathwaysHub: View {
+    @EnvironmentObject private var appState: AppState
+    @EnvironmentObject private var container: DependencyContainer
+    @State private var pathways: [UserPathway] = []
+    @State private var state = HubLoad.loading
+    @State private var selected: UserPathway?
+    @State private var retry = UUID()
+
+    var body: some View {
+        List {
+            Section(String(localized: "Your pathways")) {
+                switch state {
+                case .loading:
+                    ProgressView().frame(maxWidth: .infinity)
+                case .failed:
+                    HubFailedView(message: String(localized: "Your active pathways couldn't be loaded.")) { retry = UUID() }
+                case .loaded:
+                    if pathways.isEmpty {
+                        Text("You don't have an active pathway.")
+                            .foregroundStyle(SupportTheme.textSecondary)
+                    }
+                    ForEach(pathways) { pathway in
+                        ActivePathwayCard(userPathway: pathway) { selected = pathway }
+                            .listRowInsets(EdgeInsets())
+                    }
+                }
+            }
+            Section {
+                NavigationLink {
+                    PathwaySelectionView().environmentObject(container)
+                } label: {
+                    SupportRowLabel(
+                        title: String(localized: "Start a new pathway"),
+                        subtitle: String(localized: "Browse life transitions"),
+                        icon: "signpost.right.fill"
+                    )
+                }
+            }
+        }
+        .supportCanvas()
+        .navigationTitle(SupportDestination.pathways.title)
+        .navigationBarTitleDisplayMode(.inline)
+        .navigationDestination(isPresented: Binding(
+            get: { selected != nil },
+            set: { if !$0 { selected = nil } }
+        )) {
+            if let selected {
+                PathwayDashboardView(userPathway: selected).environmentObject(container)
+            }
+        }
+        .task(id: retry) { await load() }
+    }
+
+    private func load() async {
+        guard let userID = appState.currentUser?.id else { return }
+        state = .loading
+        do {
+            let result = try await container.transitionService.fetchActivePathways()
+            guard !Task.isCancelled, appState.currentUser?.id == userID else { return }
+            pathways = result
+            state = .loaded
+        } catch is CancellationError {
+            return
+        } catch {
+            guard !Task.isCancelled, appState.currentUser?.id == userID else { return }
+            state = .failed
+        }
+    }
+}
+
+// MARK: - Seasonal events (Explore → People and Circles)
+
+struct SupportSeasonalHub: View {
+    @EnvironmentObject private var appState: AppState
+    @EnvironmentObject private var container: DependencyContainer
+    @State private var event: SeasonalEvent?
+    @State private var participation: EventParticipation?
+    @State private var state = HubLoad.loading
+    @State private var retry = UUID()
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
+                switch state {
+                case .loading:
+                    ProgressView().frame(maxWidth: .infinity)
+                case .failed:
+                    HubFailedView(message: String(localized: "Events couldn't be loaded.")) { retry = UUID() }
+                case .loaded:
+                    if let event {
+                        SeasonalEventCard(event: event, participation: participation) { join(event) }
+                    } else {
+                        Text("There's no event running right now.")
+                            .foregroundStyle(SupportTheme.textSecondary)
+                    }
+                }
+            }
+            .padding(SupportTheme.Spacing.m)
+        }
+        .background(SupportTheme.canvas.ignoresSafeArea())
+        .navigationTitle(SupportDestination.seasonalEvents.title)
+        .navigationBarTitleDisplayMode(.inline)
+        .task(id: retry) { await load() }
+    }
+
+    private func load() async {
+        guard let userID = appState.currentUser?.id else { return }
+        state = .loading
+        do {
+            let events = try await container.supabaseDataService.getActiveEvents()
+            let all = try await container.supabaseDataService.getEventParticipation()
+            guard !Task.isCancelled, appState.currentUser?.id == userID else { return }
+            event = events.first
+            participation = event.flatMap { current in all.first { $0.eventId == current.id } }
+            state = .loaded
+        } catch is CancellationError {
+            return
+        } catch {
+            guard !Task.isCancelled, appState.currentUser?.id == userID else { return }
+            state = .failed
+        }
+    }
+
+    /// Joining is an explicit tap on the card's own Join button.
+    private func join(_ event: SeasonalEvent) {
+        guard let userID = appState.currentUser?.id else { return }
+        Task {
+            do {
+                try await container.supabaseDataService.joinEvent(id: event.id)
+                let all = try await container.supabaseDataService.getEventParticipation()
+                guard appState.currentUser?.id == userID else { return }
+                participation = all.first { $0.eventId == event.id }
+            } catch {
+                appState.showError(.apiError(error.localizedDescription))
+            }
+        }
+    }
+}
+
+// MARK: - Buddy (Explore → People and Circles)
+
+struct SupportBuddyHub: View {
+    @EnvironmentObject private var appState: AppState
+    @EnvironmentObject private var container: DependencyContainer
+    @State private var buddy: BuddyWidgetData?
+    @State private var state = HubLoad.loading
+    @State private var showInvite = false
+    @State private var retry = UUID()
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
+                switch state {
+                case .loading:
+                    ProgressView().frame(maxWidth: .infinity)
+                case .failed:
+                    HubFailedView(message: String(localized: "Your buddy status couldn't be loaded.")) { retry = UUID() }
+                case .loaded:
+                    if let buddy {
+                        // Encouragement is only sent when the person taps the widget's own button.
+                        BuddyWidget(buddyData: buddy, onSendEncouragement: { sendEncouragement(buddy) })
+                    } else {
+                        InviteBuddyPrompt(onTap: { showInvite = true })
+                    }
+                }
+            }
+            .padding(SupportTheme.Spacing.m)
+        }
+        .background(SupportTheme.canvas.ignoresSafeArea())
+        .navigationTitle(SupportDestination.buddy.title)
+        .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $showInvite) {
+            InviteBuddySheet().environmentObject(container)
+        }
+        .task(id: retry) { await load() }
+    }
+
+    private func load() async {
+        guard let userID = appState.currentUser?.id else { return }
+        state = .loading
+        do {
+            let data = try await container.supabaseDataService.getBuddyWidgetData()
+            guard !Task.isCancelled, appState.currentUser?.id == userID else { return }
+            buddy = data
+            state = .loaded
+        } catch is CancellationError {
+            return
+        } catch {
+            guard !Task.isCancelled, appState.currentUser?.id == userID else { return }
+            state = .failed
+        }
+    }
+
+    private func sendEncouragement(_ data: BuddyWidgetData) {
+        guard let userID = appState.currentUser?.id else { return }
+        Task {
+            do {
+                try await container.supabaseDataService.sendEncouragement(
+                    to: data.buddyId, relationshipId: data.relationshipId, type: .encouragement
+                )
+                let refreshed = try await container.supabaseDataService.getBuddyWidgetData()
+                guard appState.currentUser?.id == userID else { return }
+                buddy = refreshed
+            } catch {
+                appState.showError(.apiError("Could not send encouragement"))
+            }
+        }
+    }
+}
