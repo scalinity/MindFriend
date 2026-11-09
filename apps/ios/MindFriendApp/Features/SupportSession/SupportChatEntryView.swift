@@ -88,6 +88,8 @@ struct SupportChatEntryView: View {
         .fullScreenCover(isPresented: $showVoice, onDismiss: {
             let id = voiceTextID, owner = coordinator.identity.ownerID, epoch = appState.accountEpoch
             voiceTextID = nil
+            // Voice may have continued a closed session in a linked one; text picks up from that session.
+            if let voiceSessionID = voiceAccess?.selectedSessionID { sessionID = voiceSessionID }
             guard let id else { return }
             Task {
                 if let saved = try? await container.supabaseDataService.getConversation(id: id.uuidString),

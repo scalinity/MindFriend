@@ -139,6 +139,23 @@ final class SupportSessionCoordinator: ObservableObject {
         }
     }
 
+    /// The session a conversation's next message belongs to: the session itself while open; once closed,
+    /// the open session linked to it, created on first use so the conversation keeps going.
+    func continuingSession(_ sessionID: UUID) async throws -> SupportSession {
+        try requireReady()
+        guard let session = journal.sessions[sessionID] else { throw SupportSessionError.sessionNotFound(sessionID) }
+        switch session.status {
+        case .open: return session
+        case .deleted: throw SupportSessionError.sessionDeleted(sessionID)
+        case .closed:
+            if let linked = journal.sessions.values.first(where: { $0.previousSessionID == sessionID && $0.status == .open }) {
+                return linked
+            }
+            return try await createSession(conversationID: session.conversationID, previousSessionID: sessionID,
+                                           scope: session.contextScope)
+        }
+    }
+
     func suppressTemplate(_ template: SupportActivityTemplateKey, sessionID: UUID) async throws {
         try await command { try await self.repository.declineTemplate(epoch: self.identity.epochID, sessionID: sessionID, template: template) }
     }

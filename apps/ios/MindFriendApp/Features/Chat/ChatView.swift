@@ -653,9 +653,11 @@ struct ChatView: View {
         }
     }
     private var resolvedSessionID: UUID? {
-        suppliedSessionID ?? container.supportSessionCoordinator?.journal.sessions.values.first(where: {
-            $0.conversationID == UUID(uuidString: conversation.id) && $0.status != .deleted
-        })?.id
+        let sessions = container.supportSessionCoordinator?.journal.sessions.values
+        let conversationID = UUID(uuidString: conversation.id)
+        // A conversation has at most one open session; after a close (or a voice turn) it continues in a linked one.
+        if let open = sessions?.first(where: { $0.conversationID == conversationID && $0.status == .open }) { return open.id }
+        return suppliedSessionID ?? sessions?.first(where: { $0.conversationID == conversationID && $0.status != .deleted })?.id
     }
 
     private var supportChatDraftHandoffs: AnyPublisher<SupportChatDraftHandoff?, Never> {
@@ -686,7 +688,8 @@ struct ChatView: View {
     private func sendSupportMessage(content: String, requestID: UUID, retryFailed: Bool,
                                     onDelta: @escaping (String) -> Void) async throws -> SendMessageResponse {
         guard let coordinator = container.supportSessionCoordinator, let sync = container.supportSync,
-              let id = resolvedSessionID else { throw ChatRequestFailure(kind: .contractUnavailable) }
+              let resolvedID = resolvedSessionID else { throw ChatRequestFailure(kind: .contractUnavailable) }
+        let id = try await coordinator.continuingSession(resolvedID).id
         let owner = coordinator.identity.ownerID, epoch = appState.accountEpoch
         let proof: @Sendable () async -> OfflineOwnerProof? = { await MainActor.run {
             guard appState.currentUser?.id == owner, appState.accountEpoch == epoch,
@@ -761,10 +764,12 @@ struct ChatView: View {
         return id
     }
     private func startManual(_ template: SupportActivityTemplateKey) {
-        guard let id = resolvedSessionID, let conversationID = UUID(uuidString: conversation.id) else { return }
+        guard let resolvedID = resolvedSessionID, let coordinator = container.supportSessionCoordinator,
+              let conversationID = UUID(uuidString: conversation.id) else { return }
         Task { do {
-            try await container.supportSessionCoordinator?.flushDraft(inputText, sessionID: id)
-            _ = try await container.supportSessionCoordinator?.start(template, in: id, origin: .chat(conversationID: conversationID))
+            let id = try await coordinator.continuingSession(resolvedID).id
+            try await coordinator.flushDraft(inputText, sessionID: id)
+            _ = try await coordinator.start(template, in: id, origin: .chat(conversationID: conversationID))
         }
                catch { proposalError = SupportSessionCoordinator.message(for: error) } }
     }
