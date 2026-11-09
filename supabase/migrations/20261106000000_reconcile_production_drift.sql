@@ -679,19 +679,11 @@ DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public'
   WHERE ((mentorship_matches.id = mentorship_messages.match_id) AND ((mentorship_matches.mentor_id = auth.uid()) OR (mentorship_matches.mentee_id = auth.uid()))))))$ddl$; END IF; END $$;
 -- "Match participants can send messages" is replaced in section 12.
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'mentorship_messages' AND policyname = 'Senders can delete own messages') THEN EXECUTE $ddl$CREATE POLICY "Senders can delete own messages" ON public.mentorship_messages AS PERMISSIVE FOR DELETE TO public USING ((auth.uid() = sender_id))$ddl$; END IF; END $$;
-DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'mentorship_messages' AND policyname = 'Update message flags') THEN EXECUTE $ddl$CREATE POLICY "Update message flags" ON public.mentorship_messages AS PERMISSIVE FOR UPDATE TO public USING ((EXISTS ( SELECT 1
-   FROM public.mentorship_matches
-  WHERE ((mentorship_matches.id = mentorship_messages.match_id) AND ((mentorship_matches.mentor_id = auth.uid()) OR (mentorship_matches.mentee_id = auth.uid())))))) WITH CHECK ((EXISTS ( SELECT 1
-   FROM public.mentorship_matches
-  WHERE ((mentorship_matches.id = mentorship_messages.match_id) AND ((mentorship_matches.mentor_id = auth.uid()) OR (mentorship_matches.mentee_id = auth.uid()))))))$ddl$; END IF; END $$;
+-- "Update message flags" is not restored; see section 12.
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'mentorship_messages' AND policyname = 'Users can decrypt own messages') THEN EXECUTE $ddl$CREATE POLICY "Users can decrypt own messages" ON public.mentorship_messages AS PERMISSIVE FOR SELECT TO public USING ((EXISTS ( SELECT 1
    FROM public.mentorship_matches
   WHERE ((mentorship_matches.id = mentorship_messages.match_id) AND ((mentorship_matches.mentor_id = auth.uid()) OR (mentorship_matches.mentee_id = auth.uid()))))))$ddl$; END IF; END $$;
-DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'mentorship_messages' AND policyname = 'Users can mark own messages as read') THEN EXECUTE $ddl$CREATE POLICY "Users can mark own messages as read" ON public.mentorship_messages AS PERMISSIVE FOR UPDATE TO public USING (((auth.uid() = sender_id) OR (match_id IN ( SELECT mentorship_matches.id
-   FROM public.mentorship_matches
-  WHERE ((mentorship_matches.mentor_id = auth.uid()) OR (mentorship_matches.mentee_id = auth.uid())))))) WITH CHECK ((sender_id = ( SELECT m.sender_id
-   FROM public.mentorship_messages m
-  WHERE (m.id = mentorship_messages.id))))$ddl$; END IF; END $$;
+-- "Users can mark own messages as read" is not restored; see section 12.
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'mentorship_profiles' AND policyname = 'Create own profile') THEN EXECUTE $ddl$CREATE POLICY "Create own profile" ON public.mentorship_profiles AS PERMISSIVE FOR INSERT TO public WITH CHECK ((user_id = auth.uid()))$ddl$; END IF; END $$;
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'mentorship_profiles' AND policyname = 'Update own profile') THEN EXECUTE $ddl$CREATE POLICY "Update own profile" ON public.mentorship_profiles AS PERMISSIVE FOR UPDATE TO public USING ((user_id = auth.uid())) WITH CHECK ((user_id = auth.uid()))$ddl$; END IF; END $$;
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'mentorship_profiles' AND policyname = 'View verified mentor profiles') THEN EXECUTE $ddl$CREATE POLICY "View verified mentor profiles" ON public.mentorship_profiles AS PERMISSIVE FOR SELECT TO public USING (((verified = true) OR (user_id = auth.uid())))$ddl$; END IF; END $$;
@@ -1195,6 +1187,11 @@ DROP POLICY IF EXISTS "Delete own match" ON public.mentorship_matches;
 CREATE POLICY "Delete own match" ON public.mentorship_matches
     FOR DELETE TO authenticated
     USING (mentor_id = auth.uid() AND status = 'pending');
+-- Clients change read and flag state through mark_messages_read() and flag_mentorship_message(),
+-- which run as their owner. The old direct UPDATE policies are not needed: one recursed into its
+-- own table on every update, the other let a participant rewrite any field of any message.
+DROP POLICY IF EXISTS "Users can mark own messages as read" ON public.mentorship_messages;
+DROP POLICY IF EXISTS "Update message flags" ON public.mentorship_messages;
 -- Permissive policies combine with OR; an unconditional insert policy would bypass the
 -- rate-limited one, which stays as the only direct insert path.
 DROP POLICY IF EXISTS "Match participants can send messages" ON public.mentorship_messages;

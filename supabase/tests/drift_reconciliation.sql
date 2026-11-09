@@ -61,19 +61,17 @@ DO $$ DECLARE i int; BEGIN
     RAISE EXCEPTION 'Rate limit bypassed by a direct insert';
   EXCEPTION WHEN insufficient_privilege THEN NULL; END;
 END $$;
--- The recipient may mark read; nobody may change a message's id or content.
+-- The recipient marks read through the RPC; direct updates change nothing.
 SET LOCAL request.jwt.claim.sub='d1000000-0000-4000-8000-000000000002';
 DO $$ DECLARE target uuid := (SELECT id FROM public.mentorship_messages LIMIT 1); BEGIN
-  UPDATE public.mentorship_messages SET read_at=now() WHERE id=target;
-  IF NOT FOUND THEN RAISE EXCEPTION 'Recipient could not mark read'; END IF;
-  BEGIN
-    UPDATE public.mentorship_messages SET id=gen_random_uuid() WHERE id=target;
-    RAISE EXCEPTION 'Message id changed';
-  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
-  BEGIN
-    UPDATE public.mentorship_messages SET content='Rewritten' WHERE id=target;
-    RAISE EXCEPTION 'Message content changed';
-  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  PERFORM public.mark_messages_read('d2000000-0000-4000-8000-000000000002');
+  IF (SELECT read_at FROM public.mentorship_messages WHERE id=target) IS NULL THEN
+    RAISE EXCEPTION 'Recipient could not mark read';
+  END IF;
+  UPDATE public.mentorship_messages SET id=gen_random_uuid() WHERE id=target;
+  IF FOUND THEN RAISE EXCEPTION 'Message id changed'; END IF;
+  UPDATE public.mentorship_messages SET content='Rewritten' WHERE id=target;
+  IF FOUND THEN RAISE EXCEPTION 'Message content changed'; END IF;
 END $$;
 -- The mentor accepts the pending request and can decline (delete) only while it is pending.
 DO $$ BEGIN
