@@ -309,7 +309,7 @@ struct ComponentRow: View {
             HStack {
                 Image(systemName: component.type.icon)
                     .foregroundColor(SupportTheme.accent)
-                    .frame(width: 24)
+                    .frame(minWidth: 24)
 
                 Text(component.type.displayName)
                     .font(.subheadline)

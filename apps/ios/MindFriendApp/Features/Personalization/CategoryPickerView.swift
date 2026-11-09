@@ -41,7 +41,7 @@ struct CategoryPickerView: View {
                             Image(systemName: category.icon)
                                 .font(.body)
                                 .foregroundStyle(selectedCategories.contains(category.name) ? .blue : SupportTheme.textSecondary)
-                                .frame(width: 24)
+                                .frame(minWidth: 24)
 
                             Text(category.name)
                                 .foregroundStyle(SupportTheme.textPrimary)

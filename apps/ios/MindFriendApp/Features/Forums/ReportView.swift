@@ -26,7 +26,7 @@ struct ReportView: View {
                             HStack {
                                 Image(systemName: reason.icon)
                                     .foregroundStyle(.blue)
-                                    .frame(width: 24)
+                                    .frame(minWidth: 24)
 
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(reason.displayName)

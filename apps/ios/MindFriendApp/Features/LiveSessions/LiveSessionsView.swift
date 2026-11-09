@@ -501,7 +501,7 @@ private struct ExpectationRow: View {
         HStack(spacing: SupportTheme.Spacing.s) {
             Image(systemName: icon)
                 .foregroundStyle(SupportTheme.textSecondary)
-                .frame(width: 20)
+                .frame(minWidth: 20)
 
             Text(text)
                 .font(.subheadline)

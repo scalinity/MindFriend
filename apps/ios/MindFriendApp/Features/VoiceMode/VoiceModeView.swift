@@ -669,7 +669,7 @@ private struct PremiumFeatureRow: View {
             Image(systemName: icon)
                 .font(.system(size: 16))
                 .foregroundStyle(SupportTheme.accent)
-                .frame(width: 24)
+                .frame(minWidth: 24)
 
             Text(text)
                 .font(.subheadline)

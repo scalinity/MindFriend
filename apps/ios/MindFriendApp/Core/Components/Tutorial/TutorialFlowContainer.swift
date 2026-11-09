@@ -170,7 +170,7 @@ struct TutorialFeatureRow: View {
             Image(systemName: icon)
                 .font(.body)
                 .foregroundStyle(iconColor)
-                .frame(width: 24)
+                .frame(minWidth: 24)
 
             Text(label)
                 .font(.subheadline)

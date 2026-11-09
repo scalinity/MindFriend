@@ -302,7 +302,7 @@ struct PatternsCard: View {
                 HStack(alignment: .top, spacing: SupportTheme.Spacing.s) {
                     Image(systemName: pattern.icon)
                         .foregroundColor(SupportTheme.Celebration.gold)
-                        .frame(width: 24)
+                        .frame(minWidth: 24)
 
                     VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                         Text(pattern.description)

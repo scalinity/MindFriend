@@ -48,7 +48,7 @@ struct MemoryUsagePopover: View {
                     HStack(spacing: 8) {
                         Image(systemName: memory.category.icon)
                             .foregroundStyle(memory.category.color)
-                            .frame(width: 20)
+                            .frame(minWidth: 20)
 
                         VStack(alignment: .leading, spacing: 2) {
                             Text(memory.category.displayName)

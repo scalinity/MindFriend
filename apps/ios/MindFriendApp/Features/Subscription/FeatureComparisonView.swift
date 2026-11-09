@@ -66,7 +66,7 @@ struct FeatureComparisonView: View {
                         HStack(spacing: SupportTheme.Spacing.xs) {
                             Image(systemName: iconName)
                                 .foregroundStyle(SupportTheme.textSecondary)
-                                .frame(width: 24)
+                                .frame(minWidth: 24)
 
                             Text(featureName)
                                 .font(.subheadline)

@@ -311,7 +311,7 @@ struct ComponentBreakdownRow: View {
             HStack {
                 Image(systemName: icon)
                     .foregroundStyle(SupportTheme.accent)
-                    .frame(width: 24)
+                    .frame(minWidth: 24)
 
                 Text(name)
                     .font(.subheadline)

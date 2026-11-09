@@ -62,7 +62,7 @@ struct DebtTrendStep: View {
             Image(systemName: icon)
                 .font(.body)
                 .foregroundStyle(color)
-                .frame(width: 24)
+                .frame(minWidth: 24)
 
             VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text(title)

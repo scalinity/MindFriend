@@ -36,7 +36,7 @@ struct LongitudinalPatternsStep: View {
                         Image(systemName: pattern.icon)
                             .font(.title3)
                             .foregroundStyle(pattern.color)
-                            .frame(width: 28)
+                            .frame(minWidth: 28)
 
                         VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                             Text(pattern.title)

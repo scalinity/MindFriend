@@ -167,7 +167,7 @@ struct PatternAlertView: View {
                     HStack {
                         Image(systemName: component.category.icon)
                             .foregroundStyle(SupportTheme.accent)
-                            .frame(width: 24)
+                            .frame(minWidth: 24)
 
                         VStack(alignment: .leading) {
                             Text(component.displayName)

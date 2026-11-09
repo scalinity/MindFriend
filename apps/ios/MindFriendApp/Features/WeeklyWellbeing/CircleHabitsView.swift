@@ -143,7 +143,7 @@ struct CircleHabitsView: View {
         HStack(spacing: SupportTheme.Spacing.s) {
             Image(systemName: icon)
                 .foregroundStyle(SupportTheme.accent)
-                .frame(width: 24)
+                .frame(minWidth: 24)
 
             Text(text)
                 .font(.subheadline)

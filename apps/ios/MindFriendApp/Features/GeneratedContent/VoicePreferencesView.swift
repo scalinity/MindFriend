@@ -82,7 +82,7 @@ struct VoicePreferencesView: View {
                     } label: {
                         HStack {
                             Image(systemName: type.icon)
-                                .frame(width: 24)
+                                .frame(minWidth: 24)
 
                             Text(type.displayName)
 
@@ -181,7 +181,7 @@ private struct BackgroundSoundRow: View {
         Button(action: action) {
             HStack {
                 Image(systemName: sound.icon)
-                    .frame(width: 24)
+                    .frame(minWidth: 24)
 
                 Text(sound.displayName)
 

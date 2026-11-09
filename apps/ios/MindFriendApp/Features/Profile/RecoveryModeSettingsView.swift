@@ -183,7 +183,7 @@ struct RecoveryModeSettingsView: View {
             Image(systemName: icon)
                 .font(.subheadline)
                 .foregroundStyle(SupportTheme.accent)
-                .frame(width: 20)
+                .frame(minWidth: 20)
 
             Text(text)
                 .font(.subheadline)

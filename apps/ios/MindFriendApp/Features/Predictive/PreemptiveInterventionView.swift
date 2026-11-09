@@ -187,7 +187,7 @@ struct InterventionFactorRow: View {
         HStack(spacing: 12) {
             Image(systemName: factor.icon)
                 .foregroundColor(factor.impactColor)
-                .frame(width: 24)
+                .frame(minWidth: 24)
                 .accessibilityHidden(true)
 
             Text(factor.description)

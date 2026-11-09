@@ -85,7 +85,7 @@ struct ProgramsConceptStep: View {
                             Image(systemName: feature.icon)
                                 .font(.caption)
                                 .foregroundStyle(feature.color)
-                                .frame(width: 20)
+                                .frame(minWidth: 20)
 
                             Text(feature.text)
                                 .font(.caption)

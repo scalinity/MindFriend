@@ -102,7 +102,7 @@ struct DebtTransactionsStep: View {
             Image(systemName: icon)
                 .font(.caption)
                 .foregroundStyle(color)
-                .frame(width: 20)
+                .frame(minWidth: 20)
 
             Text(label)
                 .font(.caption2)

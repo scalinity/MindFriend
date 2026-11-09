@@ -118,7 +118,7 @@ struct BiometricsSettingsView: View {
                         HStack {
                             Image(systemName: type.icon)
                                 .foregroundStyle(SupportTheme.accent)
-                                .frame(width: 24)
+                                .frame(minWidth: 24)
                             Text(type.displayName)
                             Spacer()
                             Text(healthKit.hasCompletedPermissionRequest ? "Requested" : "Optional")

@@ -510,7 +510,7 @@ struct ResourceLink: View {
                 Image(systemName: icon)
                     .font(.system(.body).weight(.semibold))
                     .foregroundColor(SupportTheme.accent)
-                    .frame(width: 24)
+                    .frame(minWidth: 24)
 
                 VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     Text(title)

@@ -74,7 +74,7 @@ struct AchievementsXPStep: View {
                         HStack {
                             Image(systemName: source.icon)
                                 .foregroundStyle(source.color)
-                                .frame(width: 24)
+                                .frame(minWidth: 24)
                             Text(source.activity)
                                 .font(.caption)
                                 .fixedSize(horizontal: false, vertical: true)

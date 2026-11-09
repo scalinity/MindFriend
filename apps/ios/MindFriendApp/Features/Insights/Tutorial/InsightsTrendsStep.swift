@@ -32,7 +32,7 @@ struct InsightsTrendsStep: View {
                         Image(systemName: trend.icon)
                             .font(.title3)
                             .foregroundStyle(trend.color)
-                            .frame(width: 28)
+                            .frame(minWidth: 28)
 
                         VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                             Text(trend.label)

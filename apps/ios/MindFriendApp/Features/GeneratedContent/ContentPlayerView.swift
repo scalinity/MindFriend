@@ -490,7 +490,7 @@ private struct FlagContentSheet: View {
                 } label: {
                     HStack {
                         Image(systemName: reason.icon)
-                            .frame(width: 24)
+                            .frame(minWidth: 24)
                         Text(reason.displayName)
                         Spacer()
                         if selectedReason == reason {

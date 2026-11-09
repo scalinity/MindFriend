@@ -328,7 +328,7 @@ struct LongitudinalDashboardView: View {
             NavigationLink(destination: LifeEventsView()) {
                 HStack {
                     Image(systemName: "calendar.badge.plus")
-                        .frame(width: 24)
+                        .frame(minWidth: 24)
                     Text("Log Life Event")
                     Spacer()
                     Image(systemName: "chevron.right")
@@ -343,7 +343,7 @@ struct LongitudinalDashboardView: View {
             } label: {
                 HStack {
                     Image(systemName: "square.and.arrow.up")
-                        .frame(width: 24)
+                        .frame(minWidth: 24)
                     Text("Export Health Data (FHIR)")
                     Spacer()
                     if viewModel.isExporting {

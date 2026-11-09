@@ -49,7 +49,7 @@ struct HSAFSAInfoView: View {
                         HStack(spacing: SupportTheme.Spacing.xs) {
                             Image(systemName: "info.circle.fill")
                                 .foregroundStyle(SupportTheme.accent)
-                                .frame(width: 24)
+                                .frame(minWidth: 24)
 
                             Text("About HSA/FSA Eligibility")
                                 .font(.headline)
@@ -72,7 +72,7 @@ struct HSAFSAInfoView: View {
                         HStack(spacing: SupportTheme.Spacing.xs) {
                             Image(systemName: "checklist")
                                 .foregroundStyle(SupportTheme.accent)
-                                .frame(width: 24)
+                                .frame(minWidth: 24)
 
                             Text("How It Works")
                                 .font(.headline)
@@ -115,7 +115,7 @@ struct HSAFSAInfoView: View {
                             HStack(spacing: SupportTheme.Spacing.xs) {
                                 Image(systemName: "receipt.fill")
                                     .foregroundStyle(SupportTheme.accent)
-                                    .frame(width: 24)
+                                    .frame(minWidth: 24)
 
                                 Text("Your Receipt")
                                     .font(.headline)
@@ -193,7 +193,7 @@ struct HSAFSAInfoView: View {
                             HStack(spacing: SupportTheme.Spacing.xs) {
                                 Image(systemName: "lock.fill")
                                     .foregroundStyle(SupportTheme.textSecondary)
-                                    .frame(width: 24)
+                                    .frame(minWidth: 24)
 
                                 Text("Active Subscription Required")
                                     .font(.subheadline)

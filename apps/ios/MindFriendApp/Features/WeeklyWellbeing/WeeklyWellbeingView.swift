@@ -412,7 +412,7 @@ struct WeeklyWellbeingRecapView: View {
         HStack {
             Image(systemName: icon)
                 .foregroundStyle(color)
-                .frame(width: 24)
+                .frame(minWidth: 24)
 
             Text(name)
                 .font(.subheadline)

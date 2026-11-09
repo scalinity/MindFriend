@@ -75,7 +75,7 @@ struct WhatYouMissedCard: View {
             Image(systemName: icon)
                 .font(.body)
                 .foregroundStyle(iconColor)
-                .frame(width: 24)
+                .frame(minWidth: 24)
 
             Text(text)
                 .font(.subheadline)
