@@ -274,6 +274,12 @@ struct SupportActivityView: View {
         return value
     }
 
+    /// A saved checkpoint holds the time up to its capture, so the clock restarts from now, unless the app
+    /// left the foreground while the save was in flight: then the clock stays stopped until reactivation.
+    private func restartClockAfterSave() {
+        if activeSince != nil { activeSince = Date() }
+    }
+
     private func scheduleSave() {
         guard !isSaving else { return }
         draftTask?.cancel()
@@ -290,7 +296,7 @@ struct SupportActivityView: View {
                 try await Task.sleep(for: .milliseconds(300))
                 guard !Task.isCancelled, let value = checkpoint() else { return }
                 try await coordinator.checkpoint(presentation.id, value: value)
-                activeSince = Date()
+                restartClockAfterSave()
                 draftSavePending = false
             } catch is CancellationError {} catch { self.error = SupportSessionCoordinator.message(for: error) }
         }
@@ -301,7 +307,7 @@ struct SupportActivityView: View {
         perform {
             if let activity, activity.status.isUnfinished, let value = checkpoint() {
                 try await coordinator.checkpoint(activity.id, value: value)
-                activeSince = Date()
+                restartClockAfterSave()
             }
             discussion = try coordinator.discussionSnapshot(activityID: presentation.id)
         }
@@ -320,7 +326,7 @@ struct SupportActivityView: View {
                 }
             }
             else { try await coordinator.checkpoint(activity.id, value: value); loadAnswer(); headingFocused = true }
-            activeSince = Date()
+            restartClockAfterSave()
         }
     }
 
