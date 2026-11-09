@@ -32,3 +32,7 @@ Billable job-min/run p50: 10 (the repository is public, so standard hosted runne
 ## Changes
 | # | Commit | Change | Signal it targets | Critical path p50 / p90 before -> after | n | Cost delta | Kept |
 |---|---|---|---|---|---|---|---|
+
+### Considered and not applied
+- **Cache Swift package checkouts** (setup, up to 1m26s). The resolved packages are 3.5 GB, of which 3.2 GB is `sentry-cocoa`'s six prebuilt framework variants (SwiftPM downloads every binary target although the app links one). Caching them would take about a third of the repository's 10 GB cache allowance to save at most ~1 minute, minus the multi-gigabyte restore. Not applied.
+- **Faster or larger macOS runners** (waiting and running). They cost money; not proposed without approval.
