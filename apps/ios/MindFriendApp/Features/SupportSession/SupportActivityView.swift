@@ -35,10 +35,15 @@ struct SupportActivityView: View {
         return activity.templateKey.prompts[promptIndex]
     }
 
+    /// Height of the floating keyboard toolbar (Skip, Next, Done) plus its gap above the keyboard.
+    @ScaledMetric(relativeTo: .body) private var keyboardToolbarClearance: CGFloat = 60
+    private static let fieldScrollID = "activity-field"
+
     var body: some View {
         NavigationStack {
             Group {
                 if let activity {
+                    ScrollViewReader { proxy in
                     ScrollView {
                         VStack(alignment: .leading, spacing: SupportTheme.Spacing.l) {
                             VStack(alignment: .leading, spacing: SupportTheme.Spacing.l) {
@@ -58,10 +63,22 @@ struct SupportActivityView: View {
                         .padding(SupportTheme.Spacing.m).frame(maxWidth: .infinity)
                     }
                     .scrollDismissesKeyboard(.interactively)
+                    .onChange(of: fieldFocused) { _, focused in
+                        guard focused else { return }
+                        // Keyboard avoidance only reveals the cursor line; once the keyboard has settled, bring
+                        // the whole field above the keyboard toolbar.
+                        Task { @MainActor in
+                            try? await Task.sleep(for: .milliseconds(350))
+                            withAnimation { proxy.scrollTo(Self.fieldScrollID, anchor: .center) }
+                        }
+                    }
+                    }
                     .supportScreen()
                     .safeAreaInset(edge: .bottom) {
-                        // While typing, Next and Skip move into the keyboard toolbar.
-                        if !fieldFocused && !activity.status.isTerminal && activity.kind != .chooseStep { progression(activity) }
+                        // While typing, Next and Skip move into the keyboard toolbar. That toolbar floats above the
+                        // keyboard without taking space, so the same height is reserved to keep the field in view.
+                        if fieldFocused { Color.clear.frame(height: keyboardToolbarClearance) }
+                        else if !activity.status.isTerminal && activity.kind != .chooseStep { progression(activity) }
                     }
                     .navigationTitle(activity.templateKey.title)
                     .navigationBarTitleDisplayMode(.inline)
@@ -96,7 +113,7 @@ struct SupportActivityView: View {
                     Button("Discard this reflection", role: .destructive) {
                         perform {
                             try await coordinator.discardAnswers(presentation.id)
-                            try await coordinator.doneForNow(presentation.sessionID)
+                            try await coordinator.leaveActivity(presentation)
                             dismiss()
                         }
                     }
@@ -122,9 +139,11 @@ struct SupportActivityView: View {
         .task(id: presentation.id) { loadAnswer(); activeSince = Date() }
         .onChange(of: answer) { _, _ in scheduleSave() }
         .onChange(of: scenePhase) { _, phase in
-            if phase != .active {
-                if activity?.status.isUnfinished == true { pause() }
-            }
+            // Locking or leaving the app saves the step and stops the practice clock; the activity stays
+            // open, so unlocking returns to the same step. If the app ends meanwhile, Today offers to continue.
+            guard activity?.status.isUnfinished == true else { return }
+            if phase != .active, activeSince != nil { saveForBackground() }
+            if phase == .active, activeSince == nil { activeSince = Date() }
         }
         .onDisappear { draftTask?.cancel() }
     }
@@ -149,7 +168,7 @@ struct SupportActivityView: View {
         }
         TextField(activity.kind == .chooseStep ? "Your next step" : "Optional response", text: $answer, axis: .vertical)
             .lineLimit(3...10).supportField()
-            .focused($fieldFocused)
+            .focused($fieldFocused).id(Self.fieldScrollID)
             .disabled(isSaving)
             .accessibilityLabel(activity.kind == .chooseStep ? "Your next step" : "Optional response")
         if activity.kind == .chooseStep {
@@ -206,7 +225,7 @@ struct SupportActivityView: View {
         } else {
             Text("How was that for you?").font(.title2).accessibilityAddTraits(.isHeader)
             TextField("Optional note", text: $note, axis: .vertical).lineLimit(2...6).supportField()
-                .focused($fieldFocused).disabled(isSaving)
+                .focused($fieldFocused).id(Self.fieldScrollID).disabled(isSaving)
             Toggle("Include my written answers in the conversation", isOn: $includeAnswers).disabled(isSaving)
             Text(includeAnswers ? "Only the written preview below may be included in later AI context for this session." : "This written preview stays out of automatic session context. Answers you sent in Chat remain in that conversation.")
                 .font(.subheadline).foregroundStyle(SupportTheme.textSecondary)
@@ -231,8 +250,10 @@ struct SupportActivityView: View {
     }
 
     private var returnTitle: String {
-        if case .chat = presentation.origin { return "Back to conversation" }
-        return "Done for now"
+        switch presentation.origin {
+        case .chat, .chatDraft: return "Back to conversation"
+        case .today, .explore, .onboarding: return "Done for now"
+        }
     }
 
     private func loadAnswer() {
@@ -253,6 +274,12 @@ struct SupportActivityView: View {
         return value
     }
 
+    /// A saved checkpoint holds the time up to its capture, so the clock restarts from now, unless the app
+    /// left the foreground while the save was in flight: then the clock stays stopped until reactivation.
+    private func restartClockAfterSave() {
+        if activeSince != nil { activeSince = Date() }
+    }
+
     private func scheduleSave() {
         guard !isSaving else { return }
         draftTask?.cancel()
@@ -269,7 +296,7 @@ struct SupportActivityView: View {
                 try await Task.sleep(for: .milliseconds(300))
                 guard !Task.isCancelled, let value = checkpoint() else { return }
                 try await coordinator.checkpoint(presentation.id, value: value)
-                activeSince = Date()
+                restartClockAfterSave()
                 draftSavePending = false
             } catch is CancellationError {} catch { self.error = SupportSessionCoordinator.message(for: error) }
         }
@@ -280,7 +307,7 @@ struct SupportActivityView: View {
         perform {
             if let activity, activity.status.isUnfinished, let value = checkpoint() {
                 try await coordinator.checkpoint(activity.id, value: value)
-                activeSince = Date()
+                restartClockAfterSave()
             }
             discussion = try coordinator.discussionSnapshot(activityID: presentation.id)
         }
@@ -299,7 +326,7 @@ struct SupportActivityView: View {
                 }
             }
             else { try await coordinator.checkpoint(activity.id, value: value); loadAnswer(); headingFocused = true }
-            activeSince = Date()
+            restartClockAfterSave()
         }
     }
 
@@ -316,6 +343,17 @@ struct SupportActivityView: View {
         }
     }
 
+    private func saveForBackground() {
+        guard let activity else { return }
+        // Capture the step and stop the clock now: if the app returns before the write lands,
+        // reactivation restarts the clock and the write's completion must not stop it again.
+        var value = activity.checkpoint
+        if activity.kind == .chooseStep { value.responses["action"] = answer }
+        else if let current = checkpoint() { value = current }
+        activeSince = nil
+        perform { try await coordinator.checkpoint(activity.id, value: value) }
+    }
+
     private func finish(stopped: String) {
         perform { try await coordinator.finish(presentation.id, checkpoint: checkpoint(), stoppedReason: stopped) }
     }
@@ -324,12 +362,12 @@ struct SupportActivityView: View {
         perform {
             try await coordinator.chooseStep(presentation.id, choice: choice, text: answer)
             if choice == .didIt { appState.celebrateCompletion(String(localized: "Step done")) }
-            if choice == .saveForLater { try await coordinator.doneForNow(presentation.sessionID); dismiss() }
+            if choice == .saveForLater { try await coordinator.leaveActivity(presentation); dismiss() }
         }
     }
 
     private func leave() {
-        perform { try await coordinator.doneForNow(presentation.sessionID); dismiss() }
+        perform { try await coordinator.leaveActivity(presentation); dismiss() }
     }
 
     private func perform(_ body: @escaping @MainActor () async throws -> Void) {
@@ -376,10 +414,10 @@ struct SupportActivityChoiceButton: View {
         Button { start(previous: nil) } label: {
             if let icon {
                 VStack(spacing: SupportTheme.Spacing.xs) {
-                    Image(systemName: icon).font(.title2).accessibilityHidden(true)
+                    Image(systemName: icon).font(.title2.weight(.medium)).accessibilityHidden(true)
                     Text(title ?? template.title).fixedSize(horizontal: false, vertical: true)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 Text(title ?? template.title)
             }

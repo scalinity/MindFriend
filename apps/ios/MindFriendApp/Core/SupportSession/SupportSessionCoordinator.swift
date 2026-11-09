@@ -4,6 +4,8 @@ import Combine
 enum SupportEntryOrigin: Equatable {
     case today, explore, onboarding
     case chat(conversationID: UUID)
+    /// Chat before its first Send: the session exists, its conversation does not yet.
+    case chatDraft
 }
 
 struct SupportActivityPresentation: Identifiable, Equatable {
@@ -342,6 +344,17 @@ final class SupportSessionCoordinator: ObservableObject {
             try await self.repository.closeSession(epoch: self.identity.epochID, id: sessionID)
             try self.requireActive()
             if self.activityPresentation?.sessionID == sessionID { self.activityPresentation = nil }
+        }
+    }
+
+    /// Leaving a finished or paused activity. From Chat the conversation goes on, so its session stays open;
+    /// elsewhere this is "Done for now", which closes a session with nothing left in it.
+    func leaveActivity(_ presentation: SupportActivityPresentation) async throws {
+        switch presentation.origin {
+        case .chat, .chatDraft:
+            if activityPresentation?.id == presentation.id { activityPresentation = nil }
+        case .today, .explore, .onboarding:
+            try await doneForNow(presentation.sessionID)
         }
     }
 

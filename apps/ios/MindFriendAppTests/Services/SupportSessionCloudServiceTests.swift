@@ -333,6 +333,36 @@ final class SupportSessionCloudServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testVoiceOnAClosedSessionContinuesInANewLinkedSessionWithItsOwnConversation() async throws {
+        var created = [UUID]()
+        let (_, coordinator, sync, access, _) = try await voiceAccessRig(attached: false, create: { created.append($0) })
+        let closedID = try XCTUnwrap(access.selectedSessionID)
+        try await coordinator.close(closedID)
+        let binding = try await access.prepare()
+        XCTAssertNotEqual(binding.supportSessionUUID, closedID)
+        XCTAssertEqual(created, [binding.conversationUUID], "One session per conversation: the continuation gets a new one")
+        XCTAssertEqual(access.selectedSessionID, binding.supportSessionUUID)
+        XCTAssertEqual(coordinator.journal.sessions[binding.supportSessionUUID]?.status, .open)
+        XCTAssertEqual(coordinator.journal.sessions[binding.supportSessionUUID]?.previousSessionID, closedID)
+        XCTAssertEqual(coordinator.journal.sessions[closedID]?.status, .closed)
+        XCTAssertNil(coordinator.journal.sessions[closedID]?.conversationID)
+        await sync.invalidate().value; await coordinator.invalidate().value
+    }
+
+    @MainActor
+    func testVoiceOnAClosedConversationIsUnavailable() async throws {
+        let (_, coordinator, sync, access, _) = try await voiceAccessRig()
+        let closedID = try XCTUnwrap(access.selectedSessionID)
+        try await coordinator.close(closedID)
+        let before = coordinator.journal.sessions.count
+        do { _ = try await access.prepare(); XCTFail("A closed conversation is inspectable, not continued") }
+        catch { XCTAssertEqual(error as? VoiceSupportAccessError, .unavailable) }
+        XCTAssertEqual(coordinator.journal.sessions.count, before)
+        XCTAssertEqual(access.selectedSessionID, closedID)
+        await sync.invalidate().value; await coordinator.invalidate().value
+    }
+
+    @MainActor
     func testVoiceReadinessAndPrivacyFailureNeverAttachAnEmptyConversation() async throws {
         var created = [UUID]()
         let (rig, coordinator, sync, access, _) = try await voiceAccessRig(attached: false, create: { created.append($0) })
