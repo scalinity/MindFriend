@@ -133,7 +133,7 @@ Deno.serve(async (req) => {
       environment: transactionPayload.environment,
     });
 
-    const { productId, originalTransactionId, expiresDate } =
+    const { productId, originalTransactionId, expiresDate, purchaseDate } =
       transactionPayload;
 
     // SECURITY FIX #003: Use maybeSingle to handle missing/duplicate gracefully
@@ -233,6 +233,28 @@ Deno.serve(async (req) => {
         );
       }
 
+      // An older transaction in the chain (a replay, or one delivered late) is
+      // still validly signed, but the stored row already reflects a later charge.
+      const storedPurchase = Date.parse(existingSubscription.last_transaction_purchased_at ?? "");
+      if (Number.isFinite(storedPurchase) && !(purchaseDate > storedPurchase)) {
+        await saveEntitlements(true);
+        return new Response(
+          JSON.stringify({
+            valid: true,
+            productId: existingSubscription.product_id,
+            planType: existingSubscription.plan_type,
+            billingPeriod: existingSubscription.billing_period,
+            expiresAt: existingSubscription.expires_at,
+            familyId: existingSubscription.family_id,
+            message: "A newer transaction is already recorded",
+            idempotent: true,
+          }),
+          {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          },
+        );
+      }
+
       // Renewal or crossgrade - same original transaction, new transaction ID.
       // An upgrade into a family plan without a group continues to the purchase
       // path below, which creates the group and rewrites this row.
@@ -244,10 +266,32 @@ Deno.serve(async (req) => {
       const currentTransactionId = transactionPayload.transactionId;
       const newExpiresAt = new Date(expiresDate);
 
+      // A smaller plan cannot hold every shared seat. Members who joined last
+      // leave first, through the same removal the family owner uses.
+      const excessSeats = (existingSubscription.seats_used ?? 1) - planDetails.seatsTotal;
+      if (existingSubscription.family_id && excessSeats > 0) {
+        const { data: members, error: membersError } = await supabaseAdmin
+          .from("family_members")
+          .select("id, joined_at")
+          .eq("family_id", existingSubscription.family_id)
+          .eq("status", "active")
+          .neq("user_id", user.id)
+          .order("joined_at", { ascending: false });
+        if (membersError || !members) throw new Error("Family members could not be read");
+        for (const member of (members as { id: string }[]).slice(0, excessSeats)) {
+          const { error: removeError } = await supabaseAdmin.rpc("remove_family_member_atomic", {
+            p_actor_id: user.id,
+            p_member_id: member.id,
+          });
+          if (removeError) throw new Error("Family seat could not be released");
+        }
+      }
+
       const { error: renewalError } = await supabaseAdmin
         .from("subscriptions")
         .update({
           last_transaction_id: currentTransactionId,
+          last_transaction_purchased_at: new Date(purchaseDate).toISOString(),
           product_id: productId,
           plan_type: planDetails.planType,
           billing_period: planDetails.billingPeriod,
@@ -384,6 +428,7 @@ Deno.serve(async (req) => {
       product_id: productId,
       original_transaction_id: originalTransactionId,
       last_transaction_id: transactionPayload.transactionId, // Track for renewal detection
+      last_transaction_purchased_at: new Date(purchaseDate).toISOString(),
       status: "active" as const,
       plan_type: planDetails.planType,
       billing_period: planDetails.billingPeriod,

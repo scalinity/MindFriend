@@ -77,6 +77,7 @@ export type VerifiedAppleTransaction = JWSTransactionDecodedPayload & {
   originalTransactionId: string;
   productId: string;
   expiresDate: number;
+  purchaseDate: number;
 };
 
 export async function verifyAppleTransaction(
@@ -154,10 +155,13 @@ export async function verifyAppleTransaction(
     );
   }
   // Every supported product is a subscription. Never manufacture a new expiry
-  // for an old signed purchase that omits Apple's subscription expiry.
+  // for an old signed purchase that omits Apple's subscription expiry. The
+  // purchase date orders transactions that share an original transaction.
   if (
     !Number.isSafeInteger(transaction.expiresDate) ||
-    !Number.isFinite(new Date(transaction.expiresDate!).getTime())
+    !Number.isFinite(new Date(transaction.expiresDate!).getTime()) ||
+    !Number.isSafeInteger(transaction.purchaseDate) ||
+    !Number.isFinite(new Date(transaction.purchaseDate!).getTime())
   ) {
     throw new TransactionVerificationError(
       "INVALID_TRANSACTION_EXPIRY",

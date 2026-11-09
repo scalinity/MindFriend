@@ -255,6 +255,11 @@ Deno.test("Apple verifier and verify-purchase handler with synthetic signatures 
         "INVALID_TRANSACTION_EXPIRY",
       ],
       [
+        "missing signed purchase date",
+        { purchaseDate: undefined },
+        "INVALID_TRANSACTION_EXPIRY",
+      ],
+      [
         "unrepresentable expiry",
         { expiresDate: Number.MAX_SAFE_INTEGER },
         "INVALID_TRANSACTION_EXPIRY",
@@ -480,6 +485,96 @@ Deno.test("Apple verifier and verify-purchase handler with synthetic signatures 
         assert.equal(write?.data.seats_total, 2);
       },
     );
+
+    await t.step(
+      "a newer transaction records when Apple charged it",
+      async () => {
+        database.reset();
+        database.subscription = existingSubscription({
+          last_transaction_purchased_at: new Date(Date.now() - 30 * 86_400_000).toISOString(),
+        });
+        const payload = testTransaction({ transactionId: "200000000000005" });
+        const response = await request(trustedChain.sign(payload));
+        assert.equal(response.status, 200);
+        const write = database.writes.find((w) => w.table === "subscriptions");
+        assert.equal(
+          write?.data.last_transaction_purchased_at,
+          new Date(payload.purchaseDate).toISOString(),
+        );
+      },
+    );
+
+    await t.step(
+      "an older transaction cannot replace the stored product",
+      async () => {
+        database.reset();
+        const stored = existingSubscription({
+          product_id: "com.mindfriend.family.monthly",
+          plan_type: "family",
+          family_id: "test-family",
+          is_family_admin: true,
+          seats_total: 6,
+          last_transaction_purchased_at: new Date(Date.now() - 3_600_000).toISOString(),
+        });
+        database.subscription = stored;
+        const response = await request(trustedChain.sign(testTransaction({
+          transactionId: "200000000000000",
+          productId: "com.mindfriend.premium.monthly",
+          purchaseDate: Date.now() - 2 * 86_400_000,
+        })));
+        assert.equal(response.status, 200);
+        const body = await response.json();
+        assert.equal(body.productId, "com.mindfriend.family.monthly");
+        assert.equal(body.planType, "family");
+        assert.equal(body.familyId, "test-family");
+        assert.deepEqual(database.writes.filter((w) => w.table === "subscriptions"), []);
+      },
+    );
+
+    for (const [productId, planType, seatsTotal, kept] of [
+      ["com.mindfriend.couples.monthly", "couples", 2, ["member-early"]],
+      ["com.mindfriend.premium.monthly", "individual", 1, []],
+    ] as const) {
+      await t.step(
+        `moving a shared family plan to ${planType} releases the newest members first`,
+        async () => {
+          database.reset();
+          database.subscription = existingSubscription({
+            product_id: "com.mindfriend.family.monthly",
+            plan_type: "family",
+            family_id: "test-family",
+            is_family_admin: true,
+            seats_used: 3,
+            seats_total: 6,
+            last_transaction_purchased_at: new Date(Date.now() - 30 * 86_400_000).toISOString(),
+          });
+          database.familyMembers = [
+            { id: "member-late", user_id: "user-late", joined_at: "2026-10-02T00:00:00Z" },
+            { id: "member-early", user_id: "user-early", joined_at: "2026-10-01T00:00:00Z" },
+          ];
+          const response = await request(trustedChain.sign(testTransaction({
+            transactionId: "200000000000006",
+            productId,
+          })));
+          assert.equal(response.status, 200);
+          assert.equal((await response.json()).planType, planType);
+          assert.deepEqual(
+            database.familyMembers.map((member) => member.id),
+            kept,
+          );
+          assert.deepEqual(
+            database.rpcCalls.map((call) => call.args),
+            [
+              { p_actor_id: callerId, p_member_id: "member-late" },
+              ...(kept.length ? [] : [{ p_actor_id: callerId, p_member_id: "member-early" }]),
+            ],
+          );
+          const write = database.writes.find((w) => w.table === "subscriptions");
+          assert.equal(write?.data.seats_total, seatsTotal);
+          assert.equal(database.subscription?.seats_used, seatsTotal);
+        },
+      );
+    }
 
     await t.step(
       "lookup errors and missing/invalid auth cannot grant access",

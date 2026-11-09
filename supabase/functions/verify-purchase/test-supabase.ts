@@ -11,6 +11,7 @@ export const database = {
   failOperation: "",
   reads: [] as string[],
   rpcCalls: [] as { name: string; args: Record<string, unknown> }[],
+  familyMembers: [] as { id: string; user_id: string; joined_at: string }[],
   writes: [] as {
     table: string;
     operation: string;
@@ -26,6 +27,7 @@ export const database = {
     this.failOperation = "";
     this.reads = [];
     this.rpcCalls = [];
+    this.familyMembers = [];
     this.writes = [];
   },
 };
@@ -43,6 +45,13 @@ export function createClient(..._args: unknown[]): any {
     },
     rpc(name: string, args: Record<string, unknown>) {
       database.rpcCalls.push({ name, args });
+      if (name === "remove_family_member_atomic") {
+        // Mirrors release_family_seat: the member leaves and the owner's seat count drops.
+        const subscription = database.subscription;
+        database.familyMembers = database.familyMembers.filter((member) => member.id !== args.p_member_id);
+        if (subscription) subscription.seats_used = Number(subscription.seats_used ?? 1) - 1;
+        return Promise.resolve({ data: { success: true }, error: null });
+      }
       if (name !== "revoke_verified_apple_transaction") throw new Error("Unexpected RPC");
       if (database.failOperation === "rpc") return Promise.resolve({ data: null, error: { code: "synthetic-revoke-failure" } });
       const subscription = database.subscription;
@@ -59,9 +68,16 @@ export function createClient(..._args: unknown[]): any {
       database.reads.push(table);
       let operation = "select";
       let writeData: Record<string, unknown> | undefined;
+      let ascending = true;
       const result = () => {
+        // chk_seats_used_lte_total: an update cannot leave more occupied seats than the plan holds.
+        const seatsUsed = Number(database.subscription?.seats_used ?? 1);
+        const seatsTotal = writeData?.seats_total as number | undefined;
         const error = table === database.failTable && operation === database.failOperation
           ? { code: "synthetic-write-failure", message: "Synthetic persistence failure" }
+          : table === "subscriptions" && operation === "update" && seatsTotal !== undefined &&
+              seatsTotal !== 0 && seatsUsed > seatsTotal
+          ? { code: "23514", message: "chk_seats_used_lte_total" }
           : operation === "select" && table === "subscriptions" ? database.lookupError : null;
         if (!error && writeData) {
           if (table === "subscriptions") database.subscription = { id: "test-subscription", ...database.subscription, ...writeData };
@@ -73,6 +89,9 @@ export function createClient(..._args: unknown[]): any {
           ? database.subscription
           : table === "family_groups"
           ? { id: "test-family", circle_id: "test-circle" }
+          : table === "family_members"
+          ? [...database.familyMembers].sort((a, b) =>
+            ascending ? a.joined_at.localeCompare(b.joined_at) : b.joined_at.localeCompare(a.joined_at))
           : table === "profiles" ? database.profile
           : table === "user_stats" ? database.stats
           : null,
@@ -81,6 +100,11 @@ export function createClient(..._args: unknown[]): any {
       const query = {
         select: (_columns?: string) => query,
         eq: (_column: string, _value: unknown) => query,
+        neq: (_column: string, _value: unknown) => query,
+        order(_column: string, options?: { ascending?: boolean }) {
+          ascending = options?.ascending ?? true;
+          return query;
+        },
         maybeSingle: () => Promise.resolve(result()),
         single: () => Promise.resolve(result()),
         update(data: Record<string, unknown>) {
