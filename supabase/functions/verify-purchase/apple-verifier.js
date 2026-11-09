@@ -9,7 +9,9 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 */
 // Copyright (c) 2023 Apple Inc. Licensed under MIT License (APPLE-LICENSE.txt).
 // Vendored from @apple/app-store-server-library 3.1.0 dist/jws_verification.js.
-// Only the module format/imports and export declarations differ from upstream.
+// Only the module format/imports and export declarations differ from upstream, plus
+// nonErrorAt below: values that are not Errors keep their content and the step that
+// threw them, instead of being dropped by the catch-all. Verification results are unchanged.
 // The local crypto adapter supplies X509 methods missing from Edge 1.77.8.
 import { Buffer } from "node:buffer";
 import jsonwebtoken from "./edge-jsonwebtoken.ts";
@@ -25,6 +27,17 @@ import * as JWSRenewalInfoDecodedPayload_1 from "npm:@apple/app-store-server-lib
 import * as DecodedRealtimeRequestBody_1 from "npm:@apple/app-store-server-library@3.1.0/dist/models/DecodedRealtimeRequestBody.js";
 import * as AppTransaction_1 from "npm:@apple/app-store-server-library@3.1.0/dist/models/AppTransaction.js";
 const MAX_SKEW = 60000;
+// Some dependencies (jsrsasign) throw bare strings. Wrap one as an Error naming the step.
+function nonErrorAt(step, value) {
+    let detail;
+    try {
+        detail = typeof value === "string" ? value : JSON.stringify(value) ?? String(value);
+    }
+    catch {
+        detail = Object.prototype.toString.call(value);
+    }
+    return new Error(`non-Error thrown at ${step}: ${String(detail).slice(0, 120)}`);
+}
 const MAXIMUM_CACHE_SIZE = 32; // There are unlikely to be more than a couple keys at once
 const CACHE_TIME_LIMIT = 15 * 60 * 1000; // 15 minutes
 class CacheValue {
@@ -196,8 +209,10 @@ export class SignedDataVerifier {
     async verifyJWT(jwt, validator, signedDateExtractor) {
         let certificateChain;
         let decodedJWT;
+        let step = "decode";
         try {
             decodedJWT = jsonwebtoken.decode(jwt);
+            step = "payload validation";
             if (!validator.validate(decodedJWT)) {
                 throw new VerificationException(VerificationStatus.FAILURE);
             }
@@ -206,6 +221,7 @@ export class SignedDataVerifier {
                 // The environment MUST be checked in the public method calling this
                 return decodedJWT;
             }
+            step = "certificate parse";
             try {
                 const header = jwt.split('.')[0];
                 const decodedHeader = base64url_1.default.decode(header);
@@ -222,12 +238,15 @@ export class SignedDataVerifier {
                 }
                 throw new VerificationException(VerificationStatus.INVALID_CERTIFICATE);
             }
+            step = "certificate chain";
             const effectiveDate = this.enableOnlineChecks ? new Date() : signedDateExtractor(decodedJWT);
             const publicKey = await this.verifyCertificateChain(this.rootCertificates, certificateChain[0], certificateChain[1], effectiveDate);
+            step = "key export";
             const encodedKey = publicKey.export({
                 type: "spki",
                 format: "pem"
             });
+            step = "signature";
             jsonwebtoken.verify(jwt, encodedKey);
             return decodedJWT;
         }
@@ -238,7 +257,7 @@ export class SignedDataVerifier {
             else if (error instanceof Error) {
                 throw new VerificationException(VerificationStatus.VERIFICATION_FAILURE, error);
             }
-            throw new VerificationException(VerificationStatus.VERIFICATION_FAILURE);
+            throw new VerificationException(VerificationStatus.VERIFICATION_FAILURE, nonErrorAt(step, error));
         }
     }
     async verifyCertificateChain(trustedRoots, leaf, intermediate, effectiveDate) {
@@ -264,6 +283,15 @@ export class SignedDataVerifier {
         return publicKey;
     }
     async verifyCertificateChainWithoutCaching(trustedRoots, leaf, intermediate, effectiveDate) {
+        let step = "intermediate signature";
+        try {
+            return await this.verifyCertificateChainSteps(trustedRoots, leaf, intermediate, effectiveDate, (next) => { step = next; });
+        }
+        catch (error) {
+            throw error instanceof Error ? error : nonErrorAt(step, error);
+        }
+    }
+    async verifyCertificateChainSteps(trustedRoots, leaf, intermediate, effectiveDate, at) {
         let validity = false;
         let rootCert;
         for (const root of trustedRoots) {
@@ -272,8 +300,10 @@ export class SignedDataVerifier {
                 rootCert = root;
             }
         }
+        at("leaf signature");
         validity = validity && leaf.verify(intermediate.publicKey) && leaf.issuer === intermediate.subject;
         validity = validity && intermediate.ca;
+        at("Apple certificate markers");
         const jsrsassignX509Leaf = new jsrsasign_1.X509();
         jsrsassignX509Leaf.readCertHex(leaf.raw.toString('hex'));
         const jsrassignX509Intermediate = new jsrsasign_1.X509();
@@ -284,10 +314,12 @@ export class SignedDataVerifier {
             throw new VerificationException(VerificationStatus.VERIFICATION_FAILURE);
         }
         rootCert = rootCert;
+        at("certificate dates");
         this.checkDates(leaf, effectiveDate);
         this.checkDates(intermediate, effectiveDate);
         this.checkDates(rootCert, effectiveDate);
         if (this.enableOnlineChecks) {
+            at("OCSP");
             await Promise.all([this.checkOCSPStatus(leaf, intermediate), this.checkOCSPStatus(intermediate, rootCert)]);
         }
         return leaf.publicKey;
