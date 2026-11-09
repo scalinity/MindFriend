@@ -2,6 +2,7 @@ import SwiftUI
 
 /// Quick check-in sheet for mood, energy, gratitude, and intention logging
 struct QuickCheckInSheet: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let type: CheckInType
     let onSave: (QuickCheckInData) -> Void
 
@@ -16,7 +17,7 @@ struct QuickCheckInSheet: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 32) {
+            VStack(spacing: SupportTheme.Spacing.xl) {
                 // Title
                 Text(titleForType)
                     .font(.title2)
@@ -39,14 +40,14 @@ struct QuickCheckInSheet: View {
                     Text("Done")
                         .font(.headline)
                         .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(canSave ? Color.blue : Color.gray)
-                        .foregroundStyle(.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .padding(SupportTheme.Spacing.m)
+                        .background(canSave ? SupportTheme.accent : SupportTheme.textSecondary)
+                        .foregroundStyle(SupportTheme.textPrimary)
+                        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
                 }
                 .disabled(!canSave)
             }
-            .padding()
+            .padding(SupportTheme.Spacing.m)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -96,23 +97,23 @@ struct QuickCheckInSheet: View {
     // MARK: - Mood Selector
 
     private var moodSelector: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: SupportTheme.Spacing.m) {
             ForEach(Array(moodEmojis.enumerated()), id: \.offset) { index, emoji in
                 Button {
                     selectedEmoji = emoji
                     selectedValue = index + 1
                 } label: {
                     Text(emoji)
-                        .font(.system(size: 44))
+                        .font(.system(.largeTitle))
                         .opacity(selectedEmoji == emoji ? 1 : 0.4)
-                        .scaleEffect(selectedEmoji == emoji ? 1.2 : 1)
+                        .scaleEffect(reduceMotion ? 1 : (selectedEmoji == emoji ? 1.2 : 1))
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(moodAccessibilityLabel(for: index))
                 .accessibilityAddTraits(selectedEmoji == emoji ? .isSelected : [])
             }
         }
-        .animation(.spring(response: 0.3), value: selectedEmoji)
+        .animation(reduceMotion ? nil : .spring(response: 0.3), value: selectedEmoji)
     }
 
     private func moodAccessibilityLabel(for index: Int) -> String {
@@ -129,15 +130,16 @@ struct QuickCheckInSheet: View {
     // MARK: - Energy Selector
 
     private var energySelector: some View {
-        VStack(spacing: 16) {
-            HStack(spacing: 8) {
+        VStack(spacing: SupportTheme.Spacing.m) {
+            HStack(spacing: SupportTheme.Spacing.xs) {
                 ForEach(1...5, id: \.self) { value in
                     Button {
                         selectedValue = value
                     } label: {
                         Image(systemName: value <= selectedValue ? "bolt.fill" : "bolt")
                             .font(.title)
-                            .foregroundStyle(value <= selectedValue ? .yellow : .gray)
+                            .foregroundStyle(value <= selectedValue ? .yellow : SupportTheme.textSecondary)
+                            .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Energy level \(value)")
@@ -147,7 +149,7 @@ struct QuickCheckInSheet: View {
 
             Text(energyLabel)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
     }
 
@@ -166,7 +168,7 @@ struct QuickCheckInSheet: View {
 
     private var gratitudeInput: some View {
         TextField("I'm grateful for...", text: $textValue)
-            .textFieldStyle(.roundedBorder)
+            .supportField()
             .submitLabel(.done)
             .onSubmit {
                 if canSave {
@@ -178,9 +180,9 @@ struct QuickCheckInSheet: View {
     // MARK: - Intention Input
 
     private var intentionInput: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: SupportTheme.Spacing.s) {
             TextField("One word", text: $textValue)
-                .textFieldStyle(.roundedBorder)
+                .supportField()
                 .multilineTextAlignment(.center)
                 .font(.title2)
                 .submitLabel(.done)
@@ -192,15 +194,15 @@ struct QuickCheckInSheet: View {
 
             Text("e.g., Focus, Patience, Joy, Growth")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
     }
 
     // MARK: - Stress Selector
 
     private var stressSelector: some View {
-        VStack(spacing: 16) {
-            HStack(spacing: 8) {
+        VStack(spacing: SupportTheme.Spacing.m) {
+            HStack(spacing: SupportTheme.Spacing.xs) {
                 ForEach(1...5, id: \.self) { value in
                     Button {
                         selectedValue = value
@@ -209,7 +211,7 @@ struct QuickCheckInSheet: View {
                             .fill(stressColor(for: value))
                             .frame(width: 44, height: 44)
                             .opacity(value == selectedValue ? 1 : 0.4)
-                            .scaleEffect(value == selectedValue ? 1.2 : 1)
+                            .scaleEffect(reduceMotion ? 1 : (value == selectedValue ? 1.2 : 1))
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Stress level \(value): \(stressAccessibilityLabel(for: value))")
@@ -219,19 +221,19 @@ struct QuickCheckInSheet: View {
 
             Text(stressLabel)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
-        .animation(.spring(response: 0.3), value: selectedValue)
+        .animation(reduceMotion ? nil : .spring(response: 0.3), value: selectedValue)
     }
 
     private func stressColor(for value: Int) -> Color {
         switch value {
-        case 1: return .green
-        case 2: return .mint
-        case 3: return .yellow
-        case 4: return .orange
+        case 1: return SupportTheme.accent
+        case 2: return SupportTheme.accent
+        case 3: return SupportTheme.accent
+        case 4: return SupportTheme.accent
         case 5: return .red
-        default: return .gray
+        default: return SupportTheme.accent
         }
     }
 
@@ -260,12 +262,12 @@ struct QuickCheckInSheet: View {
     // MARK: - Context Tags
 
     private var contextTagsSelector: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             Text("Context (optional)")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
 
-            FlowLayout(spacing: 8) {
+            FlowLayout(spacing: SupportTheme.Spacing.xs) {
                 ForEach(contextTags, id: \.self) { tag in
                     Button {
                         if selectedTags.contains(tag) {
@@ -276,10 +278,10 @@ struct QuickCheckInSheet: View {
                     } label: {
                         Text(tag)
                             .font(.caption)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(selectedTags.contains(tag) ? Color.blue : Color(.secondarySystemBackground))
-                            .foregroundStyle(selectedTags.contains(tag) ? .white : .primary)
+                            .padding(.horizontal, SupportTheme.Spacing.s)
+                            .padding(.vertical, SupportTheme.Spacing.xxs)
+                            .background(selectedTags.contains(tag) ? SupportTheme.accent : SupportTheme.surface)
+                            .foregroundStyle(selectedTags.contains(tag) ? SupportTheme.onAccent : SupportTheme.textPrimary)
                             .clipShape(Capsule())
                     }
                     .buttonStyle(.plain)

@@ -19,7 +19,7 @@ struct ContextualMicroMomentView: View {
     @State private var hasStarted = false
 
     var body: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: SupportTheme.Spacing.l) {
             // Context message (if provided)
             if let contextMessage = contextMessage {
                 contextSection(message: contextMessage)
@@ -31,11 +31,11 @@ struct ContextualMicroMomentView: View {
             // Action buttons
             buttonSection
         }
-        .padding(24)
-        .background(Color(.systemBackground))
-        .cornerRadius(24)
-        .shadow(color: .black.opacity(0.1), radius: 20, y: 10)
-        .padding(.horizontal, 20)
+        .padding(SupportTheme.Spacing.l)
+        .background(SupportTheme.canvas)
+        .cornerRadius(SupportTheme.cardRadius)
+        .shadow(color: SupportTheme.canvas.opacity(0.1), radius: 20, y: 10)
+        .padding(.horizontal, SupportTheme.Spacing.m)
         .fullScreenCover(isPresented: $showPlayer) {
             MicroMomentPlayerView(template: template) { completionData in
                 handleCompletion(completionData)
@@ -45,53 +45,53 @@ struct ContextualMicroMomentView: View {
     }
 
     private func contextSection(message: String) -> some View {
-        VStack(spacing: 8) {
+        VStack(spacing: SupportTheme.Spacing.xs) {
             Image(systemName: "sparkles")
                 .font(.title2)
-                .foregroundStyle(.blue)
+                .foregroundStyle(SupportTheme.accent)
 
             Text(message)
                 .font(.body)
                 .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
 
     private var templatePreview: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: SupportTheme.Spacing.s) {
             // Icon with background
             ZStack {
                 Circle()
-                    .fill(template.type.color.opacity(0.15))
+                    .fill(SupportTheme.accent.opacity(0.15))
                     .frame(width: 72, height: 72)
 
                 Image(systemName: template.type.icon)
-                    .font(.system(size: 32))
-                    .foregroundStyle(template.type.color)
+                    .font(.system(.largeTitle))
+                    .foregroundStyle(SupportTheme.accent)
             }
 
-            VStack(spacing: 4) {
+            VStack(spacing: SupportTheme.Spacing.xxs) {
                 Text(template.title)
                     .font(.title3.weight(.semibold))
 
                 if let description = template.description {
                     Text(description)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                         .multilineTextAlignment(.center)
-                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
-                HStack(spacing: 16) {
+                HStack(spacing: SupportTheme.Spacing.m) {
                     Label(template.formattedDuration, systemImage: "clock")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
 
                     if let energyEffect = template.energyEffect {
                         Label(energyEffect.displayName, systemImage: energyIcon(for: energyEffect))
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                 }
             }
@@ -99,7 +99,7 @@ struct ContextualMicroMomentView: View {
     }
 
     private var buttonSection: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: SupportTheme.Spacing.s) {
             // Start button
             Button {
                 hasStarted = true
@@ -109,10 +109,10 @@ struct ContextualMicroMomentView: View {
                 Text("Start Exercise")
                     .fontWeight(.semibold)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(Color.accentColor)
-                    .foregroundStyle(.white)
-                    .cornerRadius(14)
+                    .padding(.vertical, SupportTheme.Spacing.m)
+                    .background(SupportTheme.accent)
+                    .foregroundStyle(SupportTheme.onAccent)
+                    .cornerRadius(SupportTheme.controlRadius)
             }
 
             // Dismiss button
@@ -121,7 +121,7 @@ struct ContextualMicroMomentView: View {
             } label: {
                 Text("Not right now")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
         }
     }
@@ -169,7 +169,7 @@ struct ContextualMicroMomentSheet: View {
 
     var body: some View {
         ZStack {
-            Color.black.opacity(0.4)
+            SupportTheme.canvas.opacity(0.4)
                 .ignoresSafeArea()
 
             ContextualMicroMomentView(

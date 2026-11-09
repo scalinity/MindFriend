@@ -3,31 +3,32 @@ import AVFoundation
 
 /// Player view for standalone soundscape playback
 struct SoundscapePlayerView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let soundscape: BackgroundSoundType
     @Environment(\.dismiss) private var dismiss
     @StateObject private var audioPlayer = SoundscapeAudioPlayer()
     @State private var volume: Double = 0.7
 
     var body: some View {
-        VStack(spacing: 32) {
+        VStack(spacing: SupportTheme.Spacing.xl) {
             Spacer()
 
             // Soundscape icon and info
-            VStack(spacing: 16) {
+            VStack(spacing: SupportTheme.Spacing.m) {
                 ZStack {
                     Circle()
-                        .fill(soundscape.themeColor.opacity(0.2))
+                        .fill(SupportTheme.accent.opacity(0.2))
                         .frame(width: 160, height: 160)
 
                     Circle()
-                        .fill(soundscape.themeColor.opacity(0.1))
+                        .fill(SupportTheme.accent.opacity(0.1))
                         .frame(width: 200, height: 200)
-                        .scaleEffect(audioPlayer.isPlaying ? 1.1 : 1.0)
-                        .animation(.easeInOut(duration: 2).repeatForever(autoreverses: true), value: audioPlayer.isPlaying)
+                        .scaleEffect(reduceMotion ? 1 : (audioPlayer.isPlaying ? 1.1 : 1.0))
+                        .animation(reduceMotion ? nil : .easeInOut(duration: 2).repeatForever(autoreverses: true), value: audioPlayer.isPlaying)
 
                     Image(systemName: soundscape.icon)
-                        .font(.system(size: 64))
-                        .foregroundStyle(soundscape.themeColor)
+                        .font(.system(.largeTitle))
+                        .foregroundStyle(SupportTheme.accent)
                 }
 
                 Text(soundscape.displayName)
@@ -36,27 +37,27 @@ struct SoundscapePlayerView: View {
 
                 Text(soundscapeDescription)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
+                    .padding(.horizontal, SupportTheme.Spacing.xl)
             }
 
             Spacer()
 
             // Volume control
-            VStack(spacing: 8) {
+            VStack(spacing: SupportTheme.Spacing.xs) {
                 HStack {
                     Image(systemName: "speaker.fill")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                     Slider(value: $volume, in: 0...1)
-                        .tint(soundscape.themeColor)
+                        .tint(SupportTheme.accent)
                         .onChange(of: volume) { _, newValue in
                             audioPlayer.setVolume(Float(newValue))
                         }
                     Image(systemName: "speaker.wave.3.fill")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
-                .padding(.horizontal, 32)
+                .padding(.horizontal, SupportTheme.Spacing.xl)
             }
 
             // Play/Pause button
@@ -69,28 +70,31 @@ struct SoundscapePlayerView: View {
             } label: {
                 ZStack {
                     Circle()
-                        .fill(soundscape.themeColor)
+                        .fill(SupportTheme.accent)
                         .frame(width: 80, height: 80)
 
                     Image(systemName: audioPlayer.isPlaying ? "pause.fill" : "play.fill")
                         .font(.title)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(SupportTheme.textPrimary)
                         .offset(x: audioPlayer.isPlaying ? 0 : 2)
                 }
+                .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                .accessibilityLabel(audioPlayer.isPlaying ? "Pause" : "Play")
             }
-            .padding(.bottom, 32)
+            .padding(.bottom, SupportTheme.Spacing.xl)
 
             // Loop indicator
-            HStack(spacing: 8) {
+            HStack(spacing: SupportTheme.Spacing.xs) {
                 Image(systemName: "repeat")
-                    .foregroundStyle(soundscape.themeColor)
+                    .foregroundStyle(SupportTheme.accent)
                 Text("Loops continuously")
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
 
             Spacer()
         }
+        .supportScreen()
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

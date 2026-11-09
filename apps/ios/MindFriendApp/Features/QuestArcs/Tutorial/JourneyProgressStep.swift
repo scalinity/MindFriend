@@ -9,6 +9,7 @@ import SwiftUI
 
 /// Step 2: Explain how completing quests advances the journey
 struct JourneyProgressStep: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let onNext: () -> Void
     let onSkip: () -> Void
 
@@ -18,60 +19,60 @@ struct JourneyProgressStep: View {
     var body: some View {
         JourneyTutorialStepLayout(
             icon: "calendar.badge.checkmark",
-            iconColor: .green,
+            iconColor: SupportTheme.accent,
             headline: "One Day at a Time",
             subheadline: "Complete your daily quest to advance through your journey.",
             primaryAction: onNext,
             skipAction: onSkip
         ) {
-            VStack(spacing: 16) {
+            VStack(spacing: SupportTheme.Spacing.m) {
                 // Animated day progression
-                HStack(spacing: 12) {
+                HStack(spacing: SupportTheme.Spacing.s) {
                     ForEach(1...5, id: \.self) { day in
                         dayIndicator(day: day)
                     }
                 }
-                .padding(.horizontal)
+                .padding(.horizontal, SupportTheme.Spacing.m)
 
                 // Progress explanation
-                VStack(spacing: 8) {
+                VStack(spacing: SupportTheme.Spacing.xs) {
                     progressRow(
                         icon: "checkmark.circle.fill",
-                        color: .green,
+                        color: SupportTheme.accent,
                         text: "Complete today's quest"
                     )
 
                     Image(systemName: "arrow.down")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
 
                     progressRow(
                         icon: "arrow.right.circle.fill",
-                        color: .blue,
+                        color: SupportTheme.accent,
                         text: "Journey advances to next day"
                     )
 
                     Image(systemName: "arrow.down")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
 
                     progressRow(
                         icon: "sparkles",
-                        color: .orange,
+                        color: SupportTheme.accent,
                         text: "Skills build over time"
                     )
                 }
-                .padding(.horizontal, 20)
+                .padding(.horizontal, SupportTheme.Spacing.m)
 
                 // Note
                 Text("**No pressure** - your journey waits for you. Complete at your own pace.")
                     .font(.caption)
                     .multilineTextAlignment(.center)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 20)
+                    .foregroundStyle(SupportTheme.textSecondary)
+                    .padding(.horizontal, SupportTheme.Spacing.m)
             }
             .onAppear {
-                withAnimation {
+                withAnimation(.easeInOut(duration: 0.2)) {
                     showProgress = true
                 }
                 // Animate through days
@@ -86,53 +87,53 @@ struct JourneyProgressStep: View {
         let isCurrent = day == currentDay
         let isUpcoming = day > currentDay
 
-        VStack(spacing: 4) {
+        VStack(spacing: SupportTheme.Spacing.xxs) {
             ZStack {
                 Circle()
-                    .fill(isCompleted ? Color.green : isCurrent ? Color.blue : Color(.systemGray5))
+                    .fill(isCompleted ? SupportTheme.accent : isCurrent ? SupportTheme.accent : SupportTheme.separator)
                     .frame(width: 36, height: 36)
 
                 if isCompleted {
                     Image(systemName: "checkmark")
                         .font(.caption.bold())
-                        .foregroundStyle(.white)
+                        .foregroundStyle(SupportTheme.textPrimary)
                 } else {
                     Text("\(day)")
                         .font(.caption.bold())
-                        .foregroundStyle(isCurrent ? .white : .secondary)
+                        .foregroundStyle(isCurrent ? SupportTheme.onAccent : SupportTheme.textSecondary)
                 }
             }
-            .scaleEffect(isCurrent ? 1.1 : 1.0)
-            .animation(.easeInOut(duration: 0.3), value: currentDay)
+            .scaleEffect(reduceMotion ? 1 : (isCurrent ? 1.1 : 1.0))
+            .animation(reduceMotion ? .easeInOut(duration: 0.2) : .easeInOut(duration: 0.3), value: currentDay)
 
             Text("Day \(day)")
                 .font(.caption2)
-                .foregroundStyle(isUpcoming ? .tertiary : .secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
     }
 
     @ViewBuilder
     private func progressRow(icon: String, color: Color, text: String) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: SupportTheme.Spacing.s) {
             Image(systemName: icon)
                 .foregroundStyle(color)
                 .frame(width: 24)
 
             Text(text)
                 .font(.subheadline)
-                .foregroundStyle(.primary)
+                .foregroundStyle(SupportTheme.textPrimary)
 
             Spacer()
         }
         .opacity(showProgress ? 1 : 0)
-        .offset(x: showProgress ? 0 : -20)
+        .offset(x: reduceMotion ? 0 : (showProgress ? 0 : -20))
     }
 
     private func animateDays() {
         // Animate through first 3 days
         for i in 2...3 {
             DispatchQueue.main.asyncAfter(deadline: .now() + Double(i - 1) * 0.8) {
-                withAnimation(.easeInOut(duration: 0.4)) {
+                withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .easeInOut(duration: 0.4)) {
                     currentDay = i
                 }
             }

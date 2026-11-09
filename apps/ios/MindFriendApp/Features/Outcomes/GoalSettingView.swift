@@ -7,32 +7,32 @@ struct GoalSettingView: View {
     let template: AssessmentTemplate
     @ObservedObject var outcomeService: OutcomeTrackingService
     @Binding var isPresented: Bool
-    
+
     @State private var suggestedTargetScore: Int = 0
     @State private var customTargetScore: String = ""
     @State private var targetDate = Date().addingTimeInterval(86400 * 84) // 12 weeks
     @State private var notes: String = ""
     @State private var isSaving = false
     @State private var showingConfirmation = false
-    
+
     var assessmentType: AssessmentType? { AssessmentType(rawValue: template.code) }
     var baselineScore: Int { response.totalScore }
     var maxScore: Int { AssessmentType(rawValue: template.code)?.maxScore ?? 27 }
     var recommendedTargetScore: Int {
         assessmentType?.suggestedTargetScore(from: baselineScore) ?? baselineScore
     }
-    
+
     var selectedTargetScore: Int {
         if let custom = Int(customTargetScore) {
             return custom
         }
         return recommendedTargetScore
     }
-    
+
     var scoreImprovement: Int {
         assessmentType?.improvement(from: baselineScore, to: selectedTargetScore) ?? 0
     }
-    
+
     var isValidTarget: Bool {
         guard response.availableScore != nil, let assessmentType,
               customTargetScore.isEmpty || Int(customTargetScore) != nil else { return false }
@@ -43,183 +43,172 @@ struct GoalSettingView: View {
     var body: some View {
         ZStack {
             // Background
-            LinearGradient(
-                gradient: Gradient(colors: [
-                    Color(red: 0.95, green: 0.97, blue: 1.0),
-                    Color(red: 0.92, green: 0.96, blue: 0.98)
-                ]),
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
+            SupportTheme.canvas
             .ignoresSafeArea()
-            
+
             VStack(spacing: 0) {
                 // Header
                 HStack {
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                         Text("Set Your Goal")
-                            .font(.system(size: 18, weight: .bold, design: .default))
-                            .foregroundColor(Color(red: 0.1, green: 0.3, blue: 0.5))
-                        
+                            .font(.system(.title3, design: .default).weight(.bold))
+                            .foregroundColor(SupportTheme.accent)
+
                         Text("Based on your baseline score")
-                            .font(.system(size: 13, weight: .regular, design: .default))
-                            .foregroundColor(.gray)
+                            .font(.system(.caption, design: .default).weight(.regular))
+                            .foregroundColor(SupportTheme.textSecondary)
                     }
-                    
+
                     Spacer()
-                    
+
                     Button(action: { isPresented = false }) {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 24))
-                            .foregroundColor(.gray)
+                            .font(.system(.title2))
+                            .foregroundColor(SupportTheme.textSecondary)
                     }
                 }
-                .padding(20)
-                .background(Color.white)
-                .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
-                
+                .padding(SupportTheme.Spacing.m)
+                .background(SupportTheme.surface)
+                .shadow(color: SupportTheme.canvas.opacity(0.05), radius: 4, x: 0, y: 2)
+
                 // Scrollable content
                 ScrollView {
-                    VStack(spacing: 20) {
+                    VStack(spacing: SupportTheme.Spacing.m) {
                         // Baseline score card
-                        VStack(spacing: 12) {
+                        VStack(spacing: SupportTheme.Spacing.s) {
                             HStack {
                                 Text("Your Baseline")
-                                    .font(.system(size: 14, weight: .semibold, design: .default))
-                                    .foregroundColor(Color(red: 0.1, green: 0.3, blue: 0.5))
-                                
+                                    .font(.system(.subheadline, design: .default).weight(.semibold))
+                                    .foregroundColor(SupportTheme.accent)
+
                                 Spacer()
-                                
-                                HStack(spacing: 4) {
+
+                                HStack(spacing: SupportTheme.Spacing.xxs) {
                                     Text("\(baselineScore)")
-                                        .font(.system(size: 18, weight: .bold, design: .default))
-                                        .foregroundColor(Color(red: 0.2, green: 0.6, blue: 0.4))
-                                    
+                                        .font(.system(.title3, design: .default).weight(.bold))
+                                        .foregroundColor(SupportTheme.accent)
+
                                     Text("/ \(maxScore)")
-                                        .font(.system(size: 13, weight: .regular, design: .default))
-                                        .foregroundColor(.gray)
+                                        .font(.system(.caption, design: .default).weight(.regular))
+                                        .foregroundColor(SupportTheme.textSecondary)
                                 }
                             }
 
                             Divider()
 
                             Text(response.severityLevel)
-                                .font(.system(size: 13, weight: .semibold, design: .default))
-                                .foregroundColor(.gray)
+                                .font(.system(.caption, design: .default).weight(.semibold))
+                                .foregroundColor(SupportTheme.textSecondary)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        .padding(14)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(Color.white)
-                                .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
-                        )
-                        .padding(.horizontal, 20)
-                        
+                        .padding(SupportTheme.Spacing.s)
+                        .background(SupportTheme.surface, in: RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
+                        .padding(.horizontal, SupportTheme.Spacing.m)
+
                         // Target score section
-                        VStack(alignment: .leading, spacing: 12) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                             Text("Target Score")
-                                .font(.system(size: 14, weight: .semibold, design: .default))
-                                .foregroundColor(Color(red: 0.1, green: 0.3, blue: 0.5))
-                            
+                                .font(.system(.subheadline, design: .default).weight(.semibold))
+                                .foregroundColor(SupportTheme.accent)
+
                             // Recommended target
-                            VStack(alignment: .leading, spacing: 8) {
-                                HStack(spacing: 8) {
+                            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
+                                HStack(spacing: SupportTheme.Spacing.xs) {
                                     Image(systemName: "lightbulb.fill")
-                                        .font(.system(size: 12))
-                                        .foregroundColor(Color(red: 0.95, green: 0.7, blue: 0.0))
-                                    
+                                        .font(.system(.caption))
+                                        .foregroundColor(SupportTheme.accent)
+
                                     Text("Recommended")
-                                        .font(.system(size: 12, weight: .semibold, design: .default))
-                                        .foregroundColor(Color(red: 0.95, green: 0.7, blue: 0.0))
+                                        .font(.system(.caption, design: .default).weight(.semibold))
+                                        .foregroundColor(SupportTheme.accent)
                                 }
-                                
-                                HStack(spacing: 12) {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        HStack(spacing: 4) {
+
+                                HStack(spacing: SupportTheme.Spacing.s) {
+                                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
+                                        HStack(spacing: SupportTheme.Spacing.xxs) {
                                             Text("\(recommendedTargetScore)")
-                                                .font(.system(size: 20, weight: .bold, design: .default))
-                                                .foregroundColor(Color(red: 0.2, green: 0.6, blue: 0.4))
-                                            
+                                                .font(.system(.title3, design: .default).weight(.bold))
+                                                .foregroundColor(SupportTheme.accent)
+
                                             Text("/ \(maxScore)")
-                                                .font(.system(size: 14, weight: .regular, design: .default))
-                                                .foregroundColor(.gray)
+                                                .font(.system(.subheadline, design: .default).weight(.regular))
+                                                .foregroundColor(SupportTheme.textSecondary)
                                         }
 
                                         Text("\(scoreImprovement) point \(assessmentType?.higherScoresAreBetter == true ? "increase" : "reduction")")
-                                            .font(.system(size: 12, weight: .regular, design: .default))
-                                            .foregroundColor(.gray)
+                                            .font(.system(.caption, design: .default).weight(.regular))
+                                            .foregroundColor(SupportTheme.textSecondary)
                                     }
-                                    
+
                                     Spacer()
-                                    
+
                                     if customTargetScore.isEmpty {
                                         Image(systemName: "checkmark.circle.fill")
-                                            .font(.system(size: 20))
-                                            .foregroundColor(Color(red: 0.2, green: 0.6, blue: 0.4))
+                                            .font(.system(.title3))
+                                            .foregroundColor(SupportTheme.accent)
                                     }
                                 }
                             }
-                            .padding(12)
+                            .padding(SupportTheme.Spacing.s)
                             .background(
-                                RoundedRectangle(cornerRadius: 10)
-                                    .fill(Color(red: 0.2, green: 0.6, blue: 0.4).opacity(0.05))
+                                RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                                    .fill(SupportTheme.accent.opacity(0.05))
                                     .stroke(
                                         customTargetScore.isEmpty ?
-                                        Color(red: 0.2, green: 0.6, blue: 0.4) :
-                                        Color.gray.opacity(0.2),
+                                        SupportTheme.accent :
+                                        SupportTheme.textSecondary.opacity(0.2),
                                         lineWidth: 1
                                     )
                             )
-                            
+
                             // Custom target
-                            VStack(alignment: .leading, spacing: 8) {
-                                HStack(spacing: 8) {
+                            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
+                                HStack(spacing: SupportTheme.Spacing.xs) {
                                     Text("Or set custom target")
-                                        .font(.system(size: 12, weight: .regular, design: .default))
-                                        .foregroundColor(.gray)
-                                    
+                                        .font(.system(.caption, design: .default).weight(.regular))
+                                        .foregroundColor(SupportTheme.textSecondary)
+
                                     Spacer()
                                 }
-                                
-                                HStack(spacing: 12) {
+
+                                HStack(spacing: SupportTheme.Spacing.s) {
                                     TextField(
                                         "Enter score 0-\(maxScore)",
                                         text: $customTargetScore
                                     )
                                     .keyboardType(.numberPad)
-                                    .font(.system(size: 15, weight: .semibold, design: .default))
+                                    .font(.system(.subheadline, design: .default).weight(.semibold))
                                     .textFieldStyle(RoundedBorderTextFieldStyle())
 
                                     if !customTargetScore.isEmpty,
                                        let score = Int(customTargetScore),
                                        score >= 0, score <= maxScore {
                                         Text("–\(baselineScore - score) pts")
-                                            .font(.system(size: 12, weight: .semibold, design: .default))
-                                            .foregroundColor(.gray)
+                                            .font(.system(.caption, design: .default).weight(.semibold))
+                                            .foregroundColor(SupportTheme.textSecondary)
                                     }
                                 }
                             }
-                            .padding(12)
+                            .padding(SupportTheme.Spacing.s)
                             .background(
-                                RoundedRectangle(cornerRadius: 10)
-                                    .fill(Color.white)
-                                    .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+                                RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                                    .fill(SupportTheme.surface)
+                                    .stroke(SupportTheme.textSecondary.opacity(0.2), lineWidth: 1)
                             )
                         }
-                        .padding(.horizontal, 20)
-                        
+                        .padding(.horizontal, SupportTheme.Spacing.m)
+
                         // Target date section
-                        VStack(alignment: .leading, spacing: 12) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                             Text("Target Date")
-                                .font(.system(size: 14, weight: .semibold, design: .default))
-                                .foregroundColor(Color(red: 0.1, green: 0.3, blue: 0.5))
-                            
-                            HStack(spacing: 12) {
+                                .font(.system(.subheadline, design: .default).weight(.semibold))
+                                .foregroundColor(SupportTheme.accent)
+
+                            HStack(spacing: SupportTheme.Spacing.s) {
                                 Image(systemName: "calendar")
-                                    .font(.system(size: 14))
-                                    .foregroundColor(Color(red: 0.2, green: 0.6, blue: 0.4))
-                                
+                                    .font(.system(.subheadline))
+                                    .foregroundColor(SupportTheme.accent)
+
                                 DatePicker(
                                     "Target Date",
                                     selection: $targetDate,
@@ -228,96 +217,96 @@ struct GoalSettingView: View {
                                 )
                                 .datePickerStyle(.compact)
                                 .labelsHidden()
-                                
+
                                 Spacer()
-                                
+
                                 Text(targetDate.formatted(date: .abbreviated, time: .omitted))
-                                    .font(.system(size: 13, weight: .semibold, design: .default))
-                                    .foregroundColor(.gray)
+                                    .font(.system(.caption, design: .default).weight(.semibold))
+                                    .foregroundColor(SupportTheme.textSecondary)
                             }
-                            .padding(12)
+                            .padding(SupportTheme.Spacing.s)
                             .background(
-                                RoundedRectangle(cornerRadius: 10)
-                                    .fill(Color.white)
-                                    .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+                                RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                                    .fill(SupportTheme.surface)
+                                    .stroke(SupportTheme.textSecondary.opacity(0.2), lineWidth: 1)
                             )
                         }
-                        .padding(.horizontal, 20)
-                        
+                        .padding(.horizontal, SupportTheme.Spacing.m)
+
                         // Goal summary card
-                        VStack(alignment: .leading, spacing: 12) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                             HStack {
                                 Image(systemName: "target")
-                                    .font(.system(size: 14, weight: .semibold))
-                                    .foregroundColor(Color(red: 0.2, green: 0.6, blue: 0.4))
-                                
+                                    .font(.system(.subheadline).weight(.semibold))
+                                    .foregroundColor(SupportTheme.accent)
+
                                 Text("Goal Summary")
-                                    .font(.system(size: 14, weight: .semibold, design: .default))
-                                    .foregroundColor(Color(red: 0.1, green: 0.3, blue: 0.5))
-                                
+                                    .font(.system(.subheadline, design: .default).weight(.semibold))
+                                    .foregroundColor(SupportTheme.accent)
+
                                 Spacer()
                             }
-                            
-                            VStack(spacing: 8) {
-                                GoalSummaryRow(label: "Current", value: "\(baselineScore)", color: Color.gray)
-                                GoalSummaryRow(label: "Target", value: "\(selectedTargetScore)", color: Color(red: 0.2, green: 0.6, blue: 0.4))
-                                GoalSummaryRow(label: "Timeline", value: "\(daysUntilTarget) days", color: Color(red: 0.1, green: 0.3, blue: 0.5))
+
+                            VStack(spacing: SupportTheme.Spacing.xs) {
+                                GoalSummaryRow(label: "Current", value: "\(baselineScore)", color: SupportTheme.textSecondary)
+                                GoalSummaryRow(label: "Target", value: "\(selectedTargetScore)", color: SupportTheme.accent)
+                                GoalSummaryRow(label: "Timeline", value: "\(daysUntilTarget) days", color: SupportTheme.accent)
                             }
                         }
-                        .padding(12)
+                        .padding(SupportTheme.Spacing.s)
                         .background(
-                            RoundedRectangle(cornerRadius: 10)
-                                .fill(Color.white)
-                                .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+                            RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                                .fill(SupportTheme.surface)
+                                .stroke(SupportTheme.textSecondary.opacity(0.2), lineWidth: 1)
                         )
-                        .padding(.horizontal, 20)
-                        
+                        .padding(.horizontal, SupportTheme.Spacing.m)
+
                         Spacer()
                             .frame(height: 20)
                     }
-                    .padding(.vertical, 20)
+                    .padding(.vertical, SupportTheme.Spacing.m)
                 }
-                
+
                 // Action buttons
-                VStack(spacing: 10) {
+                VStack(spacing: SupportTheme.Spacing.xs) {
                     Button(action: {
                         showingConfirmation = true
                     }) {
                         if isSaving {
                             ProgressView()
                                 .frame(maxWidth: .infinity)
-                                .padding(12)
+                                .padding(SupportTheme.Spacing.s)
                         } else {
                             Text("Save Goal")
-                                .font(.system(size: 15, weight: .semibold, design: .default))
-                                .foregroundColor(.white)
+                                .font(.system(.subheadline, design: .default).weight(.semibold))
+                                .foregroundColor(SupportTheme.textPrimary)
                                 .frame(maxWidth: .infinity)
-                                .padding(12)
+                                .padding(SupportTheme.Spacing.s)
                                 .background(
-                                    RoundedRectangle(cornerRadius: 10)
-                                        .fill(Color(red: 0.2, green: 0.6, blue: 0.4))
+                                    RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                                        .fill(SupportTheme.accent)
                                 )
                         }
                     }
                     .disabled(isSaving || !isValidTarget)
-                    
+
                     Button(action: {
                         isPresented = false
                     }) {
                         Text("Skip for Now")
-                            .font(.system(size: 15, weight: .semibold, design: .default))
-                            .foregroundColor(Color(red: 0.1, green: 0.3, blue: 0.5))
+                            .font(.system(.subheadline, design: .default).weight(.semibold))
+                            .foregroundColor(SupportTheme.accent)
                             .frame(maxWidth: .infinity)
-                            .padding(12)
+                            .padding(SupportTheme.Spacing.s)
                             .background(
-                                RoundedRectangle(cornerRadius: 10)
-                                    .fill(Color.white)
-                                    .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+                                RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                                    .fill(SupportTheme.surface)
+                                    .stroke(SupportTheme.textSecondary.opacity(0.2), lineWidth: 1)
                             )
                     }
                 }
-                .padding(20)
-                .background(Color.white)
+                .padding(SupportTheme.Spacing.m)
+                .background(SupportTheme.surface)
             }
         }
         .navigationBarBackButtonHidden(true)
@@ -328,17 +317,17 @@ struct GoalSettingView: View {
             Text("Create a goal to reach \(selectedTargetScore) by \(targetDate.formatted(date: .abbreviated, time: .omitted))?")
         }
     }
-    
+
     private var daysUntilTarget: Int {
         Int(targetDate.timeIntervalSince(Date()) / 86400)
     }
-    
+
     private func saveGoal() {
         guard isValidTarget, !isSaving else { return }
         isSaving = true
         Task {
             defer { isSaving = false }
-            
+
             do {
                 // Call OutcomeTrackingService to save the custom goal
                 _ = try await outcomeService.createCustomOutcomeGoal(
@@ -349,7 +338,7 @@ struct GoalSettingView: View {
                     notes: notes.isEmpty ? nil : notes,
                     baselineResponseId: response.id
                 )
-                
+
                 // Close the sheet on success
                 await MainActor.run {
                     isPresented = false
@@ -371,18 +360,18 @@ struct GoalSummaryRow: View {
     let label: String
     let value: String
     let color: Color
-    
+
     var body: some View {
         HStack {
             Text(label)
-                .font(.system(size: 13, weight: .regular, design: .default))
-                .foregroundColor(.gray)
-            
+                .font(.system(.caption, design: .default).weight(.regular))
+                .foregroundColor(SupportTheme.textSecondary)
+
             Spacer()
-            
-            HStack(spacing: 4) {
+
+            HStack(spacing: SupportTheme.Spacing.xxs) {
                 Text(value)
-                    .font(.system(size: 14, weight: .semibold, design: .default))
+                    .font(.system(.subheadline, design: .default).weight(.semibold))
                     .foregroundColor(color)
             }
         }

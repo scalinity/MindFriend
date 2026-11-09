@@ -2,6 +2,7 @@ import SwiftUI
 
 /// Meditation player with progressive instruction display
 struct LibraryMeditationPlayerView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject var viewModel: LibraryExercisePlayerViewModel
 
     var body: some View {
@@ -29,7 +30,7 @@ struct LibraryMeditationPlayerView: View {
             // Bottom controls
             controlsSection
         }
-        .background(Color(.systemBackground))
+        .background(SupportTheme.canvas)
         .onDisappear {
             // Stop audio when leaving
             if viewModel.hasAudio {
@@ -41,15 +42,15 @@ struct LibraryMeditationPlayerView: View {
     // MARK: - Audio Indicator
 
     private var audioIndicator: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: SupportTheme.Spacing.xs) {
             Image(systemName: viewModel.audioPlayer.isPlaying ? "waveform" : "speaker.wave.2")
                 .font(.caption)
-                .foregroundStyle(viewModel.audioPlayer.isPlaying ? Color.accentColor : Color.secondary)
-                .symbolEffect(.variableColor.iterative, isActive: viewModel.audioPlayer.isPlaying)
+                .foregroundStyle(viewModel.audioPlayer.isPlaying ? SupportTheme.accent : SupportTheme.textSecondary)
+                .symbolEffect(.variableColor.iterative, isActive: !reduceMotion && (viewModel.audioPlayer.isPlaying))
 
             Text("Guided Audio")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
 
             Spacer()
 
@@ -63,30 +64,32 @@ struct LibraryMeditationPlayerView: View {
             } label: {
                 Image(systemName: viewModel.audioPlayer.isPlaying ? "speaker.wave.2.fill" : "speaker.slash.fill")
                     .font(.caption)
-                    .foregroundStyle(viewModel.audioPlayer.isPlaying ? Color.accentColor : Color.secondary)
+                    .foregroundStyle(viewModel.audioPlayer.isPlaying ? SupportTheme.accent : SupportTheme.textSecondary)
+                    .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                    .accessibilityLabel(viewModel.audioPlayer.isPlaying ? "Mute audio" : "Play audio")
             }
         }
-        .padding(.horizontal)
-        .padding(.vertical, 8)
-        .background(Color(.secondarySystemBackground))
+        .padding(.horizontal, SupportTheme.Spacing.m)
+        .padding(.vertical, SupportTheme.Spacing.xs)
+        .background(SupportTheme.surface)
     }
 
     // MARK: - Header
 
     private var headerSection: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: SupportTheme.Spacing.s) {
             // Progress bar
             StepProgressBar(
                 progress: viewModel.progress,
-                color: .accentColor
+                color: SupportTheme.accent
             )
-            .padding(.horizontal)
+            .padding(.horizontal, SupportTheme.Spacing.m)
 
             // Time display
             HStack {
                 Text(elapsedTimeFormatted)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
 
                 Spacer()
 
@@ -96,11 +99,11 @@ struct LibraryMeditationPlayerView: View {
 
                 Text("-\(viewModel.timeRemainingFormatted)")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
-            .padding(.horizontal)
+            .padding(.horizontal, SupportTheme.Spacing.m)
         }
-        .padding(.vertical, 16)
+        .padding(.vertical, SupportTheme.Spacing.m)
     }
 
     private var elapsedTimeFormatted: String {
@@ -114,7 +117,7 @@ struct LibraryMeditationPlayerView: View {
     private func segmentsScrollView(segments: [MeditationSegment]) -> some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(spacing: 16) {
+                LazyVStack(spacing: SupportTheme.Spacing.m) {
                     ForEach(Array(segments.enumerated()), id: \.offset) { index, segment in
                         SegmentView(
                             text: segment.text,
@@ -124,10 +127,10 @@ struct LibraryMeditationPlayerView: View {
                         .id(index)
                     }
                 }
-                .padding()
+                .padding(SupportTheme.Spacing.m)
             }
             .onChange(of: viewModel.currentSegmentIndex) { _, newIndex in
-                withAnimation(.easeInOut(duration: 0.3)) {
+                withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .easeInOut(duration: 0.3)) {
                     proxy.scrollTo(newIndex, anchor: .center)
                 }
             }
@@ -137,7 +140,7 @@ struct LibraryMeditationPlayerView: View {
     // MARK: - Fallback
 
     private var fallbackContent: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: SupportTheme.Spacing.l) {
             Spacer()
 
             // Exercise description as content
@@ -145,14 +148,14 @@ struct LibraryMeditationPlayerView: View {
                 Text(text)
                     .font(.title3)
                     .multilineTextAlignment(.center)
-                    .foregroundStyle(.primary)
-                    .padding(.horizontal, 32)
+                    .foregroundStyle(SupportTheme.textPrimary)
+                    .padding(.horizontal, SupportTheme.Spacing.xl)
             } else {
                 Text(viewModel.exercise.description)
                     .font(.title3)
                     .multilineTextAlignment(.center)
-                    .foregroundStyle(.primary)
-                    .padding(.horizontal, 32)
+                    .foregroundStyle(SupportTheme.textPrimary)
+                    .padding(.horizontal, SupportTheme.Spacing.xl)
             }
 
             Spacer()
@@ -162,13 +165,15 @@ struct LibraryMeditationPlayerView: View {
     // MARK: - Controls
 
     private var controlsSection: some View {
-        HStack(spacing: 24) {
+        HStack(spacing: SupportTheme.Spacing.l) {
             // Previous segment
             Button {
                 viewModel.previousSegment()
             } label: {
                 Image(systemName: "chevron.left.circle.fill")
                     .font(.title)
+                .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                .accessibilityLabel("Previous step")
             }
             .disabled(viewModel.currentSegmentIndex == 0)
 
@@ -189,8 +194,10 @@ struct LibraryMeditationPlayerView: View {
                 }
             } label: {
                 Image(systemName: viewModel.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                    .font(.system(size: 64))
-                    .foregroundStyle(Color.accentColor)
+                    .font(.system(.largeTitle))
+                    .foregroundStyle(SupportTheme.accent)
+                    .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                    .accessibilityLabel(viewModel.isPlaying ? "Pause" : "Play")
             }
 
             Spacer()
@@ -208,10 +215,12 @@ struct LibraryMeditationPlayerView: View {
                     ? "checkmark.circle.fill"
                     : "chevron.right.circle.fill")
                     .font(.title)
+                .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                .accessibilityLabel("Continue exercise")
             }
         }
-        .padding()
-        .padding(.bottom, 16)
+        .padding(SupportTheme.Spacing.m)
+        .padding(.bottom, SupportTheme.Spacing.m)
     }
 }
 
@@ -222,10 +231,10 @@ private struct SegmentProgressIndicator: View {
     let current: Int
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: SupportTheme.Spacing.xxs) {
             ForEach(0..<total, id: \.self) { index in
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(index <= current ? Color.accentColor : Color.secondary.opacity(0.3))
+                RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                    .fill(index <= current ? SupportTheme.accent : SupportTheme.textSecondary.opacity(0.3))
                     .frame(height: 4)
             }
         }

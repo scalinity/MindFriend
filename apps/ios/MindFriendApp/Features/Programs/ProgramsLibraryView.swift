@@ -3,12 +3,14 @@ import SwiftUI
 // MARK: - Programs Library View
 
 struct ProgramsLibraryView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var container: DependencyContainer
 
     @State private var programs: [Program] = []
     @State private var activeEnrollment: ProgramEnrollment?
     @State private var isLoading = true
+    @State private var loadError: String?
     @State private var selectedCategory: ProgramCategory?
     @State private var showARExercises = false
 
@@ -27,35 +29,36 @@ struct ProgramsLibraryView: View {
     var body: some View {
         SupportRootNavigation(embedded: supportEmbedded) {
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: SupportTheme.Spacing.l) {
                     // Active program card
                     if let enrollment = activeEnrollment {
                         ActiveProgramCard(enrollment: enrollment)
-                            .padding(.horizontal)
+                            .padding(.horizontal, SupportTheme.Spacing.m)
                     }
 
                     // AR Grounding section
                     ARGroundingCard(showARExercises: $showARExercises)
-                        .padding(.horizontal)
+                        .padding(.horizontal, SupportTheme.Spacing.m)
 
                     // Category filter
                     CategoryFilterRow(selected: $selectedCategory)
-                        .padding(.horizontal)
+                        .padding(.horizontal, SupportTheme.Spacing.m)
 
                     // Program grid
                     if isLoading {
                         ProgressView()
                             .frame(maxWidth: .infinity)
-                            .padding(.top, 40)
+                            .padding(.top, SupportTheme.Spacing.xl)
+                    } else if let loadError {
+                        SupportUnavailableState(title: "Programs unavailable", message: loadError, actionTitle: "Try again") {
+                            Task { await loadData() }
+                        }
                     } else if filteredPrograms.isEmpty {
                         EmptyProgramsView(hasFilter: selectedCategory != nil) {
                             selectedCategory = nil
                         }
                     } else {
-                        LazyVGrid(columns: [
-                            GridItem(.flexible()),
-                            GridItem(.flexible())
-                        ], spacing: 16) {
+                        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), alignment: .top), count: dynamicTypeSize.isAccessibilitySize ? 1 : 2), spacing: SupportTheme.Spacing.m) {
                             ForEach(filteredPrograms) { program in
                                 NavigationLink {
                                     ProgramDetailView(program: program)
@@ -65,11 +68,12 @@ struct ProgramsLibraryView: View {
                                 .buttonStyle(.plain)
                             }
                         }
-                        .padding(.horizontal)
+                        .padding(.horizontal, SupportTheme.Spacing.m)
                     }
                 }
-                .padding(.vertical)
+                .padding(.vertical, SupportTheme.Spacing.m)
             }
+            .supportScreen()
             .navigationTitle("Programs")
             .task { await loadData() }
             .refreshable { await loadData() }
@@ -96,6 +100,7 @@ struct ProgramsLibraryView: View {
 
     private func loadData() async {
         isLoading = true
+        loadError = nil
         defer { isLoading = false }
 
         do {
@@ -105,7 +110,7 @@ struct ProgramsLibraryView: View {
             programs = try await programsTask
             activeEnrollment = try await enrollmentTask
         } catch {
-            appState.showError(.apiError(error.localizedDescription))
+            loadError = error.localizedDescription
         }
     }
 }
@@ -114,48 +119,42 @@ struct ProgramsLibraryView: View {
 
 struct ARGroundingCard: View {
     @Binding var showARExercises: Bool
-    
+
     var body: some View {
         Button {
             showARExercises = true
         } label: {
-            HStack(spacing: 16) {
+            HStack(spacing: SupportTheme.Spacing.m) {
                 // AR Icon
                 ZStack {
-                    RoundedRectangle(cornerRadius: 12)
+                    RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
                         .fill(
-                            LinearGradient(
-                                colors: [.indigo, .purple],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
+                            SupportTheme.surface
                         )
                         .frame(width: 56, height: 56)
-                    
+
                     Image(systemName: "arkit")
                         .font(.title2)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(SupportTheme.textPrimary)
                 }
-                
-                VStack(alignment: .leading, spacing: 4) {
+
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     Text("AR Grounding")
                         .font(.headline)
-                    
+
                     Text("Immersive exercises using augmented reality")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
+                        .foregroundStyle(SupportTheme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                
+
                 Spacer()
-                
+
                 Image(systemName: "chevron.right")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
-            .padding()
-            .background(Color(.secondarySystemBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .supportCard()
         }
         .buttonStyle(.plain)
         .accessibilityLabel("AR Grounding")
@@ -170,7 +169,7 @@ struct CategoryFilterRow: View {
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
+            HStack(spacing: SupportTheme.Spacing.xs) {
                 // All category button
                 FilterChip(
                     label: "All",
@@ -183,7 +182,7 @@ struct CategoryFilterRow: View {
                     FilterChip(
                         label: category.displayName,
                         icon: category.icon,
-                        color: category.color,
+                        color: SupportTheme.accent,
                         isSelected: selected == category
                     ) {
                         selected = category
@@ -203,7 +202,7 @@ struct FilterChip: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 4) {
+            HStack(spacing: SupportTheme.Spacing.xxs) {
                 if let icon = icon {
                     Image(systemName: icon)
                         .font(.caption)
@@ -211,10 +210,10 @@ struct FilterChip: View {
                 Text(label)
                     .font(.subheadline)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(isSelected ? color : Color(.secondarySystemBackground))
-            .foregroundStyle(isSelected ? .white : .primary)
+            .padding(.horizontal, SupportTheme.Spacing.s)
+            .padding(.vertical, SupportTheme.Spacing.xs)
+            .background(isSelected ? color : SupportTheme.surface)
+            .foregroundStyle(isSelected ? SupportTheme.onAccent : SupportTheme.textPrimary)
             .clipShape(Capsule())
         }
         .buttonStyle(.plain)
@@ -227,39 +226,38 @@ struct ProgramCard: View {
     let program: Program
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             // Cover image or icon
             ZStack {
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(program.category.color.gradient)
+                RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                    .fill(SupportTheme.accent)
 
                 Image(systemName: program.category.icon)
                     .font(.largeTitle)
-                    .foregroundStyle(.white.opacity(0.8))
+                    .foregroundStyle(SupportTheme.textPrimary.opacity(0.8))
             }
             .frame(height: 100)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 // Title - fixed height for 2 lines
                 Text(program.title)
                     .font(.headline)
-                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
                     .multilineTextAlignment(.leading)
                     .frame(height: 48, alignment: .topLeading)
 
                 // Duration - single line, no wrapping
                 Text("\(program.formattedDuration)  •  \(program.estimatedDailyMinutes) min/day")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
+                    .foregroundStyle(SupportTheme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 // Premium badge - fixed height to reserve space
                 Group {
                     if program.premiumOnly {
                         Label("Premium", systemImage: "crown.fill")
                             .font(.caption2)
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(SupportTheme.accent)
                     } else {
                         Color.clear
                     }
@@ -279,12 +277,12 @@ struct ActiveProgramCard: View {
         NavigationLink {
             ProgramDayView(enrollment: enrollment)
         } label: {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                 HStack {
                     VStack(alignment: .leading) {
                         Text("Continue Program")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                         Text(enrollment.program?.title ?? "")
                             .font(.headline)
                     }
@@ -294,33 +292,30 @@ struct ActiveProgramCard: View {
                     Text("Day \(enrollment.currentDay)")
                         .font(.title2)
                         .fontWeight(.bold)
-                        .foregroundStyle(enrollment.program?.category.color ?? .blue)
+                        .foregroundStyle(SupportTheme.accent)
                 }
 
                 // Progress bar
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(Color(.systemGray5))
+                        RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                            .fill(SupportTheme.separator)
 
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(enrollment.program?.category.color ?? .blue)
+                        RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                            .fill(SupportTheme.accent)
                             .frame(width: geo.size.width * enrollment.progressPercentage)
                     }
                 }
                 .frame(height: 8)
 
                 HStack {
-                    Label("\(enrollment.streakDays) day streak", systemImage: "flame")
                     Spacer()
                     Text("\(enrollment.daysRemaining) days left")
                 }
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
             }
-            .padding()
-            .background(Color(.secondarySystemBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .supportCard()
         }
         .buttonStyle(.plain)
     }
@@ -333,21 +328,21 @@ struct EmptyProgramsView: View {
     let clearFilter: () -> Void
 
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             Image(systemName: "book.closed")
-                .font(.system(size: 48))
-                .foregroundStyle(.secondary)
+                .font(.system(.largeTitle))
+                .foregroundStyle(SupportTheme.textSecondary)
 
             Text(hasFilter ? "No programs in this category" : "No programs available")
                 .font(.headline)
 
             if hasFilter {
                 Button("Clear Filter", action: clearFilter)
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.supportSecondary)
             }
         }
         .frame(maxWidth: .infinity)
-        .padding(.top, 60)
+        .padding(.top, SupportTheme.Spacing.xl)
     }
 }
 

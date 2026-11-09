@@ -21,36 +21,36 @@ struct GeneratedStoryView: View {
         self.content = content
         _isFavorite = State(initialValue: content.isFavorite)
     }
-    
+
     var body: some View {
         ZStack {
             // Dark ambient background
-            Color.black
+            SupportTheme.canvas
                 .ignoresSafeArea()
-            
+
             // Subtle starfield or gradient
             storyBackground
-            
-            VStack(spacing: 32) {
+
+            VStack(spacing: SupportTheme.Spacing.xl) {
                 // Header with dismiss
                 headerView
-                
+
                 Spacer()
-                
+
                 // Story info
                 storyInfoView
-                
+
                 Spacer()
-                
+
                 // Minimalist player controls
                 playerControls
-                
+
                 // Bottom toolbar
                 bottomToolbar
             }
-            .padding()
+            .padding(SupportTheme.Spacing.m)
         }
-        .preferredColorScheme(.dark)
+
         .sheet(isPresented: $showBackgroundSounds) {
             BackgroundSoundsSheet(
                 selectedSound: $player.backgroundSound,
@@ -89,28 +89,20 @@ struct GeneratedStoryView: View {
             defaults.removeObject(forKey: originalBrightnessKey)
         }
     }
-    
+
     // MARK: - Story Background
-    
+
     private var storyBackground: some View {
         ZStack {
             // Gradient from deep purple to black
-            LinearGradient(
-                colors: [
-                    Color.indigo.opacity(0.3),
-                    Color.purple.opacity(0.15),
-                    Color.black
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
+            SupportTheme.canvas
             .ignoresSafeArea()
-            
+
             // Subtle stars effect
             GeometryReader { geometry in
                 ForEach(0..<30, id: \.self) { index in
                     Circle()
-                        .fill(Color.white.opacity(Double.random(in: 0.1...0.4)))
+                        .fill(SupportTheme.surface.opacity(Double.random(in: 0.1...0.4)))
                         .frame(width: CGFloat.random(in: 1...3))
                         .position(
                             x: CGFloat.random(in: 0...geometry.size.width),
@@ -120,9 +112,9 @@ struct GeneratedStoryView: View {
             }
         }
     }
-    
+
     // MARK: - Header
-    
+
     private var headerView: some View {
         HStack {
             Button {
@@ -130,69 +122,65 @@ struct GeneratedStoryView: View {
             } label: {
                 Image(systemName: "xmark.circle.fill")
                     .font(.title2)
-                    .foregroundStyle(.white.opacity(0.6))
+                    .foregroundStyle(SupportTheme.textPrimary.opacity(0.6))
+                    .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                    .accessibilityLabel("Close")
             }
-            
+
             Spacer()
-            
+
             // Sleep timer indicator
             if let remaining = player.sleepTimerMinutes, remaining > 0 {
-                HStack(spacing: 4) {
+                HStack(spacing: SupportTheme.Spacing.xxs) {
                     Image(systemName: "moon.zzz")
                     Text(player.formattedSleepTimerRemaining)
                 }
                 .font(.caption)
-                .foregroundStyle(.indigo)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(.indigo.opacity(0.2))
+                .foregroundStyle(SupportTheme.accent)
+                .padding(.horizontal, SupportTheme.Spacing.s)
+                .padding(.vertical, SupportTheme.Spacing.xxs)
+                .background(SupportTheme.surface.opacity(0.2))
                 .clipShape(Capsule())
             }
         }
     }
-    
+
     // MARK: - Story Info
-    
+
     private var storyInfoView: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             // Moon icon
             Image(systemName: "moon.stars.fill")
-                .font(.system(size: 64))
-                .foregroundStyle(
-                    LinearGradient(
-                        colors: [.indigo, .purple],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-            
+                .font(.system(.largeTitle))
+                .foregroundStyle(SupportTheme.accent)
+
             Text(content.title)
                 .font(.title2.bold())
-                .foregroundStyle(.white)
+                .foregroundStyle(SupportTheme.textPrimary)
                 .multilineTextAlignment(.center)
-            
+
             if let duration = content.duration {
                 Text("\(duration / 60) min")
                     .font(.subheadline)
-                    .foregroundStyle(.white.opacity(0.6))
+                    .foregroundStyle(SupportTheme.textPrimary.opacity(0.6))
             }
-            
+
             if player.usesBuiltInVoice {
                 Label("Built-in voice", systemImage: "speaker.wave.2")
                     .font(.caption)
-                    .foregroundStyle(.white.opacity(0.6))
+                    .foregroundStyle(SupportTheme.textPrimary.opacity(0.6))
             }
 
             // Loading/error states
             if player.isLoading {
                 ProgressView("Preparing audio...")
-                    .tint(.white)
+                    .tint(SupportTheme.accent)
             }
-            
+
             if let error = player.error {
                 Text(error)
                     .font(.caption)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(SupportTheme.accent)
                 Button("Try again") {
                     loadAttempt += 1
                 }
@@ -200,16 +188,16 @@ struct GeneratedStoryView: View {
             }
         }
     }
-    
+
     // MARK: - Player Controls
-    
+
     private var playerControls: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: SupportTheme.Spacing.l) {
             // Progress bar
-            VStack(spacing: 8) {
+            VStack(spacing: SupportTheme.Spacing.xs) {
                 if player.usesBuiltInVoice {
                     ProgressView(value: player.progress)
-                        .tint(.indigo)
+                        .tint(SupportTheme.accent)
                 } else {
                     Slider(
                         value: Binding(
@@ -218,7 +206,7 @@ struct GeneratedStoryView: View {
                         ),
                         in: 0...max(player.duration, 1)
                     )
-                    .tint(.indigo)
+                    .tint(SupportTheme.accent)
                     .disabled(!player.canSeek)
                 }
 
@@ -230,17 +218,19 @@ struct GeneratedStoryView: View {
                     }
                 }
                 .font(.caption)
-                .foregroundStyle(.white.opacity(0.5))
+                .foregroundStyle(SupportTheme.textPrimary.opacity(0.5))
             }
-            
+
             // Play/pause with skip
-            HStack(spacing: 48) {
+            HStack(spacing: SupportTheme.Spacing.xl) {
                 Button {
                     player.skipBackward()
                 } label: {
                     Image(systemName: "gobackward.15")
                         .font(.title2)
-                        .foregroundStyle(.white.opacity(0.7))
+                        .foregroundStyle(SupportTheme.textPrimary.opacity(0.7))
+                        .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                        .accessibilityLabel("Back 15 seconds")
                 }
                 .disabled(!player.canSeek)
 
@@ -248,81 +238,84 @@ struct GeneratedStoryView: View {
                     player.togglePlayback()
                 } label: {
                     Image(systemName: player.isPlaybackRequested ? "pause.circle.fill" : "play.circle.fill")
-                        .font(.system(size: 72))
-                        .foregroundStyle(.indigo)
+                        .font(.system(.largeTitle))
+                        .foregroundStyle(SupportTheme.accent)
+                        .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                 }
                 .disabled(!player.canPlay)
                 .accessibilityLabel(player.isPlaybackRequested ? "Pause" : "Play")
-                
+
                 Button {
                     player.skipForward()
                 } label: {
                     Image(systemName: "goforward.15")
                         .font(.title2)
-                        .foregroundStyle(.white.opacity(0.7))
+                        .foregroundStyle(SupportTheme.textPrimary.opacity(0.7))
+                        .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                        .accessibilityLabel("Forward 15 seconds")
                 }
                 .disabled(!player.canSeek)
             }
         }
     }
-    
+
     // MARK: - Bottom Toolbar
-    
+
     private var bottomToolbar: some View {
-        HStack(spacing: 32) {
+        HStack(spacing: SupportTheme.Spacing.xl) {
             // Background sounds
             Button {
                 showBackgroundSounds = true
             } label: {
-                VStack(spacing: 4) {
+                VStack(spacing: SupportTheme.Spacing.xxs) {
                     Image(systemName: player.backgroundSound != nil ? "waveform.circle.fill" : "waveform.circle")
                     Text("Sounds")
                         .font(.caption2)
                 }
-                .foregroundStyle(player.backgroundSound != nil ? .indigo : .white.opacity(0.6))
+                .foregroundStyle(player.backgroundSound != nil ? .indigo : SupportTheme.textPrimary.opacity(0.6))
             }
-            
+
             // Sleep timer
             Button {
                 showSleepTimer = true
             } label: {
-                VStack(spacing: 4) {
+                VStack(spacing: SupportTheme.Spacing.xxs) {
                     Image(systemName: player.sleepTimerMinutes != nil ? "timer.circle.fill" : "timer")
                     Text("Timer")
                         .font(.caption2)
                 }
-                .foregroundStyle(player.sleepTimerMinutes != nil ? .indigo : .white.opacity(0.6))
+                .foregroundStyle(player.sleepTimerMinutes != nil ? .indigo : SupportTheme.textPrimary.opacity(0.6))
             }
-            
+
             // Brightness control
             Button {
                 adjustBrightness()
             } label: {
-                VStack(spacing: 4) {
+                VStack(spacing: SupportTheme.Spacing.xxs) {
                     Image(systemName: brightnessIcon)
                     Text("Dim")
                         .font(.caption2)
                 }
-                .foregroundStyle(.white.opacity(0.6))
+                .foregroundStyle(SupportTheme.textPrimary.opacity(0.6))
             }
-            
+
             // Favorite
             Button {
                 toggleFavorite()
             } label: {
-                VStack(spacing: 4) {
+                VStack(spacing: SupportTheme.Spacing.xxs) {
                     Image(systemName: isFavorite ? "heart.fill" : "heart")
                     Text("Save")
                         .font(.caption2)
                 }
-                .foregroundStyle(isFavorite ? .pink : .white.opacity(0.6))
+                .foregroundStyle(isFavorite ? .pink : SupportTheme.textPrimary.opacity(0.6))
             }
         }
         .font(.title3)
     }
-    
+
     // MARK: - Brightness
-    
+
     private var brightnessIcon: String {
         if screenBrightness < 0.2 {
             return "sun.min"
@@ -332,7 +325,7 @@ struct GeneratedStoryView: View {
             return "sun.max.fill"
         }
     }
-    
+
     private func dimScreen() {
         originalBrightness = UIScreen.main.brightness
         // Persist to UserDefaults for force-quit recovery
@@ -345,7 +338,7 @@ struct GeneratedStoryView: View {
         // Clear persisted value since we've restored
         UserDefaults.standard.removeObject(forKey: Self.originalBrightnessKey)
     }
-    
+
     private func adjustBrightness() {
         // Cycle through brightness levels: 0.1 → 0.3 → 0.5 → 0.1
         if screenBrightness < 0.2 {
@@ -357,12 +350,12 @@ struct GeneratedStoryView: View {
         }
         UIScreen.main.brightness = CGFloat(screenBrightness)
     }
-    
+
     // MARK: - Actions
-    
+
     private func toggleFavorite() {
         isFavorite.toggle()
-        
+
         Task {
             do {
                 let service = GeneratedContentService(supabase: supabase)

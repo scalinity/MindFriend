@@ -2,6 +2,7 @@ import SwiftUI
 
 /// Detail view for a pattern alert with intervention options and feedback collection
 struct PatternAlertView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let alert: PatternAlert
     @ObservedObject var engine: StressSignatureEngine
 
@@ -14,7 +15,7 @@ struct PatternAlertView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 24) {
+            VStack(spacing: SupportTheme.Spacing.l) {
                 // Header
                 alertHeader
 
@@ -42,8 +43,9 @@ struct PatternAlertView: View {
                     dismissButton
                 }
             }
-            .padding()
+            .padding(SupportTheme.Spacing.m)
         }
+        .supportScreen()
         .navigationTitle("Pattern Alert")
         .navigationBarTitleDisplayMode(.inline)
         .alert("Thank You", isPresented: $showingFeedbackSuccess) {
@@ -58,15 +60,15 @@ struct PatternAlertView: View {
     // MARK: - Alert Header
 
     private var alertHeader: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: SupportTheme.Spacing.s) {
             ZStack {
                 Circle()
                     .fill(severityGradient)
                     .frame(width: 80, height: 80)
 
                 Image(systemName: severityIcon)
-                    .font(.system(size: 32))
-                    .foregroundStyle(.white)
+                    .font(.system(.largeTitle))
+                    .foregroundStyle(SupportTheme.textPrimary)
             }
 
             Text(alert.severity.displayName)
@@ -75,7 +77,7 @@ struct PatternAlertView: View {
 
             Text("Detected \(alert.detectedAt, style: .relative)")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
 
             if let hours = alert.predictedHours {
                 HStack {
@@ -83,23 +85,23 @@ struct PatternAlertView: View {
                     Text("Estimated \(hours)h until crisis")
                 }
                 .font(.caption)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(Color.orange.opacity(0.2))
-                .foregroundStyle(.orange)
-                .cornerRadius(16)
+                .padding(.horizontal, SupportTheme.Spacing.s)
+                .padding(.vertical, SupportTheme.Spacing.xxs)
+                .background(SupportTheme.surface)
+                .foregroundStyle(SupportTheme.accent)
+                .cornerRadius(SupportTheme.cardRadius)
             }
         }
     }
 
-    private var severityGradient: LinearGradient {
+    private var severityGradient: Color {
         switch alert.severity {
         case .mild:
-            return LinearGradient(colors: [.yellow, .orange], startPoint: .topLeading, endPoint: .bottomTrailing)
+            return SupportTheme.surface
         case .moderate:
-            return LinearGradient(colors: [.orange, .red.opacity(0.8)], startPoint: .topLeading, endPoint: .bottomTrailing)
+            return SupportTheme.surface
         case .severe:
-            return LinearGradient(colors: [.red, .pink], startPoint: .topLeading, endPoint: .bottomTrailing)
+            return SupportTheme.surface
         }
     }
 
@@ -114,7 +116,7 @@ struct PatternAlertView: View {
     // MARK: - Message Card
 
     private var messageCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text(generateMessage())
                 .font(.body)
                 .lineSpacing(4)
@@ -123,11 +125,9 @@ struct PatternAlertView: View {
 
             Text("This pattern has been detected based on your personal warning signs.")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
-        .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(12)
+        .supportCard()
     }
 
     private func generateMessage() -> String {
@@ -158,7 +158,7 @@ struct PatternAlertView: View {
     // MARK: - Active Components Card
 
     private var activeComponentsCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("Active Warning Signs")
                 .font(.headline)
 
@@ -166,7 +166,7 @@ struct PatternAlertView: View {
                 if let component = SignatureComponent.component(for: active.signal) {
                     HStack {
                         Image(systemName: component.category.icon)
-                            .foregroundStyle(.purple)
+                            .foregroundStyle(SupportTheme.accent)
                             .frame(width: 24)
 
                         VStack(alignment: .leading) {
@@ -181,39 +181,37 @@ struct PatternAlertView: View {
 
                                 Text("\(Int(active.detectedValue * 100))%")
                                     .font(.caption2)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(SupportTheme.textSecondary)
 
                                 if active.daysActive > 1 {
                                     Text("• \(active.daysActive) days")
                                         .font(.caption2)
-                                        .foregroundStyle(.secondary)
+                                        .foregroundStyle(SupportTheme.textSecondary)
                                 }
                             }
                         }
 
                         Spacer()
                     }
-                    .padding(.vertical, 4)
+                    .padding(.vertical, SupportTheme.Spacing.xxs)
                 }
             }
         }
-        .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(12)
+        .supportCard()
     }
 
     private func signalColor(_ value: Double) -> Color {
         switch value {
         case 0.8...: return .red
-        case 0.6...: return .orange
-        default: return .yellow
+        case 0.6...: return SupportTheme.accent
+        default: return SupportTheme.accent
         }
     }
 
     // MARK: - Interventions Card
 
     private func interventionsCard(pending: PendingIntervention) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("Suggested Support")
                 .font(.headline)
 
@@ -224,8 +222,8 @@ struct PatternAlertView: View {
                     HStack {
                         interventionIcon(intervention.type)
                             .frame(width: 32, height: 32)
-                            .background(Color.purple.opacity(0.1))
-                            .cornerRadius(8)
+                            .background(SupportTheme.surface)
+                            .cornerRadius(SupportTheme.controlRadius)
 
                         VStack(alignment: .leading) {
                             Text(intervention.name)
@@ -233,17 +231,15 @@ struct PatternAlertView: View {
                                 .fontWeight(.medium)
                             Text(intervention.description)
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                         }
 
                         Spacer()
 
                         Image(systemName: "chevron.right")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
-                    .padding()
-                    .background(Color(.systemGray6))
-                    .cornerRadius(12)
+                    .supportCard()
                 }
                 .buttonStyle(.plain)
             }
@@ -255,19 +251,19 @@ struct PatternAlertView: View {
         switch type {
         case .exercise:
             Image(systemName: "figure.mind.and.body")
-                .foregroundStyle(.purple)
+                .foregroundStyle(SupportTheme.accent)
         case .chat:
             Image(systemName: "bubble.left.and.bubble.right.fill")
-                .foregroundStyle(.blue)
+                .foregroundStyle(SupportTheme.accent)
         case .socialConnection:
             Image(systemName: "person.2.fill")
-                .foregroundStyle(.green)
+                .foregroundStyle(SupportTheme.accent)
         case .crisisResources:
             Image(systemName: "phone.fill")
                 .foregroundStyle(.red)
         case .journal:
             Image(systemName: "book.fill")
-                .foregroundStyle(.orange)
+                .foregroundStyle(SupportTheme.accent)
         }
     }
 
@@ -279,15 +275,15 @@ struct PatternAlertView: View {
     // MARK: - Feedback Card
 
     private var feedbackCard: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
             Text("Was this helpful?")
                 .font(.headline)
 
             Text("Your feedback helps us improve pattern detection")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
 
-            VStack(spacing: 12) {
+            VStack(spacing: SupportTheme.Spacing.s) {
                 ForEach([AlertFeedback.accuratePrediction, .helpedPrevent, .falseAlarm], id: \.self) { feedback in
                     feedbackButton(feedback)
                 }
@@ -295,7 +291,7 @@ struct PatternAlertView: View {
 
             if selectedFeedback != nil {
                 TextField("Add notes (optional)", text: $feedbackNotes, axis: .vertical)
-                    .textFieldStyle(.roundedBorder)
+                    .supportField()
                     .lineLimit(2...4)
 
                 Button {
@@ -304,28 +300,23 @@ struct PatternAlertView: View {
                     HStack {
                         if isSubmitting {
                             ProgressView()
-                                .tint(.white)
+                                .tint(SupportTheme.accent)
                         } else {
                             Text("Submit Feedback")
                         }
                     }
                     .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.purple)
-                    .foregroundStyle(.white)
-                    .cornerRadius(12)
                 }
+                .buttonStyle(.supportPrimary)
                 .disabled(isSubmitting)
             }
         }
-        .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(12)
+        .supportCard()
     }
 
     private func feedbackButton(_ feedback: AlertFeedback) -> some View {
         Button {
-            withAnimation {
+            withAnimation(.easeInOut(duration: 0.2)) {
                 selectedFeedback = feedback
             }
         } label: {
@@ -340,12 +331,12 @@ struct PatternAlertView: View {
 
                 if selectedFeedback == feedback {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.purple)
+                        .foregroundStyle(SupportTheme.accent)
                 }
             }
-            .padding()
-            .background(selectedFeedback == feedback ? Color.purple.opacity(0.1) : Color(.systemGray5))
-            .cornerRadius(8)
+            .padding(SupportTheme.Spacing.m)
+            .background(selectedFeedback == feedback ? SupportTheme.accent.opacity(0.1) : SupportTheme.separator)
+            .cornerRadius(SupportTheme.controlRadius)
         }
         .buttonStyle(.plain)
     }
@@ -361,8 +352,8 @@ struct PatternAlertView: View {
 
     private func feedbackColor(_ feedback: AlertFeedback) -> Color {
         switch feedback {
-        case .accuratePrediction, .helpedPrevent: return .green
-        case .falseAlarm: return .orange
+        case .accuratePrediction, .helpedPrevent: return SupportTheme.accent
+        case .falseAlarm: return SupportTheme.accent
         case .missedPattern: return .red
         }
     }
@@ -370,7 +361,7 @@ struct PatternAlertView: View {
     private var feedbackGivenCard: some View {
         HStack {
             Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(.green)
+                .foregroundStyle(SupportTheme.accent)
 
             VStack(alignment: .leading) {
                 Text("Feedback Received")
@@ -380,15 +371,13 @@ struct PatternAlertView: View {
                 if let feedback = alert.userFeedback {
                     Text(feedback.displayName)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
             }
 
             Spacer()
         }
-        .padding()
-        .background(Color.green.opacity(0.1))
-        .cornerRadius(12)
+        .supportCard()
     }
 
     // MARK: - Dismiss Button
@@ -399,10 +388,10 @@ struct PatternAlertView: View {
         } label: {
             Text("Dismiss Alert")
                 .frame(maxWidth: .infinity)
-                .padding()
-                .background(Color(.systemGray5))
-                .foregroundStyle(.primary)
-                .cornerRadius(12)
+                .padding(SupportTheme.Spacing.m)
+                .background(SupportTheme.separator)
+                .foregroundStyle(SupportTheme.textPrimary)
+                .cornerRadius(SupportTheme.controlRadius)
         }
     }
 

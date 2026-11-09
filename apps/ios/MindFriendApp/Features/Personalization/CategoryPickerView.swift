@@ -4,6 +4,7 @@
 import SwiftUI
 
 struct CategoryPickerView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Binding var selectedCategories: Set<String>
 
     private let availableCategories: [(name: String, icon: String)] = [
@@ -28,7 +29,7 @@ struct CategoryPickerView: View {
             Section {
                 ForEach(availableCategories, id: \.name) { category in
                     Button {
-                        withAnimation {
+                        withAnimation(.easeInOut(duration: 0.2)) {
                             if selectedCategories.contains(category.name) {
                                 selectedCategories.remove(category.name)
                             } else {
@@ -36,20 +37,20 @@ struct CategoryPickerView: View {
                             }
                         }
                     } label: {
-                        HStack(spacing: 12) {
+                        HStack(spacing: SupportTheme.Spacing.s) {
                             Image(systemName: category.icon)
                                 .font(.body)
-                                .foregroundStyle(selectedCategories.contains(category.name) ? .blue : .secondary)
+                                .foregroundStyle(selectedCategories.contains(category.name) ? .blue : SupportTheme.textSecondary)
                                 .frame(width: 24)
 
                             Text(category.name)
-                                .foregroundStyle(.primary)
+                                .foregroundStyle(SupportTheme.textPrimary)
 
                             Spacer()
 
                             if selectedCategories.contains(category.name) {
                                 Image(systemName: "checkmark")
-                                    .foregroundStyle(.blue)
+                                    .foregroundStyle(SupportTheme.accent)
                                     .fontWeight(.semibold)
                             }
                         }
@@ -61,13 +62,14 @@ struct CategoryPickerView: View {
                 Text("Select categories that interest you most. We'll prioritize content from these areas.")
             }
         }
+        .supportScreen()
         .navigationTitle("Categories")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 if !selectedCategories.isEmpty {
                     Button("Clear All") {
-                        withAnimation {
+                        withAnimation(.easeInOut(duration: 0.2)) {
                             selectedCategories.removeAll()
                         }
                     }

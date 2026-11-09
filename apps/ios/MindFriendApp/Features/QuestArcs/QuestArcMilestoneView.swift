@@ -16,100 +16,66 @@ struct QuestArcMilestoneView: View {
     let onShare: () -> Void
 
     @State private var showConfetti = false
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var starScale: CGFloat = 0.5
-    @State private var starRotation: Double = -30
 
     var body: some View {
         ZStack {
             // Background gradient
-            LinearGradient(
-                colors: [.orange.opacity(0.3), .yellow.opacity(0.2), .clear],
-                startPoint: .top,
-                endPoint: .bottom
-            )
+            SupportTheme.canvas
             .ignoresSafeArea()
 
             // Content
-            VStack(spacing: 32) {
+            VStack(spacing: SupportTheme.Spacing.xl) {
                 Spacer()
 
-                // Animated star badge
-                ZStack {
-                    // Glow effect
-                    Circle()
-                        .fill(Color.yellow.opacity(0.3))
-                        .frame(width: 160, height: 160)
-                        .blur(radius: 20)
+                CelebrationEmblem(.text("\(milestoneNumber)"), tint: SupportTheme.Celebration.gold)
+                    .celebrationReveal()
 
-                    // Star
-                    Image(systemName: "star.fill")
-                        .font(.system(size: 80))
-                        .foregroundStyle(
-                            LinearGradient(
-                                colors: [.yellow, .orange],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .scaleEffect(starScale)
-                        .rotationEffect(.degrees(starRotation))
-
-                    // Milestone number
-                    Text("\(milestoneNumber)")
-                        .font(.title.weight(.bold))
-                        .foregroundStyle(.white)
-                }
-
-                VStack(spacing: 12) {
-                    Text("Milestone Reached!")
+                VStack(spacing: SupportTheme.Spacing.s) {
+                    Text("Milestone reached")
                         .font(.largeTitle.weight(.bold))
 
                     Text("Day \(dayNumber) of \(arcTitle)")
                         .font(.title3)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
 
                     Text("Milestone \(milestoneNumber) of \(totalMilestones)")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
                 .multilineTextAlignment(.center)
 
                 // Encouragement message
                 Text(encouragementMessage)
                     .font(.body)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
+                    .padding(.horizontal, SupportTheme.Spacing.xl)
 
                 Spacer()
 
                 // Actions
-                VStack(spacing: 12) {
+                VStack(spacing: SupportTheme.Spacing.s) {
                     Button {
                         onShare()
                     } label: {
                         Label("Share with Circles", systemImage: "person.2.fill")
                             .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.orange)
-                            .foregroundStyle(.white)
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
                     }
+                    .buttonStyle(.supportPrimary)
 
                     Button {
                         onDismiss()
                     } label: {
                         Text("Continue")
                             .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color(.secondarySystemBackground))
-                            .foregroundStyle(.primary)
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .padding(SupportTheme.Spacing.m)
+                            .background(SupportTheme.surface)
+                            .foregroundStyle(SupportTheme.textPrimary)
+                            .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
                     }
                 }
-                .padding(.horizontal)
-                .padding(.bottom, 32)
+                .padding(.horizontal, SupportTheme.Spacing.m)
+                .padding(.bottom, SupportTheme.Spacing.xl)
             }
 
             // Confetti overlay
@@ -120,15 +86,6 @@ struct QuestArcMilestoneView: View {
             }
         }
         .onAppear {
-            if reduceMotion {
-                starScale = 1.0
-                starRotation = 0
-            } else {
-                withAnimation(.spring(response: 0.6, dampingFraction: 0.6)) {
-                    starScale = 1.0
-                    starRotation = 0
-                }
-            }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                 showConfetti = true
             }
@@ -138,16 +95,16 @@ struct QuestArcMilestoneView: View {
     private var encouragementMessage: String {
         switch milestoneNumber {
         case 1:
-            return "You've taken the first big step! Keep the momentum going."
+            return "You've reached your first milestone. Take a moment to notice what helped."
         case 2:
-            return "Halfway through your journey. You're building real habits!"
+            return "You're halfway through your journey. Your completed practices are here to revisit."
         case 3:
-            return "Almost there! Your dedication is truly inspiring."
+            return "You've reached another milestone. Continue at a pace that works for you."
         default:
             if milestoneNumber == totalMilestones {
-                return "You did it! You've completed the entire journey!"
+                return "You've completed this journey. Take a moment to reflect on what you want to carry forward."
             }
-            return "Amazing progress! Keep up the great work."
+            return "Another part of your journey is complete."
         }
     }
 }
@@ -162,59 +119,37 @@ struct QuestArcCompletionView: View {
     let onDismiss: () -> Void
     let onBrowseMore: () -> Void
 
-    @State private var trophyScale: CGFloat = 0.5
     @State private var showConfetti = false
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack {
             // Background gradient
-            LinearGradient(
-                colors: [.purple.opacity(0.3), .blue.opacity(0.2), .clear],
-                startPoint: .top,
-                endPoint: .bottom
-            )
+            SupportTheme.canvas
             .ignoresSafeArea()
 
-            VStack(spacing: 32) {
+            VStack(spacing: SupportTheme.Spacing.xl) {
                 Spacer()
 
-                // Trophy
-                ZStack {
-                    Circle()
-                        .fill(Color.purple.opacity(0.3))
-                        .frame(width: 180, height: 180)
-                        .blur(radius: 25)
+                CelebrationEmblem(.symbol("trophy.fill"), tint: SupportTheme.Celebration.gold)
+                    .celebrationReveal()
 
-                    Image(systemName: "trophy.fill")
-                        .font(.system(size: 100))
-                        .foregroundStyle(
-                            LinearGradient(
-                                colors: [.yellow, .orange],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .scaleEffect(trophyScale)
-                }
-
-                VStack(spacing: 12) {
-                    Text("Journey Complete!")
+                VStack(spacing: SupportTheme.Spacing.s) {
+                    Text("Journey complete")
                         .font(.largeTitle.weight(.bold))
 
                     Text(arcTitle)
                         .font(.title3)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
 
                 // Stats
-                HStack(spacing: 32) {
+                HStack(spacing: SupportTheme.Spacing.xl) {
                     VStack {
                         Text("\(totalDays)")
                             .font(.title.weight(.bold))
                         Text("Days")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
 
                     VStack {
@@ -222,46 +157,41 @@ struct QuestArcCompletionView: View {
                             .font(.title.weight(.bold))
                         Text("Milestones")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                 }
-                .padding()
-                .background(Color(.secondarySystemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .supportCard()
 
                 Text("Congratulations on completing your wellness journey! You've built lasting habits and shown incredible dedication.")
                     .font(.body)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
+                    .padding(.horizontal, SupportTheme.Spacing.xl)
 
                 Spacer()
 
-                VStack(spacing: 12) {
+                VStack(spacing: SupportTheme.Spacing.s) {
                     Button {
                         onBrowseMore()
                     } label: {
                         Label("Start Another Journey", systemImage: "sparkles")
                             .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.purple)
-                            .foregroundStyle(.white)
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
                     }
+                    .buttonStyle(.supportPrimary)
 
                     Button {
                         onDismiss()
                     } label: {
                         Text("Done")
                             .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color(.secondarySystemBackground))
-                            .foregroundStyle(.primary)
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .padding(SupportTheme.Spacing.m)
+                            .background(SupportTheme.surface)
+                            .foregroundStyle(SupportTheme.textPrimary)
+                            .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
                     }
                 }
-                .padding(.horizontal)
-                .padding(.bottom, 32)
+                .padding(.horizontal, SupportTheme.Spacing.m)
+                .padding(.bottom, SupportTheme.Spacing.xl)
             }
 
             if showConfetti {
@@ -271,9 +201,6 @@ struct QuestArcCompletionView: View {
             }
         }
         .onAppear {
-            withAnimation(reduceMotion ? nil : .spring(response: 0.8, dampingFraction: 0.5)) {
-                trophyScale = 1.0
-            }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 showConfetti = true
             }

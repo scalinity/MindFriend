@@ -15,59 +15,59 @@ struct SensoryAudioLibraryView: View {
     @State private var selectedSoundscape: SleepContent?
     @State private var isLoading = true
     @State private var error: String?
-    
+
     private var isPremiumUser: Bool {
         appState.entitlements.tier == .premium
     }
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
                 // Header
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                     Text("Audio Soundscapes")
                         .font(.largeTitle)
                         .fontWeight(.bold)
 
                     Text("Listen to nature sounds to relax your mind")
                         .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(SupportTheme.textSecondary)
                 }
-                .padding(.horizontal)
+                .padding(.horizontal, SupportTheme.Spacing.m)
 
                 // Content states
                 if isLoading {
-                    VStack(spacing: 16) {
+                    VStack(spacing: SupportTheme.Spacing.m) {
                         ProgressView()
                         Text("Loading soundscapes...")
                             .font(.subheadline)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(SupportTheme.textSecondary)
                     }
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 60)
+                    .padding(.vertical, SupportTheme.Spacing.xl)
                 } else if let error = error {
-                    VStack(spacing: 16) {
+                    VStack(spacing: SupportTheme.Spacing.m) {
                         Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.system(size: 40))
-                            .foregroundColor(.orange)
+                            .font(.system(.largeTitle))
+                            .foregroundColor(SupportTheme.accent)
                         Text(error)
                             .font(.subheadline)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(SupportTheme.textSecondary)
                             .multilineTextAlignment(.center)
                         Button("Retry") {
                             Task { await loadSoundscapes() }
                         }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.supportSecondary)
                     }
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 60)
-                    .padding(.horizontal)
+                    .padding(.vertical, SupportTheme.Spacing.xl)
+                    .padding(.horizontal, SupportTheme.Spacing.m)
                 } else if soundscapes.isEmpty {
                     // Coming soon state
-                    VStack(spacing: 16) {
+                    VStack(spacing: SupportTheme.Spacing.m) {
                         Image(systemName: "speaker.wave.3.fill")
-                            .font(.system(size: 60))
-                            .foregroundColor(.teal.opacity(0.5))
+                            .font(.system(.largeTitle))
+                            .foregroundColor(SupportTheme.accent.opacity(0.5))
 
                         Text("Coming Soon")
                             .font(.title2)
@@ -75,14 +75,14 @@ struct SensoryAudioLibraryView: View {
 
                         Text("Nature soundscapes are being prepared. Check back soon!")
                             .font(.subheadline)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(SupportTheme.textSecondary)
                             .multilineTextAlignment(.center)
                     }
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 60)
-                    .padding(.horizontal)
+                    .padding(.vertical, SupportTheme.Spacing.xl)
+                    .padding(.horizontal, SupportTheme.Spacing.m)
                 } else {
-                    VStack(spacing: 12) {
+                    VStack(spacing: SupportTheme.Spacing.s) {
                         ForEach(soundscapes) { soundscape in
                             SleepSoundscapeRow(
                                 soundscape: soundscape,
@@ -92,11 +92,12 @@ struct SensoryAudioLibraryView: View {
                             }
                         }
                     }
-                    .padding(.horizontal)
+                    .padding(.horizontal, SupportTheme.Spacing.m)
                 }
             }
-            .padding(.vertical)
+            .padding(.vertical, SupportTheme.Spacing.m)
         }
+        .supportScreen()
         .navigationTitle("Audio")
         .task {
             await loadSoundscapes()
@@ -108,7 +109,7 @@ struct SensoryAudioLibraryView: View {
             )
         }
     }
-    
+
     private func handleSoundscapeTap(_ soundscape: SleepContent) {
         if soundscape.isPremium && !isPremiumUser {
             appState.showPaywall = true
@@ -142,66 +143,66 @@ struct SleepSoundscapeRow: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 16) {
+            HStack(spacing: SupportTheme.Spacing.m) {
                 // Icon
                 ZStack {
                     Circle()
-                        .fill(Color.teal.opacity(isLocked ? 0.1 : 0.2))
+                        .fill(SupportTheme.accent.opacity(isLocked ? 0.1 : 0.2))
                         .frame(width: 60, height: 60)
 
                     if isLocked {
                         Image(systemName: "lock.fill")
                             .font(.title2)
-                            .foregroundColor(.gray)
+                            .foregroundColor(SupportTheme.textSecondary)
                     } else {
                         Image(systemName: categoryIcon(soundscape.category))
                             .font(.title2)
-                            .foregroundColor(.teal)
+                            .foregroundColor(SupportTheme.accent)
                     }
                 }
 
                 // Soundscape info
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     HStack {
                         Text(soundscape.title)
                             .font(.headline)
-                            .foregroundColor(isLocked ? .secondary : .primary)
+                            .foregroundColor(isLocked ? .secondary : SupportTheme.textPrimary)
 
                         if isLocked {
                             Image(systemName: "lock.fill")
                                 .font(.caption)
-                                .foregroundColor(.gray)
+                                .foregroundColor(SupportTheme.textSecondary)
                         }
                     }
 
                     if let description = soundscape.description {
                         Text(description)
                             .font(.subheadline)
-                            .foregroundColor(.secondary)
-                            .lineLimit(2)
+                            .foregroundColor(SupportTheme.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
 
-                    HStack(spacing: 8) {
+                    HStack(spacing: SupportTheme.Spacing.xs) {
                         if isLocked {
                             Text("Premium")
                                 .font(.caption2)
                                 .fontWeight(.medium)
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(Color.gray.opacity(0.6))
+                                .foregroundColor(SupportTheme.textPrimary)
+                                .padding(.horizontal, SupportTheme.Spacing.xxs)
+                                .padding(.vertical, SupportTheme.Spacing.xxs)
+                                .background(SupportTheme.textSecondary.opacity(0.6))
                                 .clipShape(Capsule())
                         } else {
                             Label(soundscape.formattedDuration, systemImage: "clock")
                                 .font(.caption)
-                                .foregroundColor(.secondary)
-                                .lineLimit(1)
+                                .foregroundColor(SupportTheme.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
                                 .fixedSize()
 
                             if soundscape.isLoopable {
                                 Image(systemName: "repeat")
                                     .font(.caption)
-                                    .foregroundColor(.secondary)
+                                    .foregroundColor(SupportTheme.textSecondary)
                             }
                         }
                     }
@@ -211,14 +212,9 @@ struct SleepSoundscapeRow: View {
 
                 Image(systemName: isLocked ? "lock.fill" : "chevron.right")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(SupportTheme.textSecondary)
             }
-            .padding()
-            .background(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(Color(.systemBackground))
-                    .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 2)
-            )
+            .supportCard()
             .opacity(isLocked ? 0.8 : 1.0)
         }
         .buttonStyle(.plain)
@@ -249,14 +245,10 @@ struct SleepSoundscapePlayerView: View {
     var body: some View {
         ZStack {
             // Background gradient
-            LinearGradient(
-                colors: [Color.teal.opacity(0.3), Color.black],
-                startPoint: .top,
-                endPoint: .bottom
-            )
+            SupportTheme.canvas
             .ignoresSafeArea()
 
-            VStack(spacing: 32) {
+            VStack(spacing: SupportTheme.Spacing.xl) {
                 // Header
                 HStack {
                     Button {
@@ -265,48 +257,50 @@ struct SleepSoundscapePlayerView: View {
                     } label: {
                         Image(systemName: "xmark.circle.fill")
                             .font(.title2)
-                            .foregroundColor(.white.opacity(0.8))
+                            .foregroundColor(SupportTheme.textPrimary.opacity(0.8))
+                            .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                            .accessibilityLabel("Close")
                     }
 
                     Spacer()
 
-                    VStack(alignment: .trailing, spacing: 4) {
+                    VStack(alignment: .trailing, spacing: SupportTheme.Spacing.xxs) {
                         Text(soundscape.title)
                             .font(.headline)
-                            .foregroundColor(.white)
+                            .foregroundColor(SupportTheme.textPrimary)
 
                         Text(soundscape.category.displayName)
                             .font(.caption)
-                            .foregroundColor(.white.opacity(0.7))
+                            .foregroundColor(SupportTheme.textPrimary.opacity(0.7))
                     }
                 }
-                .padding(.horizontal)
-                .padding(.top, 20)
+                .padding(.horizontal, SupportTheme.Spacing.m)
+                .padding(.top, SupportTheme.Spacing.m)
 
                 Spacer()
 
                 // Album art / visual
                 ZStack {
                     Circle()
-                        .fill(Color.teal.opacity(0.3))
+                        .fill(SupportTheme.accent.opacity(0.3))
                         .frame(width: 200, height: 200)
 
                     Image(systemName: categoryIcon(soundscape.category))
-                        .font(.system(size: 80))
-                        .foregroundColor(.white.opacity(0.8))
+                        .font(.system(.largeTitle))
+                        .foregroundColor(SupportTheme.textPrimary.opacity(0.8))
                 }
 
                 Spacer()
 
                 // Timer display
-                VStack(spacing: 8) {
+                VStack(spacing: SupportTheme.Spacing.xs) {
                     Text(formatTime(currentTime))
-                        .font(.system(size: 48, weight: .bold, design: .rounded))
-                        .foregroundColor(.white)
+                        .font(.system(.largeTitle, design: .rounded).weight(.bold))
+                        .foregroundColor(SupportTheme.textPrimary)
 
                     if let duration = soundscape.audioURL.flatMap({ _ in Double(soundscape.durationSeconds) }), duration > 0 {
                         ProgressView(value: currentTime / duration)
-                            .tint(.white)
+                            .tint(SupportTheme.accent)
                             .frame(width: 200)
                     }
                 }
@@ -314,20 +308,22 @@ struct SleepSoundscapePlayerView: View {
                 Spacer()
 
                 // Controls
-                HStack(spacing: 40) {
+                HStack(spacing: SupportTheme.Spacing.xl) {
                     // Play/Pause button
                     Button {
                         togglePlayPause()
                     } label: {
                         ZStack {
                             Circle()
-                                .fill(.white)
+                                .fill(SupportTheme.surface)
                                 .frame(width: 80, height: 80)
 
                             Image(systemName: isPlaying ? "pause.fill" : "play.fill")
                                 .font(.title)
-                                .foregroundColor(.black)
+                                .foregroundColor(SupportTheme.textPrimary)
                         }
+                        .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                        .accessibilityLabel(isPlaying ? "Pause" : "Play")
                     }
 
                     // Stop button
@@ -335,16 +331,16 @@ struct SleepSoundscapePlayerView: View {
                         audioPlayerService.stop()
                         dismiss()
                     } label: {
-                        VStack(spacing: 4) {
+                        VStack(spacing: SupportTheme.Spacing.xxs) {
                             Image(systemName: "stop.fill")
                                 .font(.title2)
                             Text("End")
                                 .font(.caption)
                         }
-                        .foregroundColor(.white.opacity(0.8))
+                        .foregroundColor(SupportTheme.textPrimary.opacity(0.8))
                     }
                 }
-                .padding(.bottom, 40)
+                .padding(.bottom, SupportTheme.Spacing.xl)
             }
         }
         .navigationBarHidden(true)
@@ -362,16 +358,24 @@ struct SleepSoundscapePlayerView: View {
         .onChange(of: error) { _, newValue in
             showErrorAlert = newValue != nil
         }
-        .alert("Error", isPresented: $showErrorAlert) {
-            Button("OK") {
-                error = nil
-                dismiss()
+        .safeAreaInset(edge: .bottom) {
+                if showErrorAlert {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
+                    if let error = error {
+                        Text(error)
+                    }
+
+                    Button("OK") { showErrorAlert = false;
+                        error = nil
+                        dismiss()
+                    }
+                }
+                    .foregroundStyle(SupportTheme.textSecondary)
+                    .buttonStyle(.supportSecondary)
+                    .supportCard()
+                    .padding(SupportTheme.Spacing.m)
+                }
             }
-        } message: {
-            if let error = error {
-                Text(error)
-            }
-        }
     }
 
     private func startPlayback() async {
@@ -423,54 +427,54 @@ struct SoundscapeRow: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 16) {
+            HStack(spacing: SupportTheme.Spacing.m) {
                 // Icon
                 ZStack {
                     Circle()
-                        .fill(Color.teal.opacity(0.2))
+                        .fill(SupportTheme.accent.opacity(0.2))
                         .frame(width: 60, height: 60)
 
                     Image(systemName: soundscapeIcon(soundscape.id))
                         .font(.title2)
-                        .foregroundColor(.teal)
+                        .foregroundColor(SupportTheme.accent)
                 }
 
                 // Soundscape info
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     HStack {
                         Text(soundscape.name)
                             .font(.headline)
-                            .foregroundColor(.primary)
+                            .foregroundColor(SupportTheme.textPrimary)
 
                         if soundscape.isPremium {
                             Image(systemName: "crown.fill")
                                 .font(.caption)
-                                .foregroundColor(.yellow)
+                                .foregroundColor(SupportTheme.accent)
                         }
                     }
 
                     Text(soundscape.description)
                         .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(SupportTheme.textSecondary)
 
-                    HStack(spacing: 12) {
+                    HStack(spacing: SupportTheme.Spacing.s) {
                         Label("\(soundscape.durationSeconds / 60) min", systemImage: "clock")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(SupportTheme.textSecondary)
 
                         if soundscape.loopable {
                             Label("Loopable", systemImage: "repeat")
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(SupportTheme.textSecondary)
                         }
 
                         if let tags = soundscape.tags, !tags.isEmpty {
                             ForEach(tags.prefix(2), id: \.self) { tag in
                                 Text(tag)
                                     .font(.caption2)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 4)
-                                    .background(Color.teal.opacity(0.1))
+                                    .padding(.horizontal, SupportTheme.Spacing.xs)
+                                    .padding(.vertical, SupportTheme.Spacing.xxs)
+                                    .background(SupportTheme.surface)
                                     .clipShape(Capsule())
                             }
                         }
@@ -481,14 +485,9 @@ struct SoundscapeRow: View {
 
                 Image(systemName: "chevron.right")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(SupportTheme.textSecondary)
             }
-            .padding()
-            .background(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(Color(.systemBackground))
-                    .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 2)
-            )
+            .supportCard()
         }
         .buttonStyle(.plain)
     }

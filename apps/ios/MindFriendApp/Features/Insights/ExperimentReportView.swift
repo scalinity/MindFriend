@@ -27,6 +27,7 @@ struct ExperimentReportView: View {
                 )
             }
         }
+        .supportScreen()
         .navigationTitle("Experiment Results")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -45,7 +46,7 @@ struct ExperimentReportView: View {
 
     private func reportContent(_ report: ExperimentReport) -> some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.l) {
                 // Header
                 reportHeader(report)
 
@@ -73,23 +74,23 @@ struct ExperimentReportView: View {
                 // Action buttons
                 actionButtons(report)
             }
-            .padding()
+            .padding(SupportTheme.Spacing.m)
         }
     }
 
     // MARK: - Report Header
 
     private func reportHeader(_ report: ExperimentReport) -> some View {
-        VStack(alignment: .center, spacing: 12) {
+        VStack(alignment: .center, spacing: SupportTheme.Spacing.s) {
             if let actionType = report.actionTypeEnum {
                 Image(systemName: actionType.icon)
-                    .font(.system(size: 50))
-                    .foregroundStyle(.white)
+                    .font(.system(.largeTitle))
+                    .foregroundStyle(SupportTheme.textPrimary)
                     .frame(width: 100, height: 100)
                     .background(
-                        report.moodImproved ? Color.green :
-                        report.moodDeclined ? Color.orange :
-                        Color.accentColor
+                        report.moodImproved ? SupportTheme.accent :
+                        report.moodDeclined ? SupportTheme.accent :
+                        SupportTheme.accent
                     )
                     .clipShape(Circle())
             }
@@ -100,40 +101,40 @@ struct ExperimentReportView: View {
 
             Text("\(report.dateRange.start) - \(report.dateRange.end)")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
 
             // Status badge
             if report.moodImproved {
                 Label("Positive Results", systemImage: "arrow.up.circle.fill")
                     .font(.caption)
                     .fontWeight(.medium)
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Color.green)
+                    .foregroundStyle(SupportTheme.textPrimary)
+                    .padding(.horizontal, SupportTheme.Spacing.s)
+                    .padding(.vertical, SupportTheme.Spacing.xxs)
+                    .background(SupportTheme.accent)
                     .clipShape(Capsule())
             }
         }
         .frame(maxWidth: .infinity)
-        .padding()
+        .padding(SupportTheme.Spacing.m)
     }
 
     // MARK: - Adherence Card
 
     private func adherenceCard(_ report: ExperimentReport) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
             Label("Adherence", systemImage: "checkmark.circle")
                 .font(.headline)
 
             HStack {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     Text("\(report.adherencePercentage)%")
-                        .font(.system(size: 44, weight: .bold, design: .rounded))
+                        .font(.system(.largeTitle, design: .rounded).weight(.bold))
                         .foregroundStyle(adherenceColor(report.adherence.rate))
 
                     Text("\(report.adherence.completedDays) of \(report.adherence.totalDays) days completed")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
 
                 Spacer()
@@ -141,7 +142,7 @@ struct ExperimentReportView: View {
                 // Visual progress ring
                 ZStack {
                     Circle()
-                        .stroke(Color(.systemGray4), lineWidth: 8)
+                        .stroke(SupportTheme.separator, lineWidth: 8)
                     Circle()
                         .trim(from: 0, to: report.adherence.rate)
                         .stroke(adherenceColor(report.adherence.rate), style: StrokeStyle(lineWidth: 8, lineCap: .round))
@@ -150,24 +151,22 @@ struct ExperimentReportView: View {
                 .frame(width: 60, height: 60)
             }
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .supportCard()
     }
 
     // MARK: - Mood Change Card
 
     private func moodChangeCard(_ report: ExperimentReport) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
             Label("Mood Change", systemImage: "face.smiling")
                 .font(.headline)
 
-            HStack(alignment: .bottom, spacing: 24) {
+            HStack(alignment: .bottom, spacing: SupportTheme.Spacing.l) {
                 // Baseline
-                VStack(spacing: 4) {
+                VStack(spacing: SupportTheme.Spacing.xxs) {
                     Text("Baseline")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                     Text(String(format: "%.1f", report.moodChange.baseline ?? 0))
                         .font(.title2)
                         .fontWeight(.semibold)
@@ -175,13 +174,13 @@ struct ExperimentReportView: View {
 
                 // Arrow
                 Image(systemName: "arrow.right")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
 
                 // Experiment
-                VStack(spacing: 4) {
+                VStack(spacing: SupportTheme.Spacing.xxs) {
                     Text("Experiment")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                     Text(String(format: "%.1f", report.moodChange.experiment ?? 0))
                         .font(.title2)
                         .fontWeight(.semibold)
@@ -191,44 +190,42 @@ struct ExperimentReportView: View {
 
                 // Delta
                 if let delta = report.moodChange.delta {
-                    VStack(spacing: 4) {
+                    VStack(spacing: SupportTheme.Spacing.xxs) {
                         Text("Change")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
-                        HStack(spacing: 2) {
+                            .foregroundStyle(SupportTheme.textSecondary)
+                        HStack(spacing: SupportTheme.Spacing.xxs) {
                             Image(systemName: delta >= 0 ? "arrow.up" : "arrow.down")
                             Text(String(format: "%.1f", abs(delta)))
                         }
                         .font(.title2)
                         .fontWeight(.bold)
-                        .foregroundStyle(delta >= 0.5 ? .green : delta <= -0.5 ? .red : .primary)
+                        .foregroundStyle(delta >= 0.5 ? .green : delta <= -0.5 ? .red : SupportTheme.textPrimary)
                     }
                 }
             }
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .supportCard()
     }
 
     // MARK: - Absolute Mood Card (No Baseline)
 
     private func absoluteMoodCard(_ report: ExperimentReport) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
             Label("Mood During Experiment", systemImage: "face.smiling")
                 .font(.headline)
 
             HStack {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     if let avgMood = report.moodChange.experiment {
                         Text(String(format: "%.1f", avgMood))
-                            .font(.system(size: 44, weight: .bold, design: .rounded))
+                            .font(.system(.largeTitle, design: .rounded).weight(.bold))
                         Text("out of 5")
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     } else {
                         Text("No mood data")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                 }
 
@@ -236,40 +233,38 @@ struct ExperimentReportView: View {
 
                 Label("Limited baseline data", systemImage: "info.circle")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .supportCard()
     }
 
     // MARK: - Energy Change Card
 
     private func energyChangeCard(_ report: ExperimentReport) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
             Label("Energy Change", systemImage: "bolt.fill")
                 .font(.headline)
 
-            HStack(alignment: .bottom, spacing: 24) {
+            HStack(alignment: .bottom, spacing: SupportTheme.Spacing.l) {
                 // Baseline
-                VStack(spacing: 4) {
+                VStack(spacing: SupportTheme.Spacing.xxs) {
                     Text("Baseline")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                     Text(String(format: "%.1f", report.energyChange.baseline ?? 0))
                         .font(.title2)
                         .fontWeight(.semibold)
                 }
 
                 Image(systemName: "arrow.right")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
 
                 // Experiment
-                VStack(spacing: 4) {
+                VStack(spacing: SupportTheme.Spacing.xxs) {
                     Text("Experiment")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                     Text(String(format: "%.1f", report.energyChange.experiment ?? 0))
                         .font(.title2)
                         .fontWeight(.semibold)
@@ -279,47 +274,45 @@ struct ExperimentReportView: View {
 
                 // Delta
                 if let delta = report.energyChange.delta {
-                    VStack(spacing: 4) {
+                    VStack(spacing: SupportTheme.Spacing.xxs) {
                         Text("Change")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
-                        HStack(spacing: 2) {
+                            .foregroundStyle(SupportTheme.textSecondary)
+                        HStack(spacing: SupportTheme.Spacing.xxs) {
                             Image(systemName: delta >= 0 ? "arrow.up" : "arrow.down")
                             Text(String(format: "%.1f", abs(delta)))
                         }
                         .font(.title2)
                         .fontWeight(.bold)
-                        .foregroundStyle(delta >= 0.5 ? .green : delta <= -0.5 ? .red : .primary)
+                        .foregroundStyle(delta >= 0.5 ? .green : delta <= -0.5 ? .red : SupportTheme.textPrimary)
                     }
                 }
             }
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .supportCard()
     }
 
     // MARK: - Recommendation Card
 
     private func recommendationCard(_ report: ExperimentReport) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
             Label("Recommendation", systemImage: "lightbulb.fill")
                 .font(.headline)
-                .foregroundStyle(.orange)
+                .foregroundStyle(SupportTheme.accent)
 
             Text(report.recommendation.text)
                 .font(.body)
 
             if !report.recommendation.nextSteps.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                     Text("Next Steps:")
                         .font(.subheadline)
                         .fontWeight(.medium)
 
                     ForEach(report.recommendation.nextSteps, id: \.self) { step in
-                        HStack(alignment: .top, spacing: 8) {
+                        HStack(alignment: .top, spacing: SupportTheme.Spacing.xs) {
                             Image(systemName: "arrow.right.circle.fill")
-                                .foregroundStyle(Color.accentColor)
+                                .foregroundStyle(SupportTheme.accent)
                                 .font(.caption)
                             Text(step)
                                 .font(.subheadline)
@@ -328,44 +321,38 @@ struct ExperimentReportView: View {
                 }
             }
         }
-        .padding()
-        .background(Color.orange.opacity(0.1))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .supportCard()
     }
 
     // MARK: - Insights Card
 
     private func insightsCard(_ report: ExperimentReport) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Label("Key Insights", systemImage: "sparkles")
                 .font(.headline)
 
             ForEach(report.insights, id: \.self) { insight in
-                HStack(alignment: .top, spacing: 8) {
+                HStack(alignment: .top, spacing: SupportTheme.Spacing.xs) {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
+                        .foregroundStyle(SupportTheme.accent)
                         .font(.caption)
                     Text(insight)
                         .font(.subheadline)
                 }
             }
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .supportCard()
     }
 
     // MARK: - Action Buttons
 
     private func actionButtons(_ report: ExperimentReport) -> some View {
-        HStack(spacing: 16) {
+        HStack(spacing: SupportTheme.Spacing.m) {
             // Share button
             ShareLink(item: report.shareText) {
                 Label("Share", systemImage: "square.and.arrow.up")
                     .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color(.secondarySystemBackground))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .supportCard()
             }
 
             // Start new experiment button
@@ -374,22 +361,19 @@ struct ExperimentReportView: View {
             } label: {
                 Label("New Experiment", systemImage: "plus.circle.fill")
                     .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.accentColor)
-                    .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
             }
+            .buttonStyle(.supportPrimary)
         }
-        .padding(.top)
+        .padding(.top, SupportTheme.Spacing.m)
     }
 
     // MARK: - Helpers
 
     private func adherenceColor(_ rate: Double) -> Color {
         if rate >= 0.8 {
-            return .green
+            return SupportTheme.accent
         } else if rate >= 0.5 {
-            return .orange
+            return SupportTheme.accent
         } else {
             return .red
         }

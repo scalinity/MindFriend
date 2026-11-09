@@ -9,6 +9,7 @@ import SwiftUI
 
 /// Step 1: Introduce weekly insights concept
 struct InsightsSummaryStep: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let onNext: () -> Void
     let onSkip: () -> Void
 
@@ -17,64 +18,65 @@ struct InsightsSummaryStep: View {
     var body: some View {
         TutorialStepView(
             icon: "chart.bar.fill",
-            iconColor: .purple,
+            iconColor: SupportTheme.accent,
             headline: "Your Weekly Summary",
             subheadline: "Every Sunday, you'll receive a personalized summary of your wellbeing patterns.",
             primaryAction: onNext,
             skipAction: onSkip
         ) {
-            VStack(spacing: 8) {
+            VStack(spacing: SupportTheme.Spacing.xs) {
                 // Example metrics
-                HStack(spacing: 12) {
+                HStack(spacing: SupportTheme.Spacing.s) {
                     InsightMetricCard(
                         icon: "face.smiling",
                         value: "3.8",
                         label: "Avg Mood",
-                        color: .green,
+                        color: SupportTheme.accent,
                         isVisible: showMetrics
                     )
                     InsightMetricCard(
-                        icon: "flame",
+                        icon: "leaf",
                         value: "5",
-                        label: "Day Streak",
-                        color: .orange,
+                        label: "Practices",
+                        color: SupportTheme.accent,
                         isVisible: showMetrics
                     )
                     InsightMetricCard(
                         icon: "star",
                         value: "6",
                         label: "Quests",
-                        color: .yellow,
+                        color: SupportTheme.accent,
                         isVisible: showMetrics
                     )
                 }
-                .padding(.horizontal, 20)
+                .padding(.horizontal, SupportTheme.Spacing.m)
 
                 // What's included
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                     Text("Your summary includes:")
                         .font(.subheadline.weight(.medium))
+                .accessibilityAddTraits(.isHeader)
 
                     ForEach(summaryItems, id: \.self) { item in
-                        HStack(spacing: 8) {
+                        HStack(spacing: SupportTheme.Spacing.xs) {
                             Image(systemName: "checkmark.circle.fill")
                                 .font(.caption)
-                                .foregroundStyle(.purple)
+                                .foregroundStyle(SupportTheme.accent)
                             Text(item)
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                     }
                 }
-                .padding(12)
-                .background(Color(.secondarySystemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .padding(.horizontal, 20)
+                .padding(SupportTheme.Spacing.s)
+                .background(SupportTheme.surface)
+                .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
+                .padding(.horizontal, SupportTheme.Spacing.m)
                 .opacity(showMetrics ? 1 : 0)
             }
             .onAppear {
-                withAnimation(.easeOut(duration: 0.5).delay(0.3)) {
+                withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .easeOut(duration: 0.5).delay(0.3)) {
                     showMetrics = true
                 }
             }
@@ -90,6 +92,7 @@ struct InsightsSummaryStep: View {
 }
 
 private struct InsightMetricCard: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let icon: String
     let value: String
     let label: String
@@ -97,7 +100,7 @@ private struct InsightMetricCard: View {
     let isVisible: Bool
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: SupportTheme.Spacing.xs) {
             Image(systemName: icon)
                 .font(.title3)
                 .foregroundStyle(color)
@@ -107,13 +110,13 @@ private struct InsightMetricCard: View {
 
             Text(label)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .scaleEffect(isVisible ? 1 : 0.8)
+        .padding(.vertical, SupportTheme.Spacing.s)
+        .background(SupportTheme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
+        .scaleEffect(reduceMotion ? 1 : (isVisible ? 1 : 0.8))
         .opacity(isVisible ? 1 : 0)
     }
 }

@@ -5,6 +5,7 @@ import SwiftUI
 import AVFoundation
 
 struct ActiveSessionView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let session: LiveSession
     @ObservedObject var liveService: LiveService
 
@@ -72,11 +73,7 @@ struct ActiveSessionView: View {
     // MARK: - Subviews
 
     private var backgroundGradient: some View {
-        LinearGradient(
-            colors: [typeColor.opacity(0.3), typeColor.opacity(0.1), Color(.systemBackground)],
-            startPoint: .top,
-            endPoint: .bottom
-        )
+        SupportTheme.canvas
         .ignoresSafeArea()
     }
 
@@ -87,16 +84,18 @@ struct ActiveSessionView: View {
             } label: {
                 Image(systemName: "xmark")
                     .font(.title3)
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(SupportTheme.textPrimary)
                     .frame(width: 44, height: 44)
-                    .background(.ultraThinMaterial)
+                    .background(SupportTheme.elevated)
                     .clipShape(Circle())
+                .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                .accessibilityLabel("Close")
             }
 
             Spacer()
 
             // Participant count
-            HStack(spacing: 6) {
+            HStack(spacing: SupportTheme.Spacing.xxs) {
                 Circle()
                     .fill(Color.red)
                     .frame(width: 8, height: 8)
@@ -105,16 +104,16 @@ struct ActiveSessionView: View {
                     .fontWeight(.medium)
             }
             .font(.subheadline)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(.ultraThinMaterial)
-            .cornerRadius(20)
+            .padding(.horizontal, SupportTheme.Spacing.s)
+            .padding(.vertical, SupportTheme.Spacing.xs)
+            .background(SupportTheme.elevated)
+            .cornerRadius(SupportTheme.cardRadius)
         }
-        .padding()
+        .padding(SupportTheme.Spacing.m)
     }
 
     private func mainContent(geometry: GeometryProxy) -> some View {
-        VStack(spacing: 24) {
+        VStack(spacing: SupportTheme.Spacing.l) {
             // Session type icon with animation
             ZStack {
                 // Outer ring
@@ -128,28 +127,28 @@ struct ActiveSessionView: View {
                     .stroke(typeColor, style: StrokeStyle(lineWidth: 4, lineCap: .round))
                     .frame(width: 160, height: 160)
                     .rotationEffect(.degrees(-90))
-                    .animation(.linear(duration: 1), value: progress)
+                    .animation(reduceMotion ? nil : .linear(duration: 1), value: progress)
 
                 // Icon
                 Image(systemName: session.sessionType.icon)
-                    .font(.system(size: 60))
+                    .font(.system(.largeTitle))
                     .foregroundStyle(typeColor)
             }
 
             // Session info
-            VStack(spacing: 8) {
+            VStack(spacing: SupportTheme.Spacing.xs) {
                 Text(session.title)
                     .font(.title2.bold())
                     .multilineTextAlignment(.center)
 
                 Text(session.sessionType.displayName)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
 
             // Time remaining
             Text(formatTime(timeRemaining))
-                .font(.system(size: 48, weight: .light, design: .rounded))
+                .font(.system(.largeTitle, design: .rounded).weight(.light))
                 .monospacedDigit()
 
             // Play/Pause button
@@ -157,8 +156,10 @@ struct ActiveSessionView: View {
                 togglePlayback()
             } label: {
                 Image(systemName: isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                    .font(.system(size: 64))
+                    .font(.system(.largeTitle))
                     .foregroundStyle(typeColor)
+                    .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                    .accessibilityLabel(isPlaying ? "Pause" : "Play")
             }
 
             // Reactions feed
@@ -167,19 +168,19 @@ struct ActiveSessionView: View {
     }
 
     private var reactionsOverlay: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: SupportTheme.Spacing.xs) {
             ForEach(Array(liveService.recentReactions.enumerated()), id: \.offset) { index, emoji in
                 Text(emoji)
                     .font(.title2)
-                    .transition(.scale.combined(with: .opacity))
+                    .transition(reduceMotion ? .opacity : .scale.combined(with: .opacity))
             }
         }
-        .animation(.spring(response: 0.3), value: liveService.recentReactions)
+        .animation(reduceMotion ? nil : .spring(response: 0.3), value: liveService.recentReactions)
         .frame(height: 40)
     }
 
     private var reactionBar: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: SupportTheme.Spacing.m) {
             ForEach(reactionEmojis, id: \.self) { emoji in
                 Button {
                     Task { await sendReaction(emoji) }
@@ -187,32 +188,32 @@ struct ActiveSessionView: View {
                     Text(emoji)
                         .font(.title)
                         .frame(width: 50, height: 50)
-                        .background(.ultraThinMaterial)
+                        .background(SupportTheme.elevated)
                         .clipShape(Circle())
                 }
             }
         }
-        .padding()
+        .padding(SupportTheme.Spacing.m)
     }
 
     private var sessionProgress: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: SupportTheme.Spacing.s) {
             // Progress bar
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
                     Rectangle()
-                        .fill(Color(.systemGray5))
+                        .fill(SupportTheme.separator)
                         .frame(height: 6)
-                        .cornerRadius(3)
+                        .cornerRadius(SupportTheme.controlRadius)
 
                     Rectangle()
                         .fill(typeColor)
                         .frame(width: geometry.size.width * progress, height: 6)
-                        .cornerRadius(3)
+                        .cornerRadius(SupportTheme.controlRadius)
                 }
             }
             .frame(height: 6)
-            .padding(.horizontal)
+            .padding(.horizontal, SupportTheme.Spacing.m)
 
             // Complete button (shows when session is ending)
             if timeRemaining < 60 || progress > 0.9 {
@@ -222,7 +223,7 @@ struct ActiveSessionView: View {
                     HStack {
                         if isCompleting {
                             ProgressView()
-                                .tint(.white)
+                                .tint(SupportTheme.accent)
                         } else {
                             Image(systemName: "checkmark.circle.fill")
                             Text("Complete Session")
@@ -230,27 +231,24 @@ struct ActiveSessionView: View {
                     }
                     .font(.headline)
                     .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.green)
-                    .foregroundStyle(.white)
-                    .cornerRadius(12)
                 }
+                .buttonStyle(.supportPrimary)
                 .disabled(isCompleting)
-                .padding(.horizontal)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .padding(.horizontal, SupportTheme.Spacing.m)
+                .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
             }
         }
-        .padding(.bottom)
-        .animation(.spring(), value: progress > 0.9)
+        .padding(.bottom, SupportTheme.Spacing.m)
+        .animation(reduceMotion ? nil : .spring(), value: progress > 0.9)
     }
 
     // MARK: - Helpers
 
     private var typeColor: Color {
         switch session.sessionType {
-        case .breathing: return .blue
-        case .meditation: return .purple
-        case .bodyScan: return .green
+        case .breathing: return SupportTheme.accent
+        case .meditation: return SupportTheme.accent
+        case .bodyScan: return SupportTheme.accent
         }
     }
 

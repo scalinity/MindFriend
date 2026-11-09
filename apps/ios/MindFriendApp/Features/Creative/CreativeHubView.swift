@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct CreativeHubView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var container: DependencyContainer
     @Environment(\.scenePhase) private var scenePhase
@@ -14,16 +15,16 @@ struct CreativeHubView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 24) {
+            VStack(spacing: SupportTheme.Spacing.l) {
                 // Quota display
                 if let quota = quota {
                     QuotaCard(quota: quota)
-                        .padding(.horizontal)
+                        .padding(.horizontal, SupportTheme.Spacing.m)
                 }
 
                 // Quick Create Section
                 quickCreateSection
-                    .padding(.horizontal)
+                    .padding(.horizontal, SupportTheme.Spacing.m)
 
                 // Recent Creations
                 if !recentWorks.isEmpty {
@@ -32,19 +33,21 @@ struct CreativeHubView: View {
 
                 // Creative Exercises
                 exercisesSection
-                    .padding(.horizontal)
+                    .padding(.horizontal, SupportTheme.Spacing.m)
             }
-            .padding(.vertical)
+            .padding(.vertical, SupportTheme.Spacing.m)
         }
+        .supportScreen()
         .navigationTitle("Create")
         .navigationBarTitleDisplayMode(.large)
-        .toolbarBackground(.visible, for: .navigationBar)
+
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 NavigationLink {
                     CreativeGalleryView()
                 } label: {
                     Image(systemName: "photo.on.rectangle.angled")
+                    .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                 }
                 .accessibilityLabel("Gallery")
             }
@@ -86,16 +89,17 @@ struct CreativeHubView: View {
     // MARK: - Quick Create Section
 
     private var quickCreateSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
             Text("Express Yourself")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
-            HStack(spacing: 12) {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: dynamicTypeSize.isAccessibilitySize ? 1 : 3), spacing: SupportTheme.Spacing.s) {
                 QuickCreateButton(
                     icon: "wand.and.stars",
                     title: "AI Art",
                     subtitle: "Create from feelings",
-                    color: .purple
+                    color: SupportTheme.accent
                 ) {
                     showArtGenerator = true
                 }
@@ -104,7 +108,7 @@ struct CreativeHubView: View {
                     icon: "mic.fill",
                     title: "Voice",
                     subtitle: "Record thoughts",
-                    color: .red
+                    color: SupportTheme.accent
                 ) {
                     showVoiceRecorder = true
                 }
@@ -113,7 +117,7 @@ struct CreativeHubView: View {
                     icon: "pencil.tip",
                     title: "Draw",
                     subtitle: "Free expression",
-                    color: .blue
+                    color: SupportTheme.accent
                 ) {
                     showDrawingCanvas = true
                 }
@@ -124,20 +128,21 @@ struct CreativeHubView: View {
     // MARK: - Recent Creations Section
 
     private var recentCreationsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             HStack {
                 Text("Recent Creations")
                     .font(.headline)
+                .accessibilityAddTraits(.isHeader)
                 Spacer()
                 NavigationLink("See All") {
                     CreativeGalleryView()
                 }
                 .font(.subheadline)
             }
-            .padding(.horizontal)
+            .padding(.horizontal, SupportTheme.Spacing.m)
 
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
+                HStack(spacing: SupportTheme.Spacing.s) {
                     ForEach(recentWorks.prefix(5)) { work in
                         NavigationLink {
                             CreativeWorkDetailView(work: work)
@@ -147,7 +152,7 @@ struct CreativeHubView: View {
                         .buttonStyle(.plain)
                     }
                 }
-                .padding(.horizontal)
+                .padding(.horizontal, SupportTheme.Spacing.m)
             }
         }
     }
@@ -155,7 +160,7 @@ struct CreativeHubView: View {
     // MARK: - Exercises Section
 
     private var exercisesSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("Guided Exercises")
                 .font(.headline)
 
@@ -165,28 +170,26 @@ struct CreativeHubView: View {
                 HStack {
                     Image(systemName: "paintpalette")
                         .font(.title2)
-                        .foregroundStyle(.purple)
+                        .foregroundStyle(SupportTheme.accent)
                         .frame(width: 44, height: 44)
-                        .background(Color.purple.opacity(0.1))
-                        .cornerRadius(10)
+                        .background(SupportTheme.surface)
+                        .cornerRadius(SupportTheme.controlRadius)
 
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                         Text("Art Therapy Exercises")
                             .font(.subheadline.bold())
-                            .foregroundStyle(.primary)
+                            .foregroundStyle(SupportTheme.textPrimary)
                         Text("Guided creative activities for emotional expression")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
 
                     Spacer()
 
                     Image(systemName: "chevron.right")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
-                .padding()
-                .background(Color(.secondarySystemBackground))
-                .cornerRadius(12)
+                .supportCard()
             }
             .buttonStyle(.plain)
         }
@@ -216,27 +219,27 @@ struct QuotaCard: View {
     let quota: CreativeQuota
 
     var body: some View {
-        HStack(spacing: 16) {
-            VStack(alignment: .leading, spacing: 4) {
+        HStack(spacing: SupportTheme.Spacing.m) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Label("\(quota.aiArtLimit - quota.aiArtCount) AI Art", systemImage: "wand.and.stars")
                     .font(.caption.bold())
-                    .lineLimit(1)
+                    .fixedSize(horizontal: false, vertical: true)
                 Text("left today")
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
             .fixedSize(horizontal: true, vertical: false)
 
             Divider()
                 .frame(height: 30)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Label("\(quota.voiceMinutesLimit - quota.voiceMinutesUsed) min Voice", systemImage: "mic")
                     .font(.caption.bold())
-                    .lineLimit(1)
+                    .fixedSize(horizontal: false, vertical: true)
                 Text("left today")
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
             .fixedSize(horizontal: true, vertical: false)
 
@@ -248,18 +251,16 @@ struct QuotaCard: View {
                 } label: {
                     Text("Upgrade")
                         .font(.caption.bold())
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(Color.accentColor)
-                        .foregroundStyle(.white)
-                        .cornerRadius(8)
+                        .padding(.horizontal, SupportTheme.Spacing.s)
+                        .padding(.vertical, SupportTheme.Spacing.xxs)
+                        .background(SupportTheme.accent)
+                        .foregroundStyle(SupportTheme.onAccent)
+                        .cornerRadius(SupportTheme.controlRadius)
                 }
                 .fixedSize()
             }
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .cornerRadius(12)
+        .supportCard()
     }
 }
 
@@ -272,23 +273,23 @@ struct QuickCreateButton: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 8) {
+            VStack(spacing: SupportTheme.Spacing.xs) {
                 Image(systemName: icon)
                     .font(.title)
                     .foregroundStyle(color)
 
                 Text(title)
                     .font(.caption.bold())
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(SupportTheme.textPrimary)
 
                 Text(subtitle)
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 16)
-            .background(color.opacity(0.1))
-            .cornerRadius(12)
+            .padding(.vertical, SupportTheme.Spacing.m)
+            .background(SupportTheme.surface)
+            .cornerRadius(SupportTheme.controlRadius)
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
@@ -301,7 +302,7 @@ struct CreativeWorkThumbnail: View {
     let work: CreativeWork
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             // Thumbnail image
             Group {
                 if let storagePath = work.storagePath {
@@ -325,21 +326,21 @@ struct CreativeWorkThumbnail: View {
                 }
             }
             .frame(width: 120, height: 120)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
 
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 4) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
+                HStack(spacing: SupportTheme.Spacing.xxs) {
                     Image(systemName: work.workType.icon)
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                     Text(work.title ?? work.workType.displayName)
                         .font(.caption)
-                        .lineLimit(1)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Text(work.createdAt.formatted(date: .abbreviated, time: .omitted))
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
         }
         .frame(width: 120)
@@ -349,11 +350,11 @@ struct CreativeWorkThumbnail: View {
 
     private var placeholderView: some View {
         Rectangle()
-            .fill(Color(.secondarySystemBackground))
+            .fill(SupportTheme.surface)
             .overlay {
                 Image(systemName: work.workType.icon)
                     .font(.title)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
     }
 

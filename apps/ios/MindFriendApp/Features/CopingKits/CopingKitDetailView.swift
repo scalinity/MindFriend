@@ -3,6 +3,7 @@ import SwiftUI
 // MARK: - Coping Kit Detail View
 
 struct CopingKitDetailView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject var viewModel: CopingKitsViewModel
     let kit: CopingKit
 
@@ -35,6 +36,7 @@ struct CopingKitDetailView: View {
                 // Bottom action bar
                 actionBar
             }
+            .supportScreen()
             .navigationTitle(kit.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -46,6 +48,8 @@ struct CopingKitDetailView: View {
                         }
                     } label: {
                         Image(systemName: "xmark")
+                        .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                        .accessibilityLabel("Close")
                     }
                 }
 
@@ -57,7 +61,9 @@ struct CopingKitDetailView: View {
                             }
                         } label: {
                             Image(systemName: userState.pinned ? "pin.fill" : "pin")
-                                .foregroundStyle(userState.pinned ? .pink : .secondary)
+                                .foregroundStyle(userState.pinned ? .pink : SupportTheme.textSecondary)
+                                .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                                .accessibilityLabel(userState.pinned ? "Unpin" : "Pin")
                         }
                     }
                 }
@@ -70,15 +76,23 @@ struct CopingKitDetailView: View {
                     ProgressView()
                         .scaleEffect(1.5)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .background(Color.black.opacity(0.2))
+                        .background(SupportTheme.canvas.opacity(0.2))
                 }
             }
-            .alert("Error", isPresented: $viewModel.showError) {
-                Button("OK") {
-                    viewModel.dismissError()
+            .safeAreaInset(edge: .bottom) {
+                if viewModel.showError {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
+                        Text(viewModel.error?.localizedDescription ?? "An error occurred")
+
+                        Button("OK") {
+                            viewModel.dismissError()
+                        }
+                    }
+                    .foregroundStyle(SupportTheme.textSecondary)
+                    .buttonStyle(.supportSecondary)
+                    .supportCard()
+                    .padding(SupportTheme.Spacing.m)
                 }
-            } message: {
-                Text(viewModel.error?.localizedDescription ?? "An error occurred")
             }
         }
     }
@@ -89,11 +103,11 @@ struct CopingKitDetailView: View {
         GeometryReader { geometry in
             ZStack(alignment: .leading) {
                 Rectangle()
-                    .fill(Color(.systemGray5))
+                    .fill(SupportTheme.separator)
                     .frame(height: 4)
 
                 Rectangle()
-                    .fill(Color.pink)
+                    .fill(SupportTheme.accent)
                     .frame(width: geometry.size.width * viewModel.progressPercentage, height: 4)
             }
         }
@@ -103,41 +117,41 @@ struct CopingKitDetailView: View {
     // MARK: - Kit Overview Content
 
     private var kitOverviewContent: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: SupportTheme.Spacing.l) {
             Spacer()
 
             // Kit icon
             ZStack {
                 Circle()
-                    .fill(Color.pink.opacity(0.15))
+                    .fill(SupportTheme.accent.opacity(0.15))
                     .frame(width: 80, height: 80)
 
                 Image(systemName: kit.contextIcon)
-                    .font(.system(size: 36))
-                    .foregroundStyle(.pink)
+                    .font(.system(.largeTitle))
+                    .foregroundStyle(SupportTheme.accent)
             }
 
             // Kit info
-            VStack(spacing: 8) {
+            VStack(spacing: SupportTheme.Spacing.xs) {
                 Text(kit.description)
                     .font(.body)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .multilineTextAlignment(.center)
 
-                HStack(spacing: 16) {
+                HStack(spacing: SupportTheme.Spacing.m) {
                     Label(kit.formattedDuration, systemImage: "clock")
                     Label("\(kit.stepsCount) steps", systemImage: "list.bullet")
                 }
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
             }
-            .padding(.horizontal, 24)
+            .padding(.horizontal, SupportTheme.Spacing.l)
 
             // Steps preview
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                 Text("What's included")
                     .font(.headline)
-                    .padding(.horizontal)
+                    .padding(.horizontal, SupportTheme.Spacing.m)
 
                 ForEach(Array(kit.steps.enumerated()), id: \.offset) { index, step in
                     HStack {
@@ -145,10 +159,10 @@ struct CopingKitDetailView: View {
                             .font(.caption)
                             .fontWeight(.bold)
                             .frame(width: 24, height: 24)
-                            .background(Color.pink.opacity(0.15))
+                            .background(SupportTheme.surface)
                             .clipShape(Circle())
 
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                             Text(step.typeDescription)
                                 .font(.subheadline)
                                 .fontWeight(.medium)
@@ -156,8 +170,8 @@ struct CopingKitDetailView: View {
                             if let instructions = step.instructions {
                                 Text(instructions)
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(2)
+                                    .foregroundStyle(SupportTheme.textSecondary)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
                         }
 
@@ -166,10 +180,10 @@ struct CopingKitDetailView: View {
                         if let duration = step.durationSeconds {
                             Text("\(duration)s")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                         }
                     }
-                    .padding(.horizontal)
+                    .padding(.horizontal, SupportTheme.Spacing.m)
                 }
             }
 
@@ -180,11 +194,11 @@ struct CopingKitDetailView: View {
     // MARK: - Action Bar
 
     private var actionBar: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: SupportTheme.Spacing.xs) {
             // Step counter
             Text("Step \(viewModel.currentStepIndex + 1) of \(kit.stepsCount)")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
 
             // Action button
             Button {
@@ -201,15 +215,12 @@ struct CopingKitDetailView: View {
                 Text(buttonTitle)
                     .fontWeight(.semibold)
                     .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.pink)
-                    .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
             }
+            .buttonStyle(.supportPrimary)
             .disabled(viewModel.isCompleting)
         }
-        .padding()
-        .background(Color(.systemBackground))
+        .padding(SupportTheme.Spacing.m)
+        .background(SupportTheme.canvas)
     }
 
     private var buttonTitle: String {

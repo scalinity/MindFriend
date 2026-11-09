@@ -9,6 +9,7 @@ import SwiftUI
 
 /// Step 3: Explain milestone system and rewards
 struct JourneyMilestonesStep: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let onNext: () -> Void
     let onSkip: () -> Void
 
@@ -24,13 +25,13 @@ struct JourneyMilestonesStep: View {
     var body: some View {
         JourneyTutorialStepLayout(
             icon: "flag.fill",
-            iconColor: .orange,
+            iconColor: SupportTheme.accent,
             headline: "Celebrate Your Progress",
             subheadline: "Reach milestones along the way and see your transformation unfold.",
             primaryAction: onNext,
             skipAction: onSkip
         ) {
-            VStack(spacing: 8) {
+            VStack(spacing: SupportTheme.Spacing.xs) {
                 // Milestone timeline
                 HStack(spacing: 0) {
                     ForEach(Array(milestones.enumerated()), id: \.offset) { index, milestone in
@@ -40,48 +41,48 @@ struct JourneyMilestonesStep: View {
                             if index < milestones.count - 1 {
                                 // Connection line
                                 Rectangle()
-                                    .fill(milestone.achieved ? Color.orange : Color(.systemGray4))
+                                    .fill(milestone.achieved ? SupportTheme.accent : SupportTheme.separator)
                                     .frame(height: 2)
                                     .frame(maxWidth: .infinity)
                             }
                         }
                     }
                 }
-                .padding(.horizontal, 24)
+                .padding(.horizontal, SupportTheme.Spacing.l)
 
                 // Rewards preview
-                VStack(spacing: 10) {
+                VStack(spacing: SupportTheme.Spacing.xs) {
                     Text("When you hit a milestone:")
                         .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(SupportTheme.textPrimary)
 
-                    HStack(spacing: 20) {
-                        rewardItem(icon: "trophy.fill", color: .yellow, label: "Badges")
-                        rewardItem(icon: "star.fill", color: .orange, label: "XP Bonus")
-                        rewardItem(icon: "square.and.arrow.up", color: .blue, label: "Share")
+                    HStack(spacing: SupportTheme.Spacing.m) {
+                        rewardItem(icon: "trophy.fill", color: SupportTheme.accent, label: "Badges")
+                        rewardItem(icon: "star.fill", color: SupportTheme.accent, label: "XP Bonus")
+                        rewardItem(icon: "square.and.arrow.up", color: SupportTheme.accent, label: "Share")
                     }
                 }
-                .padding(.vertical, 12)
-                .padding(.horizontal, 16)
-                .background(Color(.secondarySystemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .padding(.horizontal, 20)
+                .padding(.vertical, SupportTheme.Spacing.s)
+                .padding(.horizontal, SupportTheme.Spacing.m)
+                .background(SupportTheme.surface)
+                .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
+                .padding(.horizontal, SupportTheme.Spacing.m)
                 .opacity(showMilestones ? 1 : 0)
-                .offset(y: showMilestones ? 0 : 20)
+                .offset(y: reduceMotion ? 0 : (showMilestones ? 0 : 20))
 
                 // Motivation text
                 Text("Each milestone proves your commitment and reinforces your new habits.")
                     .font(.caption)
                     .multilineTextAlignment(.center)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 20)
+                    .padding(.horizontal, SupportTheme.Spacing.m)
             }
             .onAppear {
-                withAnimation(.easeOut(duration: 0.5).delay(0.3)) {
+                withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .easeOut(duration: 0.5).delay(0.3)) {
                     showMilestones = true
                 }
-                withAnimation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true).delay(0.5)) {
+                withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .easeInOut(duration: 0.6).repeatForever(autoreverses: true).delay(0.5)) {
                     celebrateMilestone = true
                 }
             }
@@ -90,47 +91,47 @@ struct JourneyMilestonesStep: View {
 
     @ViewBuilder
     private func milestoneMarker(milestone: (day: Int, title: String, achieved: Bool), index: Int) -> some View {
-        VStack(spacing: 6) {
+        VStack(spacing: SupportTheme.Spacing.xxs) {
             ZStack {
                 Circle()
-                    .fill(milestone.achieved ? Color.orange : Color(.systemGray5))
+                    .fill(milestone.achieved ? SupportTheme.accent : SupportTheme.separator)
                     .frame(width: 36, height: 36)
-                    .scaleEffect(milestone.achieved && celebrateMilestone ? 1.1 : 1.0)
+                    .scaleEffect(reduceMotion ? 1 : (milestone.achieved && celebrateMilestone ? 1.1 : 1.0))
 
                 if milestone.achieved {
                     Image(systemName: "star.fill")
                         .font(.caption)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(SupportTheme.textPrimary)
                 } else {
                     Image(systemName: "flag.fill")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
             }
             .opacity(showMilestones ? 1 : 0)
-            .scaleEffect(showMilestones ? 1 : 0.5)
-            .animation(.easeOut(duration: 0.4).delay(Double(index) * 0.15), value: showMilestones)
+            .scaleEffect(reduceMotion ? 1 : (showMilestones ? 1 : 0.5))
+            .animation(reduceMotion ? .easeInOut(duration: 0.2) : .easeOut(duration: 0.4).delay(Double(index) * 0.15), value: showMilestones)
 
             Text("Day \(milestone.day)")
                 .font(.caption2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
 
             Text(milestone.title)
                 .font(.caption2.weight(.medium))
-                .foregroundStyle(milestone.achieved ? .orange : .secondary)
+                .foregroundStyle(milestone.achieved ? SupportTheme.Celebration.gold : SupportTheme.textSecondary)
         }
     }
 
     @ViewBuilder
     private func rewardItem(icon: String, color: Color, label: String) -> some View {
-        VStack(spacing: 4) {
+        VStack(spacing: SupportTheme.Spacing.xxs) {
             Image(systemName: icon)
                 .font(.title3)
                 .foregroundStyle(color)
 
             Text(label)
                 .font(.caption2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
     }
 }

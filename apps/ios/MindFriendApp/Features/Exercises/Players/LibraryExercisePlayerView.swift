@@ -29,6 +29,7 @@ struct LibraryExercisePlayerView: View {
             // Type-specific player content
             playerContent
         }
+        .supportScreen()
         .navigationTitle(exercise.title)
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $viewModel.showCompletion) {
@@ -42,9 +43,9 @@ struct LibraryExercisePlayerView: View {
             .safeAreaInset(edge: .bottom) {
                 Text("Efficacy unavailable: no emotional measurements were recorded. You can still save your exercise.")
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .multilineTextAlignment(.center)
-                    .padding()
+                    .padding(SupportTheme.Spacing.m)
             }
         }
         .fullScreenCover(isPresented: $viewModel.showBreakthroughCelebration) {

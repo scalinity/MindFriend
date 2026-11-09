@@ -10,6 +10,7 @@ struct ProgramDetailView: View {
 
     @State private var days: [ProgramDay] = []
     @State private var isLoading = true
+    @State private var loadError: String?
     @State private var showEnrollSheet = false
     @State private var existingEnrollment: ProgramEnrollment?
 
@@ -19,10 +20,15 @@ struct ProgramDetailView: View {
                 ProgressView("Loading program...")
                     .frame(maxWidth: .infinity, minHeight: 200)
                     .accessibilityLabel("Loading program details")
+            } else if let loadError {
+                SupportUnavailableState(title: "Program unavailable", message: loadError, actionTitle: "Try again") {
+                    Task { await loadData() }
+                }
             } else {
                 programContent
             }
         }
+        .supportScreen()
         .navigationTitle(program.title)
         .navigationBarTitleDisplayMode(.inline)
         .task { await loadData() }
@@ -35,19 +41,20 @@ struct ProgramDetailView: View {
 
     @ViewBuilder
     private var programContent: some View {
-        VStack(alignment: .leading, spacing: 24) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.l) {
             // Header
             ProgramHeaderView(program: program)
 
                 // Learning objectives
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                     Text("What You'll Learn")
                         .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
                     ForEach(program.learningObjectives, id: \.self) { objective in
-                        HStack(alignment: .top, spacing: 8) {
+                        HStack(alignment: .top, spacing: SupportTheme.Spacing.xs) {
                             Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(.green)
+                                .foregroundStyle(SupportTheme.accent)
                             Text(objective)
                         }
                         .font(.subheadline)
@@ -56,9 +63,10 @@ struct ProgramDetailView: View {
 
                 // Program overview
                 if !days.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                         Text("Program Overview")
                             .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
                         ForEach(days.prefix(5)) { day in
                             ProgramDayPreviewRow(day: day, isExpanded: day.dayNumber == 1)
@@ -67,7 +75,7 @@ struct ProgramDetailView: View {
                         if days.count > 5 {
                             Text("+ \(days.count - 5) more days")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                         }
                     }
                 }
@@ -80,7 +88,7 @@ struct ProgramDetailView: View {
                         Text("Continue Program")
                             .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.supportPrimary)
                     .controlSize(.large)
                 } else {
                     Button {
@@ -99,15 +107,16 @@ struct ProgramDetailView: View {
                         }
                         .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.supportPrimary)
                     .controlSize(.large)
                 }
             }
-            .padding()
+            .padding(SupportTheme.Spacing.m)
         }
 
     private func loadData() async {
         isLoading = true
+        loadError = nil
         defer { isLoading = false }
 
         do {
@@ -119,7 +128,7 @@ struct ProgramDetailView: View {
                 "category": program.category.rawValue
             ])
         } catch {
-            appState.showError(.apiError(error.localizedDescription))
+            loadError = error.localizedDescription
         }
     }
 }
@@ -130,20 +139,20 @@ struct ProgramHeaderView: View {
     let program: Program
 
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             // Icon/Image
             ZStack {
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(program.category.color.gradient)
+                RoundedRectangle(cornerRadius: SupportTheme.cardRadius)
+                    .fill(SupportTheme.accent)
                     .frame(width: 100, height: 100)
 
                 Image(systemName: program.category.icon)
-                    .font(.system(size: 40))
-                    .foregroundStyle(.white)
+                    .font(.system(.largeTitle))
+                    .foregroundStyle(SupportTheme.textPrimary)
             }
             .accessibilityHidden(true)
 
-            VStack(spacing: 4) {
+            VStack(spacing: SupportTheme.Spacing.xxs) {
                 Text(program.title)
                     .font(.title2)
                     .fontWeight(.bold)
@@ -152,12 +161,12 @@ struct ProgramHeaderView: View {
 
                 Text(program.description)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .multilineTextAlignment(.center)
             }
 
             // Stats row
-            HStack(spacing: 24) {
+            HStack(spacing: SupportTheme.Spacing.l) {
                 StatItem(
                     value: program.formattedDuration,
                     label: "Duration"
@@ -178,18 +187,18 @@ struct ProgramHeaderView: View {
 
             // Tags
             if !program.tags.isEmpty {
-                FlowLayout(spacing: 8) {
+                FlowLayout(spacing: SupportTheme.Spacing.xs) {
                     ForEach(program.tags, id: \.self) { tag in
                         Text(tag)
                             .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(Color(.secondarySystemBackground))
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .foregroundStyle(SupportTheme.textSecondary)
+                            .padding(.horizontal, SupportTheme.Spacing.s)
+                            .padding(.vertical, SupportTheme.Spacing.xxs)
+                            .background(SupportTheme.surface)
+                            .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
                             .overlay(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .stroke(Color(.separator), lineWidth: 0.5)
+                                RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                                    .stroke(SupportTheme.separator, lineWidth: 0.5)
                             )
                             .accessibilityLabel("Tag: \(tag)")
                     }
@@ -204,6 +213,7 @@ struct ProgramHeaderView: View {
 // MARK: - Program Day Preview Row
 
 struct ProgramDayPreviewRow: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let day: ProgramDay
     let isExpanded: Bool
 
@@ -212,7 +222,7 @@ struct ProgramDayPreviewRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Button {
-                withAnimation(.easeInOut(duration: 0.2)) {
+                withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .easeInOut(duration: 0.2)) {
                     expanded.toggle()
                 }
             } label: {
@@ -220,37 +230,37 @@ struct ProgramDayPreviewRow: View {
                     Text("Day \(day.dayNumber)")
                         .font(.subheadline)
                         .fontWeight(.medium)
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(SupportTheme.textPrimary)
 
                     Text(day.title)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                        .foregroundStyle(SupportTheme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
 
                     Spacer()
 
                     Image(systemName: "chevron.down")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .rotationEffect(.degrees(expanded ? 180 : 0))
+                        .foregroundStyle(SupportTheme.textSecondary)
+                        .rotationEffect(.degrees(reduceMotion ? 0 : (expanded ? 180 : 0)))
                         .accessibilityHidden(true)
                 }
-                .padding(.vertical, 12)
+                .padding(.vertical, SupportTheme.Spacing.s)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Day \(day.dayNumber): \(day.title)")
             .accessibilityHint(expanded ? "Double tap to collapse" : "Double tap to expand details")
 
             if expanded {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                     if let theme = day.theme {
                         Text(theme)
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
 
                     // Content type icons
-                    HStack(spacing: 12) {
+                    HStack(spacing: SupportTheme.Spacing.s) {
                         ForEach(day.content) { content in
                             Label {
                                 Text(content.type.displayName)
@@ -258,20 +268,20 @@ struct ProgramDayPreviewRow: View {
                                 Image(systemName: content.type.icon)
                             }
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                         }
                     }
 
                     Text("~\(day.estimatedMinutes) min")
                         .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
-                .padding(.bottom, 12)
-                .padding(.leading, 8)
+                .padding(.bottom, SupportTheme.Spacing.s)
+                .padding(.leading, SupportTheme.Spacing.xs)
             }
         }
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .background(SupportTheme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
         .onAppear {
             expanded = isExpanded
         }

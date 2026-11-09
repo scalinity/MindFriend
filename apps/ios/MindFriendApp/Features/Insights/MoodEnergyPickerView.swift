@@ -4,6 +4,7 @@
 import SwiftUI
 
 struct MoodEnergyPickerView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var insightLabService: InsightLabService
     let experimentId: UUID
     let dayIndex: Int
@@ -17,45 +18,41 @@ struct MoodEnergyPickerView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 32) {
+            VStack(spacing: SupportTheme.Spacing.xl) {
                 // Header
-                VStack(spacing: 8) {
+                VStack(spacing: SupportTheme.Spacing.xs) {
                     Text("Day \(dayIndex) Check-In")
                         .font(.title2)
                         .fontWeight(.bold)
 
                     Text("Rate how you're feeling today")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
-                .padding(.top)
+                .padding(.top, SupportTheme.Spacing.m)
 
                 // Mood picker
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
                     Text("How's your mood?")
                         .font(.headline)
 
                     MoodSlider(value: $selectedMood, label: "Mood")
                 }
-                .padding()
-                .background(Color(.secondarySystemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .supportCard()
 
                 // Energy picker
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
                     Text("How's your energy?")
                         .font(.headline)
 
                     EnergySlider(value: $selectedEnergy)
                 }
-                .padding()
-                .background(Color(.secondarySystemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .supportCard()
 
                 Spacer()
 
                 // Action buttons
-                VStack(spacing: 12) {
+                VStack(spacing: SupportTheme.Spacing.s) {
                     // Submit button
                     Button {
                         Task {
@@ -65,18 +62,15 @@ struct MoodEnergyPickerView: View {
                         HStack {
                             if isSubmitting {
                                 ProgressView()
-                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                    .progressViewStyle(CircularProgressViewStyle(tint: SupportTheme.textPrimary))
                                     .scaleEffect(0.8)
                             }
                             Text(isSubmitting ? "Submitting..." : "Complete Day \(dayIndex)")
                                 .fontWeight(.semibold)
                         }
                         .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.accentColor)
-                        .foregroundStyle(.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
                     }
+                    .buttonStyle(.supportPrimary)
                     .disabled(isSubmitting)
 
                     // Skip button
@@ -87,12 +81,12 @@ struct MoodEnergyPickerView: View {
                     } label: {
                         Text("Skip Mood Rating")
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                     .disabled(isSubmitting)
                 }
             }
-            .padding()
+            .padding(SupportTheme.Spacing.m)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -102,13 +96,21 @@ struct MoodEnergyPickerView: View {
                     }
                 }
             }
-            .alert("Error", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
-                Button("OK") {
-                    errorMessage = nil
-                }
-            } message: {
-                if let error = errorMessage {
-                    Text(error)
+            .safeAreaInset(edge: .bottom) {
+                if errorMessage != nil {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
+                        if let error = errorMessage {
+                            Text(error)
+                        }
+
+                        Button("OK") {
+                            errorMessage = nil
+                        }
+                    }
+                    .foregroundStyle(SupportTheme.textSecondary)
+                    .buttonStyle(.supportSecondary)
+                    .supportCard()
+                    .padding(SupportTheme.Spacing.m)
                 }
             }
         }
@@ -140,6 +142,7 @@ struct MoodEnergyPickerView: View {
 // MARK: - Mood Slider
 
 struct MoodSlider: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Binding var value: Int
     let label: String
 
@@ -152,16 +155,16 @@ struct MoodSlider: View {
     ]
 
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: SupportTheme.Spacing.s) {
             // Emoji selector
             HStack(spacing: 0) {
                 ForEach(1...5, id: \.self) { index in
                     Button {
-                        withAnimation(.spring(response: 0.3)) {
+                        withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .spring(response: 0.3)) {
                             value = index
                         }
                     } label: {
-                        VStack(spacing: 4) {
+                        VStack(spacing: SupportTheme.Spacing.xxs) {
                             Text(moods[index - 1].emoji)
                                 .font(.system(size: value == index ? 40 : 28))
                                 .opacity(value == index ? 1 : 0.5)
@@ -169,7 +172,7 @@ struct MoodSlider: View {
                             if value == index {
                                 Text(moods[index - 1].label)
                                     .font(.caption2)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(SupportTheme.textSecondary)
                             }
                         }
                         .frame(maxWidth: .infinity)
@@ -184,11 +187,11 @@ struct MoodSlider: View {
             // Selection indicator
             GeometryReader { geometry in
                 let itemWidth = geometry.size.width / 5
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(Color.accentColor)
+                RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                    .fill(SupportTheme.accent)
                     .frame(width: itemWidth * 0.6, height: 3)
                     .offset(x: itemWidth * CGFloat(value - 1) + itemWidth * 0.2)
-                    .animation(.spring(response: 0.3), value: value)
+                    .animation(reduceMotion ? nil : .spring(response: 0.3), value: value)
             }
             .frame(height: 4)
         }
@@ -198,6 +201,7 @@ struct MoodSlider: View {
 // MARK: - Energy Slider
 
 struct EnergySlider: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Binding var value: Int
 
     private let levels: [(icon: String, label: String)] = [
@@ -209,16 +213,16 @@ struct EnergySlider: View {
     ]
 
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: SupportTheme.Spacing.s) {
             // Energy selector
             HStack(spacing: 0) {
                 ForEach(1...5, id: \.self) { index in
                     Button {
-                        withAnimation(.spring(response: 0.3)) {
+                        withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .spring(response: 0.3)) {
                             value = index
                         }
                     } label: {
-                        VStack(spacing: 4) {
+                        VStack(spacing: SupportTheme.Spacing.xxs) {
                             Image(systemName: levels[index - 1].icon)
                                 .font(.system(size: value == index ? 28 : 22))
                                 .foregroundStyle(energyColor(index))
@@ -227,7 +231,7 @@ struct EnergySlider: View {
                             if value == index {
                                 Text(levels[index - 1].label)
                                     .font(.caption2)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(SupportTheme.textSecondary)
                             }
                         }
                         .frame(maxWidth: .infinity)
@@ -242,11 +246,11 @@ struct EnergySlider: View {
             // Selection indicator
             GeometryReader { geometry in
                 let itemWidth = geometry.size.width / 5
-                RoundedRectangle(cornerRadius: 2)
+                RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
                     .fill(energyColor(value))
                     .frame(width: itemWidth * 0.6, height: 3)
                     .offset(x: itemWidth * CGFloat(value - 1) + itemWidth * 0.2)
-                    .animation(.spring(response: 0.3), value: value)
+                    .animation(reduceMotion ? nil : .spring(response: 0.3), value: value)
             }
             .frame(height: 4)
         }
@@ -255,11 +259,11 @@ struct EnergySlider: View {
     private func energyColor(_ level: Int) -> Color {
         switch level {
         case 1: return .red
-        case 2: return .orange
-        case 3: return .yellow
-        case 4: return .green
-        case 5: return .green
-        default: return .gray
+        case 2: return SupportTheme.accent
+        case 3: return SupportTheme.accent
+        case 4: return SupportTheme.accent
+        case 5: return SupportTheme.accent
+        default: return SupportTheme.accent
         }
     }
 }

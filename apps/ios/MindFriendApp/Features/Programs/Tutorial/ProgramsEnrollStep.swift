@@ -9,6 +9,7 @@ import SwiftUI
 
 /// Step 2: Explain program enrollment
 struct ProgramsEnrollStep: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let onNext: () -> Void
     let onSkip: () -> Void
 
@@ -18,36 +19,36 @@ struct ProgramsEnrollStep: View {
     var body: some View {
         TutorialStepView(
             icon: "hand.tap.fill",
-            iconColor: .blue,
+            iconColor: SupportTheme.accent,
             headline: "Enroll in a Program",
             subheadline: "Browse our library and commit to a program that matches your goals.",
             primaryAction: onNext,
             skipAction: onSkip
         ) {
-            VStack(spacing: 16) {
+            VStack(spacing: SupportTheme.Spacing.m) {
                 // Example program card
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                     HStack {
                         ZStack {
-                            RoundedRectangle(cornerRadius: 10)
-                                .fill(Color.cyan.gradient)
+                            RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                                .fill(SupportTheme.accent)
                                 .frame(width: 50, height: 50)
 
                             Image(systemName: "brain.head.profile")
                                 .font(.title3)
-                                .foregroundStyle(.white)
+                                .foregroundStyle(SupportTheme.textPrimary)
                         }
 
-                        VStack(alignment: .leading, spacing: 4) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                             Text("21-Day Anxiety Reset")
                                 .font(.subheadline.weight(.semibold))
 
-                            HStack(spacing: 8) {
+                            HStack(spacing: SupportTheme.Spacing.xs) {
                                 Label("21 days", systemImage: "calendar")
                                 Label("15 min/day", systemImage: "clock")
                             }
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                         }
 
                         Spacer()
@@ -60,34 +61,34 @@ struct ProgramsEnrollStep: View {
                         Text(showEnroll ? "Enrolled!" : "Start Program")
                             .font(.subheadline.weight(.medium))
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 10)
-                            .background(showEnroll ? Color.green : Color.cyan)
-                            .foregroundStyle(.white)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .padding(.vertical, SupportTheme.Spacing.xs)
+                            .background(showEnroll ? SupportTheme.accent : SupportTheme.accent)
+                            .foregroundStyle(SupportTheme.textPrimary)
+                            .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
                     }
                     .disabled(true)
                 }
-                .padding(12)
-                .background(Color(.secondarySystemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 16))
-                .scaleEffect(showCard ? 1 : 0.9)
+                .padding(SupportTheme.Spacing.s)
+                .background(SupportTheme.surface)
+                .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
+                .scaleEffect(reduceMotion ? 1 : (showCard ? 1 : 0.9))
                 .opacity(showCard ? 1 : 0)
-                .padding(.horizontal, 20)
+                .padding(.horizontal, SupportTheme.Spacing.m)
 
                 // Enrollment info
-                VStack(spacing: 8) {
+                VStack(spacing: SupportTheme.Spacing.xs) {
                     ProgramEnrollInfoRow(icon: "clock.badge.checkmark", text: "Choose your daily reminder time")
                     ProgramEnrollInfoRow(icon: "calendar.badge.plus", text: "Start immediately or schedule for later")
                     ProgramEnrollInfoRow(icon: "arrow.clockwise", text: "Pause anytime if life gets busy")
                 }
-                .padding(.horizontal, 24)
+                .padding(.horizontal, SupportTheme.Spacing.l)
                 .opacity(showEnroll ? 1 : 0)
             }
             .onAppear {
-                withAnimation(.easeOut(duration: 0.5).delay(0.3)) {
+                withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .easeOut(duration: 0.5).delay(0.3)) {
                     showCard = true
                 }
-                withAnimation(.easeOut(duration: 0.4).delay(1.0)) {
+                withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .easeOut(duration: 0.4).delay(1.0)) {
                     showEnroll = true
                 }
             }
@@ -102,15 +103,15 @@ private struct ProgramEnrollInfoRow: View {
     let text: String
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: SupportTheme.Spacing.xs) {
             Image(systemName: icon)
                 .font(.caption)
-                .foregroundStyle(.cyan)
+                .foregroundStyle(SupportTheme.accent)
                 .frame(width: 20)
 
             Text(text)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
 
             Spacer()

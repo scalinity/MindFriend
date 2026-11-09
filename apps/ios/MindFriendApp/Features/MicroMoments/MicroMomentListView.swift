@@ -23,6 +23,7 @@ enum MicroMomentFilter: String, CaseIterable {
 
 /// List view for browsing micro-moments by type
 struct MicroMomentListView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let type: MicroMomentType
     @ObservedObject var service: MicroMomentsService
 
@@ -49,6 +50,7 @@ struct MicroMomentListView: View {
                 templateList
             }
         }
+        .supportScreen()
         .navigationTitle(type.displayName)
         .task {
             await loadTemplates()
@@ -65,28 +67,28 @@ struct MicroMomentListView: View {
     // MARK: - Loading View
 
     private var loadingView: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             ProgressView()
             Text("Loading exercises...")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
     }
 
     // MARK: - Error View
 
     private func errorView(_ message: String) -> some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             Image(systemName: "exclamationmark.triangle")
                 .font(.largeTitle)
-                .foregroundStyle(.orange)
+                .foregroundStyle(SupportTheme.accent)
 
             Text("Couldn't load exercises")
                 .font(.headline)
 
             Text(message)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .multilineTextAlignment(.center)
 
             Button("Try Again") {
@@ -94,34 +96,34 @@ struct MicroMomentListView: View {
                     await loadTemplates()
                 }
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.supportSecondary)
         }
-        .padding()
+        .padding(SupportTheme.Spacing.m)
     }
 
     // MARK: - Empty View
 
     private var emptyView: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             Image(systemName: type.icon)
                 .font(.largeTitle)
-                .foregroundStyle(type.color)
+                .foregroundStyle(SupportTheme.accent)
 
             Text("No \(type.displayName.lowercased()) exercises yet")
                 .font(.headline)
 
             Text("Check back soon for new exercises")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
-        .padding()
+        .padding(SupportTheme.Spacing.m)
     }
 
     // MARK: - Template List
 
     private var templateList: some View {
         ScrollView {
-            LazyVStack(spacing: 16) {
+            LazyVStack(spacing: SupportTheme.Spacing.m) {
                 // Type header
                 typeHeader
 
@@ -137,38 +139,38 @@ struct MicroMomentListView: View {
 
                 // Empty state when filter has no results
                 if filteredTemplates.isEmpty && !templates.isEmpty {
-                    VStack(spacing: 12) {
+                    VStack(spacing: SupportTheme.Spacing.s) {
                         Image(systemName: "magnifyingglass")
                             .font(.title)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
 
                         Text("No exercises match this filter")
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
 
                         Button("Clear Filter") {
                             selectedFilter = .all
                         }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.supportSecondary)
                     }
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 32)
+                    .padding(.vertical, SupportTheme.Spacing.xl)
                 }
             }
-            .padding()
+            .padding(SupportTheme.Spacing.m)
         }
     }
 
     private var typeHeader: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: SupportTheme.Spacing.m) {
             Image(systemName: type.icon)
                 .font(.title)
-                .foregroundStyle(.white)
+                .foregroundStyle(SupportTheme.onAccent)
                 .frame(width: 60, height: 60)
-                .background(type.color)
-                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .background(SupportTheme.accent)
+                .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text(type.displayName)
                     .font(.title2)
                     .fontWeight(.bold)
@@ -177,35 +179,35 @@ struct MicroMomentListView: View {
                 if selectedFilter == .all {
                     Text("\(templates.count) exercises available")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 } else {
                     Text("\(filteredTemplates.count) of \(templates.count) exercises")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
             }
 
             Spacer()
         }
-        .padding(.bottom, 8)
+        .padding(.bottom, SupportTheme.Spacing.xs)
     }
 
     private var filterSection: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
+            HStack(spacing: SupportTheme.Spacing.xs) {
                 ForEach(MicroMomentFilter.allCases, id: \.self) { filter in
                     MicroMomentFilterChip(
                         label: filter.rawValue,
                         isSelected: selectedFilter == filter
                     ) {
-                        withAnimation(.easeInOut(duration: 0.2)) {
+                        withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .easeInOut(duration: 0.2)) {
                             selectedFilter = filter
                         }
                     }
                 }
             }
         }
-        .padding(.bottom, 8)
+        .padding(.bottom, SupportTheme.Spacing.xs)
     }
 
     // MARK: - Data Loading
@@ -235,10 +237,10 @@ struct MicroMomentFilterChip: View {
         Button(action: action) {
             Text(label)
                 .font(.subheadline)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(isSelected ? Color.blue : Color(.secondarySystemBackground))
-                .foregroundStyle(isSelected ? .white : .primary)
+                .padding(.horizontal, SupportTheme.Spacing.m)
+                .padding(.vertical, SupportTheme.Spacing.xs)
+                .background(isSelected ? SupportTheme.accent : SupportTheme.surface)
+                .foregroundStyle(isSelected ? SupportTheme.onAccent : SupportTheme.textPrimary)
                 .clipShape(Capsule())
         }
         .buttonStyle(.plain)
@@ -254,30 +256,30 @@ struct MicroMomentDetailCard: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                 // Header
                 HStack {
                     Image(systemName: template.type.icon)
                         .font(.title2)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(SupportTheme.onAccent)
                         .frame(width: 44, height: 44)
-                        .background(template.type.color)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .background(SupportTheme.accent)
+                        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
 
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                         HStack {
                             Text(template.title)
                                 .font(.headline)
-                                .foregroundStyle(.primary)
+                                .foregroundStyle(SupportTheme.textPrimary)
 
                             if template.isPremium {
                                 Image(systemName: "star.fill")
                                     .font(.caption)
-                                    .foregroundStyle(.yellow)
+                                    .foregroundStyle(SupportTheme.accent)
                             }
                         }
 
-                        HStack(spacing: 8) {
+                        HStack(spacing: SupportTheme.Spacing.xs) {
                             Label(template.formattedDuration, systemImage: "clock")
 
                             if let effect = template.energyEffect {
@@ -285,41 +287,39 @@ struct MicroMomentDetailCard: View {
                             }
                         }
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                     }
 
                     Spacer()
 
                     Image(systemName: "play.circle.fill")
                         .font(.title)
-                        .foregroundStyle(template.type.color)
+                        .foregroundStyle(SupportTheme.accent)
                 }
 
                 // Description
                 if let description = template.description {
                     Text(description)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
+                        .foregroundStyle(SupportTheme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 // Context tags
                 if let contexts = template.suggestedContexts, !contexts.isEmpty {
-                    HStack(spacing: 6) {
+                    HStack(spacing: SupportTheme.Spacing.xxs) {
                         ForEach(contexts.prefix(3), id: \.self) { context in
                             Text(context.capitalized)
                                 .font(.caption2)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color(.tertiarySystemBackground))
+                                .padding(.horizontal, SupportTheme.Spacing.xs)
+                                .padding(.vertical, SupportTheme.Spacing.xxs)
+                                .background(SupportTheme.surface)
                                 .clipShape(Capsule())
                         }
                     }
                 }
             }
-            .padding()
-            .background(Color(.secondarySystemBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .supportCard()
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(template.title), \(template.formattedDuration)\(template.isPremium ? ", premium" : "")")

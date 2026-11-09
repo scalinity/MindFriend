@@ -26,6 +26,7 @@ struct SavedExercisesView: View {
                     exercisesList
                 }
             }
+            .supportScreen()
             .navigationTitle("My Exercises")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
@@ -36,10 +37,18 @@ struct SavedExercisesView: View {
             .refreshable {
                 await viewModel.loadExercises()
             }
-            .alert("Error", isPresented: $viewModel.showError) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(viewModel.errorMessage ?? "An error occurred")
+            .safeAreaInset(edge: .bottom) {
+                if viewModel.showError {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
+                        Text(viewModel.errorMessage ?? "An error occurred")
+
+                        Button("OK", role: .cancel) { viewModel.showError = false }
+                    }
+                    .foregroundStyle(SupportTheme.textSecondary)
+                    .buttonStyle(.supportSecondary)
+                    .supportCard()
+                    .padding(SupportTheme.Spacing.m)
+                }
             }
         }
         .task {
@@ -101,6 +110,8 @@ struct SavedExercisesView: View {
             Toggle("Favorites Only", isOn: $viewModel.favoritesOnly)
         } label: {
             Image(systemName: "line.3.horizontal.decrease.circle")
+            .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+            .accessibilityLabel("Filter exercises")
         }
         .onChange(of: viewModel.filterType) {
             Task { await viewModel.loadExercises() }
@@ -114,23 +125,23 @@ struct SavedExercisesView: View {
     private func exerciseDetailView(for exercise: GeneratedContent) -> some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
                     // Header
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                         Text(exercise.title)
                             .font(.title2.bold())
 
                         HStack {
                             Label(exercise.contentType.displayName, systemImage: exercise.contentType.icon)
                                 .font(.subheadline)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(SupportTheme.textSecondary)
 
                             if let duration = exercise.duration {
                                 Text("•")
-                                    .foregroundColor(.secondary)
+                                    .foregroundColor(SupportTheme.textSecondary)
                                 Text("\(duration / 60) min")
                                     .font(.subheadline)
-                                    .foregroundColor(.secondary)
+                                    .foregroundColor(SupportTheme.textSecondary)
                             }
                         }
                     }
@@ -143,8 +154,9 @@ struct SavedExercisesView: View {
 
                     Spacer()
                 }
-                .padding()
+                .padding(SupportTheme.Spacing.m)
             }
+            .supportScreen()
             .navigationTitle("Exercise")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -167,11 +179,11 @@ struct ExerciseRowView: View {
     @State private var showRating = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             // Title and type
             HStack {
                 Image(systemName: exercise.contentType.icon)
-                    .foregroundColor(.blue)
+                    .foregroundColor(SupportTheme.accent)
 
                 Text(exercise.title)
                     .font(.headline)
@@ -180,7 +192,7 @@ struct ExerciseRowView: View {
 
                 Button(action: onToggleFavorite) {
                     Image(systemName: exercise.isFavorite ? "heart.fill" : "heart")
-                        .foregroundColor(exercise.isFavorite ? .red : .gray)
+                        .foregroundColor(exercise.isFavorite ? .red : SupportTheme.textSecondary)
                 }
                 .buttonStyle(.plain)
             }
@@ -190,29 +202,29 @@ struct ExerciseRowView: View {
                 if let duration = exercise.duration {
                     Label("\(duration / 60) min", systemImage: "clock")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(SupportTheme.textSecondary)
                 }
 
                 if let rating = exercise.userRating {
                     Label("\(rating)", systemImage: "star.fill")
                         .font(.caption)
-                        .foregroundColor(.yellow)
+                        .foregroundColor(SupportTheme.accent)
                 } else {
                     Button("Rate") {
                         showRating = true
                     }
                     .font(.caption)
-                    .foregroundColor(.blue)
+                    .foregroundColor(SupportTheme.accent)
                 }
 
                 Spacer()
 
                 Text(exercise.createdAt, style: .relative)
                     .font(.caption2)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(SupportTheme.textSecondary)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, SupportTheme.Spacing.xxs)
         .confirmationDialog("Rate Exercise", isPresented: $showRating) {
             ForEach(1...5, id: \.self) { rating in
                 Button(String(repeating: "⭐", count: rating)) {

@@ -2,6 +2,7 @@ import SwiftUI
 
 /// Journaling exercise player with embedded text fields
 struct LibraryJournalingPlayerView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject var viewModel: LibraryExercisePlayerViewModel
     @FocusState private var focusedPrompt: Int?
     @State private var currentPromptIndex: Int = 0
@@ -22,19 +23,19 @@ struct LibraryJournalingPlayerView: View {
 
             // Keyboard toolbar appears automatically
         }
-        .background(Color(.systemBackground))
+        .background(SupportTheme.canvas)
     }
 
     // MARK: - Header
 
     private var headerSection: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: SupportTheme.Spacing.s) {
             // Progress dots
             if let journaling = viewModel.journalingInstructions {
                 ProgressDots(
                     total: journaling.prompts.count,
                     current: currentPromptIndex,
-                    activeColor: .accentColor
+                    activeColor: SupportTheme.accent
                 )
             }
 
@@ -42,7 +43,7 @@ struct LibraryJournalingPlayerView: View {
             Text("Journal Prompts")
                 .font(.headline)
         }
-        .padding()
+        .padding(SupportTheme.Spacing.m)
     }
 
     // MARK: - Journaling Content
@@ -50,7 +51,7 @@ struct LibraryJournalingPlayerView: View {
     private func journalingContent(_ journaling: JournalingInstructions) -> some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(spacing: 24) {
+                LazyVStack(spacing: SupportTheme.Spacing.l) {
                     // Prompts
                     ForEach(Array(journaling.prompts.enumerated()), id: \.offset) { index, prompt in
                         promptCard(prompt: prompt, index: index)
@@ -64,13 +65,13 @@ struct LibraryJournalingPlayerView: View {
 
                     // Complete button
                     completeButton
-                        .padding(.bottom, 32)
+                        .padding(.bottom, SupportTheme.Spacing.xl)
                 }
-                .padding()
+                .padding(SupportTheme.Spacing.m)
             }
             .onChange(of: focusedPrompt) { _, newValue in
                 if let index = newValue {
-                    withAnimation {
+                    withAnimation(.easeInOut(duration: 0.2)) {
                         proxy.scrollTo(index, anchor: .center)
                     }
                 }
@@ -79,30 +80,30 @@ struct LibraryJournalingPlayerView: View {
     }
 
     private func promptCard(prompt: JournalingPrompt, index: Int) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             // Category badge
             if let category = prompt.category {
                 Text(category.capitalized)
                     .font(.caption)
                     .fontWeight(.semibold)
-                    .foregroundStyle(Color.accentColor)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 4)
-                    .background(Color.accentColor.opacity(0.1))
+                    .foregroundStyle(SupportTheme.accent)
+                    .padding(.horizontal, SupportTheme.Spacing.xs)
+                    .padding(.vertical, SupportTheme.Spacing.xxs)
+                    .background(SupportTheme.surface)
                     .clipShape(Capsule())
             }
 
             // Prompt text
             Text(prompt.text)
                 .font(.headline)
-                .foregroundStyle(.primary)
+                .foregroundStyle(SupportTheme.textPrimary)
 
             // Text editor
             TextEditor(text: binding(for: index))
                 .frame(minHeight: 120)
-                .padding(8)
-                .background(Color(.systemGray6))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .padding(SupportTheme.Spacing.xs)
+                .background(SupportTheme.separator)
+                .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
                 .focused($focusedPrompt, equals: index)
                 .onChange(of: focusedPrompt) { _, newValue in
                     if newValue == index {
@@ -113,39 +114,33 @@ struct LibraryJournalingPlayerView: View {
             // Character count
             Text("\(viewModel.journalResponses[safe: index]?.count ?? 0) characters")
                 .font(.caption2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
-        .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color(.secondarySystemBackground))
-        )
+        .supportCard()
         .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(focusedPrompt == index ? Color.accentColor : Color.clear, lineWidth: 2)
+            RoundedRectangle(cornerRadius: SupportTheme.cardRadius)
+                .stroke(focusedPrompt == index ? SupportTheme.accent : Color.clear, lineWidth: 2)
         )
     }
 
     private func reflectionSection(questions: [String]) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
             Text("Reflection Questions")
                 .font(.headline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
 
             ForEach(questions, id: \.self) { question in
-                HStack(alignment: .top, spacing: 12) {
+                HStack(alignment: .top, spacing: SupportTheme.Spacing.s) {
                     Image(systemName: "lightbulb.fill")
-                        .foregroundStyle(.yellow)
+                        .foregroundStyle(SupportTheme.accent)
 
                     Text(question)
                         .font(.body)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
             }
         }
-        .padding()
-        .background(Color(.tertiarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .supportCard()
     }
 
     private var completeButton: some View {
@@ -156,28 +151,28 @@ struct LibraryJournalingPlayerView: View {
         } label: {
             Text("Complete Journal Entry")
                 .font(.headline)
-                .foregroundStyle(.white)
+                .foregroundStyle(SupportTheme.textPrimary)
                 .frame(maxWidth: .infinity)
-                .padding()
-                .background(Color.accentColor)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .padding(SupportTheme.Spacing.m)
+                .background(SupportTheme.accent)
+                .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
         }
     }
 
     // MARK: - Fallback
 
     private var fallbackContent: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: SupportTheme.Spacing.l) {
             Spacer()
 
             Image(systemName: "pencil.and.scribble")
-                .font(.system(size: 64))
-                .foregroundStyle(.secondary)
+                .font(.system(.largeTitle))
+                .foregroundStyle(SupportTheme.textSecondary)
 
             Text(viewModel.exercise.description)
                 .font(.title3)
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
+                .padding(.horizontal, SupportTheme.Spacing.xl)
 
             // Single text editor for unstructured journaling
             TextEditor(text: Binding(
@@ -191,23 +186,23 @@ struct LibraryJournalingPlayerView: View {
                 }
             ))
             .frame(height: 200)
-            .padding(12)
-            .background(Color(.secondarySystemBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-            .padding(.horizontal)
+            .padding(SupportTheme.Spacing.s)
+            .background(SupportTheme.surface)
+            .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
+            .padding(.horizontal, SupportTheme.Spacing.m)
 
             Button {
                 viewModel.completeExercise()
             } label: {
                 Text("Done")
                     .font(.headline)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(SupportTheme.textPrimary)
                     .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.accentColor)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .padding(SupportTheme.Spacing.m)
+                    .background(SupportTheme.accent)
+                    .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
             }
-            .padding(.horizontal)
+            .padding(.horizontal, SupportTheme.Spacing.m)
 
             Spacer()
         }

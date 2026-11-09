@@ -5,32 +5,33 @@ struct SleepTimerView: View {
     @Binding var selectedMinutes: Int?
     let usesBuiltInVoice: Bool
     @Environment(\.dismiss) private var dismiss
-    
+
     /// Available timer presets in minutes
     private let presets: [Int?] = [nil, 15, 30, 45, 60, 90]
-    
+
     var body: some View {
         NavigationStack {
-            VStack(spacing: 24) {
+            VStack(spacing: SupportTheme.Spacing.l) {
                 Text(usesBuiltInVoice
                      ? "Built-in voice will pause when the timer ends"
                      : "Audio will fade out gently over the last 30 seconds")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal)
-                
+                    .padding(.horizontal, SupportTheme.Spacing.m)
+
                 // Timer options
-                VStack(spacing: 12) {
+                VStack(spacing: SupportTheme.Spacing.s) {
                     ForEach(presets, id: \.self) { minutes in
                         timerOption(for: minutes)
                     }
                 }
-                .padding(.horizontal)
-                
+                .padding(.horizontal, SupportTheme.Spacing.m)
+
                 Spacer()
             }
-            .padding(.top)
+            .padding(.top, SupportTheme.Spacing.m)
+            .supportScreen()
             .navigationTitle("Sleep Timer")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -42,7 +43,7 @@ struct SleepTimerView: View {
             }
         }
     }
-    
+
     private func timerOption(for minutes: Int?) -> some View {
         Button {
             selectedMinutes = minutes
@@ -50,25 +51,23 @@ struct SleepTimerView: View {
         } label: {
             HStack {
                 Image(systemName: minutes == nil ? "timer.slash" : "timer")
-                    .foregroundStyle(isSelected(minutes) ? .blue : .secondary)
-                
+                    .foregroundStyle(isSelected(minutes) ? .blue : SupportTheme.textSecondary)
+
                 Text(displayText(for: minutes))
-                    .foregroundStyle(.primary)
-                
+                    .foregroundStyle(SupportTheme.textPrimary)
+
                 Spacer()
-                
+
                 if isSelected(minutes) {
                     Image(systemName: "checkmark")
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(SupportTheme.accent)
                 }
             }
-            .padding()
-            .background(Color(uiColor: .secondarySystemBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .supportCard()
         }
         .buttonStyle(.plain)
     }
-    
+
     private func displayText(for minutes: Int?) -> String {
         guard let minutes = minutes else {
             return "Off"
@@ -83,7 +82,7 @@ struct SleepTimerView: View {
         }
         return "\(minutes) minutes"
     }
-    
+
     private func isSelected(_ minutes: Int?) -> Bool {
         selectedMinutes == minutes
     }

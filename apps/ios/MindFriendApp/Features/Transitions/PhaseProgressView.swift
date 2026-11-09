@@ -21,12 +21,12 @@ struct PhaseProgressView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.l) {
                 // Phase header
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                     Text("Phase \(userPathway.currentPhase)")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(SupportTheme.textSecondary)
                         .textCase(.uppercase)
 
                     Text(userPathway.currentPhaseName)
@@ -36,15 +36,15 @@ struct PhaseProgressView: View {
                     if let phaseDescription = viewModel.phaseDetails?.description {
                         Text(phaseDescription)
                             .font(.body)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(SupportTheme.textSecondary)
                     }
                 }
-                .padding(.horizontal)
-                .padding(.top)
+                .padding(.horizontal, SupportTheme.Spacing.m)
+                .padding(.top, SupportTheme.Spacing.m)
 
                 // Progress in current phase
                 if let phaseDetails = viewModel.phaseDetails {
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                         HStack {
                             Text("Phase Progress")
                                 .font(.headline)
@@ -53,92 +53,80 @@ struct PhaseProgressView: View {
 
                             Text("Day \(userPathway.currentPhaseDay) of \(phaseDetails.durationDays)")
                                 .font(.subheadline)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(SupportTheme.textSecondary)
                         }
 
                         GeometryReader { geometry in
                             ZStack(alignment: .leading) {
-                                RoundedRectangle(cornerRadius: 8)
-                                    .fill(Color.gray.opacity(0.2))
+                                RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                                    .fill(SupportTheme.textSecondary.opacity(0.2))
                                     .frame(height: 12)
 
-                                RoundedRectangle(cornerRadius: 8)
-                                    .fill(Color.blue)
+                                RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                                    .fill(SupportTheme.accent)
                                     .frame(width: geometry.size.width * phaseProgress, height: 12)
                             }
                         }
                         .frame(height: 12)
                     }
-                    .padding()
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color(.secondarySystemGroupedBackground))
-                    )
-                    .padding(.horizontal)
+                    .supportCard()
+                    .padding(.horizontal, SupportTheme.Spacing.m)
                 }
 
                 // Objectives
                 if let objectives = viewModel.phaseDetails?.objectives, !objectives.isEmpty {
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                         Text("Phase Objectives")
                             .font(.headline)
 
                         ForEach(Array(objectives.enumerated()), id: \.offset) { _, objective in
-                            HStack(alignment: .top, spacing: 12) {
+                            HStack(alignment: .top, spacing: SupportTheme.Spacing.s) {
                                 Image(systemName: "checkmark.circle.fill")
-                                    .foregroundColor(.green)
-                                    .font(.system(size: 20))
+                                    .foregroundColor(SupportTheme.accent)
+                                    .font(.system(.title3))
                                     .accessibilityHidden(true)
 
                                 Text(objective)
                                     .font(.body)
-                                    .foregroundColor(.primary)
+                                    .foregroundColor(SupportTheme.textPrimary)
                             }
                             .accessibilityElement(children: .combine)
                             .accessibilityLabel("Objective: \(objective)")
                         }
                     }
-                    .padding()
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color(.secondarySystemGroupedBackground))
-                    )
-                    .padding(.horizontal)
+                    .supportCard()
+                    .padding(.horizontal, SupportTheme.Spacing.m)
                 }
 
                 // Milestones
                 if !viewModel.milestones.isEmpty {
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                         Text("Milestones Achieved")
                             .font(.headline)
 
                         ForEach(viewModel.milestones) { milestone in
-                            HStack(spacing: 12) {
+                            HStack(spacing: SupportTheme.Spacing.s) {
                                 Image(systemName: "star.fill")
-                                    .foregroundColor(.yellow)
-                                    .font(.system(size: 24))
+                                    .foregroundColor(SupportTheme.accent)
+                                    .font(.system(.title2))
 
-                                VStack(alignment: .leading, spacing: 4) {
+                                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                                     Text(milestone.milestoneKey)
                                         .font(.subheadline)
                                         .fontWeight(.medium)
 
                                     Text(milestone.achievedAt.formatted(date: .abbreviated, time: .omitted))
                                         .font(.caption)
-                                        .foregroundColor(.secondary)
+                                        .foregroundColor(SupportTheme.textSecondary)
                                 }
 
                                 Spacer()
                             }
-                            .padding(.vertical, 8)
+                            .padding(.vertical, SupportTheme.Spacing.xs)
                         }
                     }
-                    .padding()
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color(.secondarySystemGroupedBackground))
-                    )
-                    .padding(.horizontal)
+                    .supportCard()
+                    .padding(.horizontal, SupportTheme.Spacing.m)
                 }
 
                 // Advance phase button
@@ -153,22 +141,23 @@ struct PhaseProgressView: View {
                             Spacer()
 
                             Image(systemName: "arrow.right.circle.fill")
-                                .font(.system(size: 24))
+                                .font(.system(.title2))
                         }
-                        .padding()
+                        .padding(SupportTheme.Spacing.m)
                         .frame(maxWidth: .infinity)
-                        .background(Color.blue)
-                        .foregroundColor(.white)
-                        .cornerRadius(12)
+                        .background(SupportTheme.accent)
+                        .foregroundColor(SupportTheme.onAccent)
+                        .cornerRadius(SupportTheme.controlRadius)
                     }
                     .accessibilityLabel("Advance to next phase")
                     .accessibilityHint("You have completed the current phase. Double tap to begin the next phase of your journey.")
-                    .padding(.horizontal)
+                    .padding(.horizontal, SupportTheme.Spacing.m)
                 }
             }
-            .padding(.bottom, 24)
+            .padding(.bottom, SupportTheme.Spacing.l)
         }
-        .background(Color(.systemGroupedBackground))
+        .background(SupportTheme.surface)
+        .supportScreen()
         .navigationTitle("Phase Details")
         .navigationBarTitleDisplayMode(.inline)
         .task {
@@ -195,13 +184,21 @@ struct PhaseProgressView: View {
         } message: {
             Text("Welcome to \(viewModel.newPhaseName). Your journey continues.")
         }
-        .alert("Error", isPresented: $viewModel.showError) {
-            Button("OK") {
-                viewModel.showError = false
+        .safeAreaInset(edge: .bottom) {
+                if viewModel.showError {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
+                    Text(viewModel.errorMessage)
+
+                    Button("OK") {
+                        viewModel.showError = false
+                    }
+                }
+                    .foregroundStyle(SupportTheme.textSecondary)
+                    .buttonStyle(.supportSecondary)
+                    .supportCard()
+                    .padding(SupportTheme.Spacing.m)
+                }
             }
-        } message: {
-            Text(viewModel.errorMessage)
-        }
     }
 
     private var phaseProgress: Double {
@@ -236,14 +233,14 @@ class PhaseProgressViewModel: ObservableObject {
     func loadPhaseDetails() async {
         // Fetch phase details from database
         guard let pathwayId = userPathway.pathway?.id else { return }
-        
+
         do {
             // Fetch phase details
             self.phaseDetails = try await transitionService.fetchPhaseDetails(
                 pathwayId: pathwayId,
                 phaseNumber: userPathway.currentPhase
             )
-            
+
             // Fetch milestones
             self.milestones = try await transitionService.fetchPhaseMilestones(
                 userPathwayId: userPathway.id,

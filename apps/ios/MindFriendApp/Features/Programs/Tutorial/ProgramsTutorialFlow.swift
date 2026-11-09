@@ -10,6 +10,7 @@ import SwiftUI
 
 /// Main container for the Programs tutorial walkthrough
 struct ProgramsTutorialFlow: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject var container: DependencyContainer
 
     let onComplete: () -> Void
@@ -28,9 +29,9 @@ struct ProgramsTutorialFlow: View {
             // Progress bar
             ProgressView(value: currentStep.progress)
                 .progressViewStyle(.linear)
-                .tint(.cyan)
-                .padding(.horizontal)
-                .padding(.top, 60)
+                .tint(SupportTheme.accent)
+                .padding(.horizontal, SupportTheme.Spacing.m)
+                .padding(.top, SupportTheme.Spacing.xl)
 
             // Step content
             Group {
@@ -45,18 +46,18 @@ struct ProgramsTutorialFlow: View {
                     ProgramsCertificateStep(onComplete: completeTutorial)
                 }
             }
-            .transition(.asymmetric(
+            .transition(reduceMotion ? .opacity : .asymmetric(
                 insertion: .move(edge: .trailing).combined(with: .opacity),
                 removal: .move(edge: .leading).combined(with: .opacity)
             ))
         }
-        .background(Color(.systemBackground))
-        .animation(.easeInOut(duration: 0.3), value: currentStep)
+        .background(SupportTheme.canvas)
+        .animation(reduceMotion ? .easeInOut(duration: 0.2) : .easeInOut(duration: 0.3), value: currentStep)
     }
 
     private func advanceStep() {
         if let nextStep = TutorialStep(rawValue: currentStep.rawValue + 1) {
-            withAnimation {
+            withAnimation(.easeInOut(duration: 0.2)) {
                 currentStep = nextStep
             }
         }

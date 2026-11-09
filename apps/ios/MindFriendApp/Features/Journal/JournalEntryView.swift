@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct JournalEntryView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var container: DependencyContainer
     @Environment(\.dismiss) var dismiss
@@ -61,14 +62,14 @@ struct JournalEntryView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: SupportTheme.Spacing.l) {
                     // Prompt banner (if using a prompt)
                     if let prompt = selectedPrompt {
                         promptBanner(prompt)
                     }
 
                     if let draft = recoveredDraft {
-                        VStack(alignment: .leading, spacing: 12) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                             Text("A previous draft is available. Your current writing has been kept.")
                                 .font(.subheadline)
                             DisclosureGroup("Read previous draft") {
@@ -84,40 +85,38 @@ struct JournalEntryView: View {
                                 scheduleAutoSave()
                             }
                         }
-                        .padding()
-                        .background(Color(.systemGray6))
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .supportCard()
                     }
 
                     // Mood selection
                     moodSelector
 
                     // Title field
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                         Text("Title (optional)")
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                         TextField("Give your entry a title...", text: $title)
-                            .textFieldStyle(.roundedBorder)
+                            .supportField()
                     }
 
                     // Main content
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                         HStack {
                             Text("Your thoughts")
                                 .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                             Spacer()
                             Text("\(wordCount) words")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                         }
 
                         TextEditor(text: $content)
                             .frame(minHeight: 200)
-                            .padding(8)
-                            .background(Color(.systemGray6))
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .padding(SupportTheme.Spacing.xs)
+                            .background(SupportTheme.separator)
+                            .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
                     }
 
                     // Writing tips
@@ -135,10 +134,10 @@ struct JournalEntryView: View {
                         Text(error)
                             .font(.caption)
                             .foregroundStyle(.red)
-                            .padding()
+                            .padding(SupportTheme.Spacing.m)
                             .frame(maxWidth: .infinity)
                             .background(Color.red.opacity(0.1))
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
                         if !hasLoadedDraft && !isEditing {
                             Button("Retry loading draft") {
                                 Task { await loadExistingData() }
@@ -146,9 +145,10 @@ struct JournalEntryView: View {
                         }
                     }
                 }
-                .padding()
+                .padding(SupportTheme.Spacing.m)
             }
             .scrollDismissesKeyboard(.interactively)
+            .supportScreen()
             .navigationTitle(isEditing ? "Edit Entry" : "New Entry")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -210,10 +210,10 @@ struct JournalEntryView: View {
     // MARK: - Subviews
 
     private func promptBanner(_ prompt: JournalPrompt) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             HStack {
                 Image(systemName: "lightbulb.fill")
-                    .foregroundStyle(.yellow)
+                    .foregroundStyle(SupportTheme.accent)
                 Text("Writing Prompt")
                     .font(.caption)
                     .fontWeight(.semibold)
@@ -222,29 +222,29 @@ struct JournalEntryView: View {
                 .font(.subheadline)
                 .italic()
         }
-        .padding()
+        .padding(SupportTheme.Spacing.m)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.yellow.opacity(0.1))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .background(SupportTheme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
     }
 
     private var moodSelector: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             Text("How are you feeling?")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
 
-            HStack(spacing: 16) {
+            HStack(spacing: SupportTheme.Spacing.m) {
                 ForEach(1...5, id: \.self) { score in
                     Button {
-                        withAnimation {
+                        withAnimation(.easeInOut(duration: 0.2)) {
                             mood = (mood == score) ? nil : score
                         }
                     } label: {
                         Text(moodEmojis[score - 1])
-                            .font(.system(size: 32))
+                            .font(.system(.largeTitle))
                             .opacity(mood == nil || mood == score ? 1 : 0.3)
-                            .scaleEffect(mood == score ? 1.2 : 1)
+                            .scaleEffect(reduceMotion ? 1 : (mood == score ? 1.2 : 1))
                     }
                 }
 
@@ -254,22 +254,22 @@ struct JournalEntryView: View {
     }
 
     private var writingTips: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             HStack {
                 Image(systemName: "info.circle")
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(SupportTheme.accent)
                 Text("Writing Tips")
                     .font(.caption)
                     .fontWeight(.semibold)
             }
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text("• Write at least 50 words to unlock AI insights")
                 Text("• There's no right or wrong way to journal")
                 Text("• Your entries are completely private")
             }
             .font(.caption)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(SupportTheme.textSecondary)
 
             if !content.isEmpty {
                 Button {
@@ -280,17 +280,17 @@ struct JournalEntryView: View {
                 }
             }
         }
-        .padding()
+        .padding(SupportTheme.Spacing.m)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.blue.opacity(0.1))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .background(SupportTheme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
     }
 
     private var analysisSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             HStack {
                 Image(systemName: "sparkles")
-                    .foregroundStyle(.purple)
+                    .foregroundStyle(SupportTheme.accent)
                 Text("AI Insights")
                     .font(.headline)
                 Spacer()
@@ -298,13 +298,13 @@ struct JournalEntryView: View {
                 if let quota = quotaRemaining, quota >= 0 {
                     Text("\(quota) analyses left today")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
             }
 
             if let analysis = analysis {
                 // Show analysis preview
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                     if !analysis.emotionalThemes.isEmpty {
                         Text("Themes: \(analysis.emotionalThemes.joined(separator: ", "))")
                             .font(.subheadline)
@@ -315,7 +315,7 @@ struct JournalEntryView: View {
                     } label: {
                         Label("View Full Analysis", systemImage: "arrow.right")
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.supportSecondary)
                 }
             } else if canAnalyze {
                 Button {
@@ -329,34 +329,32 @@ struct JournalEntryView: View {
                             .frame(maxWidth: .infinity)
                     }
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(.purple)
+                .buttonStyle(.supportPrimary)
+                .tint(SupportTheme.accent)
                 .disabled(isRequestingAnalysis || (quotaRemaining == 0))
 
                 if quotaRemaining == 0 {
                     Text("Upgrade to Premium for unlimited analyses")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
             } else {
                 Text("Write at least 50 words to unlock AI insights")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
         }
-        .padding()
-        .background(Color.purple.opacity(0.1))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .supportCard()
     }
 
     private var moodPickerSheet: some View {
         NavigationStack {
-            VStack(spacing: 24) {
+            VStack(spacing: SupportTheme.Spacing.l) {
                 Text("How are you feeling?")
                     .font(.title2)
                     .fontWeight(.semibold)
 
-                HStack(spacing: 20) {
+                HStack(spacing: SupportTheme.Spacing.m) {
                     ForEach(1...5, id: \.self) { score in
                         Button {
                             mood = score
@@ -364,7 +362,7 @@ struct JournalEntryView: View {
                         } label: {
                             VStack {
                                 Text(moodEmojis[score - 1])
-                                    .font(.system(size: 48))
+                                    .font(.system(.largeTitle))
                                 Text(moodLabel(score))
                                     .font(.caption)
                             }
@@ -373,7 +371,8 @@ struct JournalEntryView: View {
                     }
                 }
             }
-            .padding()
+            .padding(SupportTheme.Spacing.m)
+            .supportScreen()
             .navigationTitle("Select Mood")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

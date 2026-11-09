@@ -9,6 +9,7 @@ import SwiftUI
 
 /// Step 2: Show how recommendations adapt to your state
 struct ExerciseRecommendStep: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let onNext: () -> Void
     let onSkip: () -> Void
 
@@ -18,23 +19,23 @@ struct ExerciseRecommendStep: View {
     var body: some View {
         TutorialStepView(
             icon: "sparkles",
-            iconColor: .purple,
+            iconColor: SupportTheme.accent,
             headline: "Personalized For You",
             subheadline: "We recommend exercises based on your current energy and mood.",
             primaryAction: onNext,
             skipAction: onSkip
         ) {
-            VStack(spacing: 16) {
+            VStack(spacing: SupportTheme.Spacing.m) {
                 // Capacity indicator
-                VStack(spacing: 8) {
+                VStack(spacing: SupportTheme.Spacing.xs) {
                     Text("Your Current Capacity")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
 
-                    HStack(spacing: 4) {
+                    HStack(spacing: SupportTheme.Spacing.xxs) {
                         ForEach(1...5, id: \.self) { level in
-                            RoundedRectangle(cornerRadius: 4)
-                                .fill(level <= capacityLevel ? capacityColor : Color(.systemGray5))
+                            RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                                .fill(level <= capacityLevel ? capacityColor : SupportTheme.separator)
                                 .frame(width: 36, height: 8)
                         }
                     }
@@ -43,26 +44,26 @@ struct ExerciseRecommendStep: View {
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(capacityColor)
                 }
-                .padding(12)
-                .background(Color(.secondarySystemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .padding(.horizontal, 20)
+                .padding(SupportTheme.Spacing.s)
+                .background(SupportTheme.surface)
+                .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
+                .padding(.horizontal, SupportTheme.Spacing.m)
 
                 // Explanation
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                     Text("How it works:")
                         .font(.subheadline.weight(.medium))
 
-                    VStack(alignment: .leading, spacing: 6) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                         InfoPoint(text: "Low capacity? Quick, simple exercises")
                         InfoPoint(text: "Feeling good? Try longer, deeper practices")
                         InfoPoint(text: "Updates based on your mood check-ins")
                     }
                 }
-                .padding(12)
-                .background(Color(.tertiarySystemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .padding(.horizontal, 20)
+                .padding(SupportTheme.Spacing.s)
+                .background(SupportTheme.surface)
+                .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
+                .padding(.horizontal, SupportTheme.Spacing.m)
                 .opacity(showExplanation ? 1 : 0)
             }
             .onAppear {
@@ -74,11 +75,11 @@ struct ExerciseRecommendStep: View {
     private var capacityColor: Color {
         switch capacityLevel {
         case 1: return .red
-        case 2: return .orange
-        case 3: return .yellow
-        case 4: return .green
-        case 5: return .blue
-        default: return .gray
+        case 2: return SupportTheme.accent
+        case 3: return SupportTheme.accent
+        case 4: return SupportTheme.accent
+        case 5: return SupportTheme.accent
+        default: return SupportTheme.accent
         }
     }
 
@@ -95,12 +96,12 @@ struct ExerciseRecommendStep: View {
 
     private func animateCapacity() {
         Timer.scheduledTimer(withTimeInterval: 0.3, repeats: true) { timer in
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+            withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .spring(response: 0.3, dampingFraction: 0.7)) {
                 capacityLevel += 1
             }
             if capacityLevel >= 4 {
                 timer.invalidate()
-                withAnimation(.easeOut(duration: 0.3)) {
+                withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .easeOut(duration: 0.3)) {
                     showExplanation = true
                 }
             }
@@ -112,13 +113,13 @@ private struct InfoPoint: View {
     let text: String
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: SupportTheme.Spacing.xs) {
             Image(systemName: "checkmark.circle.fill")
                 .font(.caption)
-                .foregroundStyle(.green)
+                .foregroundStyle(SupportTheme.accent)
             Text(text)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }

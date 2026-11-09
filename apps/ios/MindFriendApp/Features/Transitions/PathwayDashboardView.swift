@@ -23,22 +23,22 @@ struct PathwayDashboardView: View {
                 PathwayCompletionView(userPathway: userPathway)
             } else {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 20) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
                         // Header
-                        VStack(alignment: .leading, spacing: 8) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                             Text(userPathway.pathway?.name ?? "Transition Pathway")
                                 .font(.title2.weight(.bold))
                             Text("Day \(userPathway.currentDay) of \(userPathway.totalDays)")
                                 .font(.subheadline)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(SupportTheme.textSecondary)
                         }
 
                         // Progress bar
                         ProgressView(value: userPathway.progressPercentage)
-                            .tint(Color.blue)
+                            .tint(SupportTheme.accent)
 
                         // Current phase
-                        VStack(alignment: .leading, spacing: 12) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                             HStack {
                                 Text("Current Phase: \(userPathway.currentPhaseName)")
                                     .font(.headline)
@@ -46,18 +46,18 @@ struct PathwayDashboardView: View {
                                 Spacer()
 
                                 NavigationLink(destination: PhaseProgressView(userPathway: userPathway, transitionService: container.transitionService)) {
-                                    HStack(spacing: 4) {
+                                    HStack(spacing: SupportTheme.Spacing.xxs) {
                                         Text("Details")
                                             .font(.subheadline)
                                         Image(systemName: "chevron.right")
                                             .font(.caption)
                                     }
-                                    .foregroundColor(.blue)
+                                    .foregroundColor(SupportTheme.accent)
                                 }
                             }
 
                             if let phases = userPathway.pathway?.phases {
-                                HStack(spacing: 12) {
+                                HStack(spacing: SupportTheme.Spacing.s) {
                                     ForEach(phases) { phase in
                                         PhaseIndicator(
                                             phase: phase,
@@ -68,12 +68,10 @@ struct PathwayDashboardView: View {
                                 }
                             }
                         }
-                        .padding()
-                        .background(Color(.systemGray6))
-                        .cornerRadius(12)
+                        .supportCard()
 
                         // Today's Content
-                        VStack(alignment: .leading, spacing: 12) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                             Text("Today's Content")
                                 .font(.headline)
 
@@ -81,10 +79,10 @@ struct PathwayDashboardView: View {
                                 HStack {
                                     ProgressView()
                                     Text("Loading...")
-                                        .foregroundColor(.secondary)
+                                        .foregroundColor(SupportTheme.textSecondary)
                                 }
                             } else if let error = errorMessage {
-                                VStack(alignment: .leading, spacing: 8) {
+                                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                                     Text(error)
                                         .foregroundColor(.red)
                                         .font(.caption)
@@ -101,23 +99,22 @@ struct PathwayDashboardView: View {
                                                 .font(.subheadline.weight(.semibold))
                                             Text(dailyContent?.theme.title ?? "Daily Check-In")
                                                 .font(.caption)
-                                                .foregroundColor(.secondary)
+                                                .foregroundColor(SupportTheme.textSecondary)
                                         }
                                         Spacer()
                                         Image(systemName: "chevron.right")
                                     }
-                                    .padding()
-                                    .background(Color(.systemGray6))
-                                    .cornerRadius(12)
+                                    .supportCard()
                                 }
                                 .disabled(dailyContent == nil)
                             }
                         }
                     }
-                    .padding()
+                    .padding(SupportTheme.Spacing.m)
                 }
             }
         }
+        .supportScreen()
         .navigationTitle(userPathway.pathway?.name ?? "Pathway")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -187,7 +184,7 @@ struct PhaseIndicator: View {
     let isCompleted: Bool
 
     var body: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: SupportTheme.Spacing.xxs) {
             ZStack {
                 Circle()
                     .fill(backgroundColor)
@@ -195,26 +192,25 @@ struct PhaseIndicator: View {
 
                 if isCompleted {
                     Image(systemName: "checkmark")
-                        .foregroundColor(.white)
+                        .foregroundColor(SupportTheme.textPrimary)
                 } else {
                     Text("\(phase.number)")
-                        .foregroundColor(isActive ? .white : .primary)
+                        .foregroundColor(isActive ? SupportTheme.onAccent : SupportTheme.textPrimary)
                         .font(.caption.weight(.bold))
                 }
             }
 
             Text(phase.name)
                 .font(.caption2)
-                .lineLimit(1)
-                .minimumScaleFactor(0.5)
+                .fixedSize(horizontal: false, vertical: true)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
     }
 
     var backgroundColor: Color {
-        if isCompleted { return Color.green }
-        if isActive { return Color.blue }
-        return Color.gray.opacity(0.3)
+        if isCompleted { return SupportTheme.accent }
+        if isActive { return SupportTheme.accent }
+        return SupportTheme.textSecondary.opacity(0.3)
     }
 }

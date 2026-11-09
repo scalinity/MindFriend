@@ -34,23 +34,24 @@ struct SmartQuietHoursView: View {
             }
 
             Section {
-                HStack(spacing: 12) {
+                HStack(spacing: SupportTheme.Spacing.s) {
                     Image(systemName: "moon.zzz.fill")
                         .font(.title)
-                        .foregroundStyle(.indigo)
+                        .foregroundStyle(SupportTheme.accent)
 
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                         Text("Quiet Hours Active")
                             .font(.subheadline)
                             .fontWeight(.medium)
                         Text(quietHoursSummary)
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                 }
-                .padding(.vertical, 8)
+                .padding(.vertical, SupportTheme.Spacing.xs)
             }
         }
+        .supportScreen()
         .navigationTitle("Quiet Hours")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {

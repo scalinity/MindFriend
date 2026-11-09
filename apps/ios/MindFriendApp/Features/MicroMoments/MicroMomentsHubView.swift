@@ -2,6 +2,7 @@ import SwiftUI
 
 /// Main hub view for micro-moments feature
 struct MicroMomentsHubView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @StateObject private var service: MicroMomentsService
     @State private var selectedTemplate: MicroMomentTemplate?
     @State private var showingBreathingExercise = false
@@ -18,7 +19,7 @@ struct MicroMomentsHubView: View {
     var body: some View {
         SupportRootNavigation(embedded: supportEmbedded) {
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: SupportTheme.Spacing.l) {
                     // Quick Actions
                     quickActionsSection
 
@@ -27,9 +28,9 @@ struct MicroMomentsHubView: View {
                         suggestionsSection
                     }
 
-                    // Streak & Stats
+                    // Practice totals
                     if let streak = service.streak, streak.totalMicroMoments > 0 {
-                        streakSection(streak)
+                        practiceTotalsSection(streak)
                     }
 
                     // Browse by Type
@@ -40,9 +41,10 @@ struct MicroMomentsHubView: View {
                         recentActivitySection
                     }
                 }
-                .padding()
+                .padding(SupportTheme.Spacing.m)
             }
-            .navigationTitle("Micro-Moments")
+            .supportScreen()
+            .navigationTitle(SupportDestination.microMoments.title)
             .task {
                 await service.loadData()
             }
@@ -76,16 +78,17 @@ struct MicroMomentsHubView: View {
     // MARK: - Quick Actions
 
     private var quickActionsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("Quick Actions")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
-            HStack(spacing: 12) {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: dynamicTypeSize.isAccessibilitySize ? 1 : 3), spacing: SupportTheme.Spacing.s) {
                 QuickActionButton(
                     icon: "wind",
                     title: "Breathe",
                     subtitle: "15 sec",
-                    color: .blue
+                    color: SupportTheme.accent
                 ) {
                     showingBreathingExercise = true
                 }
@@ -94,7 +97,7 @@ struct MicroMomentsHubView: View {
                     icon: "face.smiling",
                     title: "Mood",
                     subtitle: "2 taps",
-                    color: .orange
+                    color: SupportTheme.accent
                 ) {
                     checkInType = .mood
                     showingQuickCheckIn = true
@@ -104,7 +107,7 @@ struct MicroMomentsHubView: View {
                     icon: "bolt",
                     title: "Energy",
                     subtitle: "1 tap",
-                    color: .yellow
+                    color: SupportTheme.accent
                 ) {
                     checkInType = .energy
                     showingQuickCheckIn = true
@@ -114,7 +117,7 @@ struct MicroMomentsHubView: View {
                     icon: "heart",
                     title: "Gratitude",
                     subtitle: "Quick",
-                    color: .pink
+                    color: SupportTheme.accent
                 ) {
                     checkInType = .gratitude
                     showingQuickCheckIn = true
@@ -126,9 +129,10 @@ struct MicroMomentsHubView: View {
     // MARK: - Suggestions
 
     private var suggestionsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("Suggested for You")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
             ForEach(service.suggestions) { template in
                 MicroMomentCard(template: template) {
@@ -138,33 +142,27 @@ struct MicroMomentsHubView: View {
         }
     }
 
-    // MARK: - Streak
+    // MARK: - Practice totals
 
-    private func streakSection(_ streak: MicroStreak) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+    private func practiceTotalsSection(_ streak: MicroStreak) -> some View {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("Your Progress")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
-            HStack(spacing: 16) {
-                MicroMomentStatBox(
-                    value: "\(streak.currentStreak)",
-                    label: "Day Streak",
-                    icon: "flame.fill",
-                    color: .orange
-                )
-
+            HStack(spacing: SupportTheme.Spacing.m) {
                 MicroMomentStatBox(
                     value: "\(streak.totalMicroMoments)",
                     label: "Moments",
                     icon: "sparkles",
-                    color: .purple
+                    color: SupportTheme.accent
                 )
 
                 MicroMomentStatBox(
                     value: "\(streak.totalMinutesPracticed)",
                     label: "Minutes",
                     icon: "clock.fill",
-                    color: .blue
+                    color: SupportTheme.accent
                 )
             }
         }
@@ -173,14 +171,12 @@ struct MicroMomentsHubView: View {
     // MARK: - Browse
 
     private var browseSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("Browse")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
-            LazyVGrid(columns: [
-                GridItem(.flexible()),
-                GridItem(.flexible())
-            ], spacing: 12) {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), alignment: .top), count: dynamicTypeSize.isAccessibilitySize ? 1 : 2), spacing: SupportTheme.Spacing.s) {
                 ForEach(MicroMomentType.allCases, id: \.self) { type in
                     NavigationLink {
                         MicroMomentListView(type: type, service: service)
@@ -196,9 +192,10 @@ struct MicroMomentsHubView: View {
     // MARK: - Recent Activity
 
     private var recentActivitySection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("Recent")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
             ForEach(service.recentCompletions.prefix(3)) { completion in
                 RecentCompletionRow(completion: completion, templates: service.templates)
@@ -218,7 +215,7 @@ struct QuickActionButton: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 8) {
+            VStack(spacing: SupportTheme.Spacing.xs) {
                 Image(systemName: icon)
                     .font(.title2)
                     .foregroundStyle(color)
@@ -229,12 +226,12 @@ struct QuickActionButton: View {
 
                 Text(subtitle)
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 16)
-            .background(color.opacity(0.1))
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .padding(.vertical, SupportTheme.Spacing.m)
+            .background(SupportTheme.surface)
+            .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(title), \(subtitle)")
@@ -249,45 +246,43 @@ struct MicroMomentCard: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 16) {
+            HStack(spacing: SupportTheme.Spacing.m) {
                 Image(systemName: template.type.icon)
                     .font(.title2)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(SupportTheme.onAccent)
                     .frame(width: 50, height: 50)
-                    .background(template.type.color)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .background(SupportTheme.accent)
+                    .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
 
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     Text(template.title)
                         .font(.headline)
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(SupportTheme.textPrimary)
 
                     if let description = template.description {
                         Text(description)
                             .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
+                            .foregroundStyle(SupportTheme.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
 
                 Spacer()
 
-                VStack(alignment: .trailing, spacing: 4) {
+                VStack(alignment: .trailing, spacing: SupportTheme.Spacing.xxs) {
                     Text(template.formattedDuration)
                         .font(.subheadline)
                         .fontWeight(.semibold)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
 
                     if template.isPremium {
                         Image(systemName: "star.fill")
                             .font(.caption)
-                            .foregroundStyle(.yellow)
+                            .foregroundStyle(SupportTheme.accent)
                     }
                 }
             }
-            .padding()
-            .background(Color(.secondarySystemBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .supportCard()
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(template.title), \(template.formattedDuration)")
@@ -303,7 +298,7 @@ struct MicroMomentStatBox: View {
     let color: Color
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: SupportTheme.Spacing.xs) {
             Image(systemName: icon)
                 .font(.title2)
                 .foregroundStyle(color)
@@ -314,12 +309,10 @@ struct MicroMomentStatBox: View {
 
             Text(label)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
         .frame(maxWidth: .infinity)
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .supportCard()
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(value) \(label)")
     }
@@ -331,19 +324,17 @@ struct BrowseCategoryCard: View {
     let type: MicroMomentType
 
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: SupportTheme.Spacing.s) {
             Image(systemName: type.icon)
                 .font(.title)
-                .foregroundStyle(type.color)
+                .foregroundStyle(SupportTheme.accent)
 
             Text(type.displayName)
                 .font(.subheadline)
                 .fontWeight(.medium)
         }
         .frame(maxWidth: .infinity)
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .supportCard()
         .accessibilityLabel(type.displayName)
     }
 }
@@ -362,13 +353,13 @@ struct RecentCompletionRow: View {
         HStack {
             if let template = template {
                 Image(systemName: template.type.icon)
-                    .foregroundStyle(template.type.color)
+                    .foregroundStyle(SupportTheme.accent)
 
                 Text(template.title)
                     .font(.subheadline)
             } else {
                 Image(systemName: "sparkles")
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(SupportTheme.accent)
 
                 Text("Micro-moment")
                     .font(.subheadline)
@@ -378,11 +369,9 @@ struct RecentCompletionRow: View {
 
             Text(completion.createdDate, style: .relative)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .supportCard()
     }
 }
 

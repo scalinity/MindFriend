@@ -12,10 +12,14 @@ struct PatternsView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 20) {
+            VStack(spacing: SupportTheme.Spacing.m) {
                 if isLoading {
                     ProgressView("Analyzing your patterns...")
                         .frame(height: 200)
+                } else if let error {
+                    SupportUnavailableState(title: "Patterns unavailable", message: error, actionTitle: "Try again") {
+                        Task { await loadData() }
+                    }
                 } else if patterns.isEmpty {
                     emptyStateView
                 } else {
@@ -29,20 +33,21 @@ struct PatternsView: View {
                     )
                 }
             }
-            .padding()
+            .padding(SupportTheme.Spacing.m)
         }
+        .supportScreen()
         .navigationTitle("Your Patterns")
-        .background(Color(.systemGroupedBackground))
+        .background(SupportTheme.surface)
         .task { await loadData() }
         .refreshable { await loadData() }
         .trackScreen("patterns")
     }
 
     private var emptyStateView: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             Image(systemName: "chart.line.uptrend.xyaxis.circle")
-                .font(.system(size: 60))
-                .foregroundStyle(.secondary)
+                .font(.system(.largeTitle))
+                .foregroundStyle(SupportTheme.textSecondary)
                 .accessibilityHidden(true)
 
             Text("No Patterns Yet")
@@ -51,14 +56,14 @@ struct PatternsView: View {
 
             Text("Keep logging your moods, completing quests, and doing exercises. After about 2 weeks of data, MindFriend will start detecting patterns in your wellness journey.")
                 .font(.body)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 16)
+                .padding(.horizontal, SupportTheme.Spacing.m)
         }
-        .padding(32)
+        .padding(SupportTheme.Spacing.xl)
         .frame(maxWidth: .infinity)
-        .background(Color(.secondarySystemGroupedBackground))
-        .cornerRadius(16)
+        .background(SupportTheme.surface)
+        .cornerRadius(SupportTheme.cardRadius)
         .accessibilityElement(children: .combine)
     }
 
@@ -75,7 +80,6 @@ struct PatternsView: View {
             engagementState = try await engagementTask
         } catch {
             self.error = error.localizedDescription
-            appState.showError(.apiError(error.localizedDescription))
         }
 
         isLoading = false
@@ -120,18 +124,18 @@ struct EngagementStateCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             HStack {
                 Label("Engagement", systemImage: "heart.fill")
                     .font(.headline)
                 Spacer()
                 Text(state.currentState.displayName)
                     .font(.subheadline)
-                    .foregroundColor(state.currentState.color)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 4)
-                    .background(state.currentState.color.opacity(0.15))
-                    .cornerRadius(8)
+                    .foregroundColor(SupportTheme.accent)
+                    .padding(.horizontal, SupportTheme.Spacing.xs)
+                    .padding(.vertical, SupportTheme.Spacing.xxs)
+                    .background(SupportTheme.surface)
+                    .cornerRadius(SupportTheme.controlRadius)
             }
 
             // Proactive engagement rate
@@ -139,7 +143,7 @@ struct EngagementStateCard: View {
                 HStack {
                     Text("Proactive engagement")
                         .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(SupportTheme.textSecondary)
                     Spacer()
                     Text("\(Int(state.proactiveEngagementRate * 100))%")
                         .font(.title3)
@@ -151,10 +155,10 @@ struct EngagementStateCard: View {
             if state.moodDeclineDetected {
                 HStack {
                     Image(systemName: "arrow.down.heart.fill")
-                        .foregroundColor(.orange)
+                        .foregroundColor(SupportTheme.accent)
                     Text("Recent mood decline detected")
                         .font(.subheadline)
-                        .foregroundColor(.orange)
+                        .foregroundColor(SupportTheme.accent)
                 }
             }
 
@@ -162,16 +166,14 @@ struct EngagementStateCard: View {
             if daysSinceLastActivity > 0 {
                 HStack {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundColor(.orange)
+                        .foregroundColor(SupportTheme.accent)
                     Text("\(daysSinceLastActivity) day\(daysSinceLastActivity > 1 ? "s" : "") since last check-in")
                         .font(.subheadline)
-                        .foregroundColor(.orange)
+                        .foregroundColor(SupportTheme.accent)
                 }
             }
         }
-        .padding()
-        .background(Color(.secondarySystemGroupedBackground))
-        .cornerRadius(16)
+        .supportCard()
     }
 }
 
@@ -186,7 +188,7 @@ struct PatternsListView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Label("Detected Patterns", systemImage: "wand.and.stars")
                 .font(.headline)
 
@@ -204,18 +206,18 @@ struct PatternCard: View {
     let onAcknowledge: (UserPattern) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             HStack(alignment: .top) {
                 Image(systemName: pattern.patternType.icon)
                     .font(.title2)
-                    .foregroundColor(pattern.patternType.color)
+                    .foregroundColor(SupportTheme.accent)
                     .frame(width: 32)
 
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     Text(pattern.patternType.displayName)
                         .font(.subheadline)
                         .fontWeight(.medium)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(SupportTheme.textSecondary)
 
                     Text(pattern.insightMessage ?? pattern.patternType.description)
                         .font(.body)
@@ -228,12 +230,12 @@ struct PatternCard: View {
             HStack {
                 Text("Confidence")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(SupportTheme.textSecondary)
 
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
                         Capsule()
-                            .fill(Color.gray.opacity(0.2))
+                            .fill(SupportTheme.textSecondary.opacity(0.2))
                             .frame(height: 6)
 
                         Capsule()
@@ -245,7 +247,7 @@ struct PatternCard: View {
 
                 Text("\(Int(pattern.confidence * 100))%")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(SupportTheme.textSecondary)
             }
 
             if !pattern.userAcknowledged {
@@ -257,31 +259,29 @@ struct PatternCard: View {
                         Text("Got it!")
                     }
                     .font(.subheadline)
-                    .foregroundColor(.accentColor)
+                    .foregroundColor(SupportTheme.accent)
                 }
                 .buttonStyle(.borderless)
             } else {
                 HStack {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(.green)
+                        .foregroundColor(SupportTheme.accent)
                     Text("Acknowledged")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(SupportTheme.textSecondary)
                 }
             }
         }
-        .padding()
-        .background(Color(.secondarySystemGroupedBackground))
-        .cornerRadius(16)
+        .supportCard()
     }
 
     private var confidenceColor: Color {
         if pattern.confidence >= 0.8 {
-            return .green
+            return SupportTheme.accent
         } else if pattern.confidence >= 0.6 {
-            return .yellow
+            return SupportTheme.accent
         } else {
-            return .orange
+            return SupportTheme.accent
         }
     }
 }
@@ -292,11 +292,11 @@ extension PatternType {
     var color: Color {
         switch self {
         case .dayOfWeek:
-            return .blue
+            return SupportTheme.accent
         case .exerciseCorrelation:
-            return .green
+            return SupportTheme.accent
         case .questPreference:
-            return .orange
+            return SupportTheme.accent
         }
     }
 }
@@ -307,17 +307,17 @@ extension EngagementState {
     var color: Color {
         switch self {
         case .highlyActive:
-            return .green
+            return SupportTheme.accent
         case .active:
-            return .blue
+            return SupportTheme.accent
         case .moderate:
-            return .cyan
+            return SupportTheme.accent
         case .drifting:
-            return .yellow
+            return SupportTheme.accent
         case .lapsed:
-            return .orange
+            return SupportTheme.accent
         case .hibernating:
-            return .gray
+            return SupportTheme.accent
         }
     }
 }

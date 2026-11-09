@@ -26,9 +26,9 @@ struct JournalDetailView: View {
         ScrollView {
             if isLoading {
                 ProgressView("Loading entry...")
-                    .padding(.top, 100)
+                    .padding(.top, SupportTheme.Spacing.xl)
             } else if let entry = entry {
-                VStack(alignment: .leading, spacing: 24) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.l) {
                     // Header with mood and date
                     headerSection(entry: entry)
 
@@ -46,7 +46,7 @@ struct JournalDetailView: View {
                     // Metadata
                     metadataSection(entry: entry)
                 }
-                .padding()
+                .padding(SupportTheme.Spacing.m)
             } else {
                 ContentUnavailableView {
                     Label("Entry Not Found", systemImage: "doc.questionmark")
@@ -55,6 +55,7 @@ struct JournalDetailView: View {
                 }
             }
         }
+        .supportScreen()
         .navigationTitle(entry?.title ?? "Journal Entry")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -73,17 +74,27 @@ struct JournalDetailView: View {
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
+                    .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                    .accessibilityLabel("More options")
                 }
                 .disabled(isDeleting || entry == nil)
             }
         }
-        .alert("Error", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
-            Button("OK") {
-                errorMessage = nil
+        .safeAreaInset(edge: .bottom) {
+                if errorMessage != nil {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
+                    Text(errorMessage ?? "")
+
+                    Button("OK") {
+                        errorMessage = nil
+                    }
+                }
+                    .foregroundStyle(SupportTheme.textSecondary)
+                    .buttonStyle(.supportSecondary)
+                    .supportCard()
+                    .padding(SupportTheme.Spacing.m)
+                }
             }
-        } message: {
-            Text(errorMessage ?? "")
-        }
         .alert("Delete Entry?", isPresented: $showingDeleteConfirmation) {
             Button("Cancel", role: .cancel) {}
             Button("Delete", role: .destructive) {
@@ -121,30 +132,30 @@ struct JournalDetailView: View {
             if let mood = entry.mood {
                 VStack {
                     Text(moodEmojis[mood - 1])
-                        .font(.system(size: 48))
+                        .font(.system(.largeTitle))
                     Text(moodLabel(mood))
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
             }
 
             Spacer()
 
-            VStack(alignment: .trailing, spacing: 4) {
+            VStack(alignment: .trailing, spacing: SupportTheme.Spacing.xxs) {
                 Text(entry.createdAt, style: .date)
                     .font(.headline)
                 Text(entry.createdAt, style: .time)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
         }
     }
 
     private func promptSection(prompt: JournalPrompt) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             HStack {
                 Image(systemName: "lightbulb.fill")
-                    .foregroundStyle(.yellow)
+                    .foregroundStyle(SupportTheme.accent)
                 Text("Writing Prompt")
                     .font(.caption)
                     .fontWeight(.semibold)
@@ -152,16 +163,16 @@ struct JournalDetailView: View {
             Text(prompt.promptText)
                 .font(.subheadline)
                 .italic()
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
-        .padding()
+        .padding(SupportTheme.Spacing.m)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.yellow.opacity(0.1))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .background(SupportTheme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
     }
 
     private func contentSection(entry: JournalEntry) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             if let title = entry.title, !title.isEmpty {
                 Text(title)
                     .font(.title2)
@@ -175,24 +186,24 @@ struct JournalDetailView: View {
             HStack {
                 Text("\(entry.wordCount) words")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
 
                 if entry.moodBefore != nil {
                     Text("•")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                     Text("\(entry.characterCount) characters")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
             }
         }
     }
 
     private var analysisSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             HStack {
                 Image(systemName: "sparkles")
-                    .foregroundStyle(.purple)
+                    .foregroundStyle(SupportTheme.accent)
                 Text("AI Insights")
                     .font(.headline)
                 Spacer()
@@ -200,27 +211,27 @@ struct JournalDetailView: View {
                 if let quota = quotaRemaining, quota >= 0 {
                     Text("\(quota) analyses left today")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
             }
 
             if let analysis = analysis {
                 // Analysis preview
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                     // Emotional themes
                     if !analysis.emotionalThemes.isEmpty {
-                        VStack(alignment: .leading, spacing: 4) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                             Text("Emotional Themes")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                             HStack {
                                 ForEach(analysis.emotionalThemes.prefix(4), id: \.self) { theme in
                                     Text(theme.capitalized)
                                         .font(.caption)
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 4)
-                                        .background(Color.purple.opacity(0.15))
-                                        .foregroundStyle(.purple)
+                                        .padding(.horizontal, SupportTheme.Spacing.xs)
+                                        .padding(.vertical, SupportTheme.Spacing.xxs)
+                                        .background(SupportTheme.surface)
+                                        .foregroundStyle(SupportTheme.accent)
                                         .clipShape(Capsule())
                                 }
                             }
@@ -231,7 +242,7 @@ struct JournalDetailView: View {
                     HStack {
                         Text("Overall tone:")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                         Text(analysis.overallSentiment.capitalized)
                             .font(.caption)
                             .fontWeight(.medium)
@@ -241,7 +252,7 @@ struct JournalDetailView: View {
                     if analysis.hasDistortions {
                         HStack {
                             Image(systemName: "brain.head.profile")
-                                .foregroundStyle(.orange)
+                                .foregroundStyle(SupportTheme.accent)
                             Text("\(analysis.cognitiveDistortions.count) thinking pattern\(analysis.cognitiveDistortions.count == 1 ? "" : "s") identified")
                                 .font(.caption)
                         }
@@ -253,13 +264,13 @@ struct JournalDetailView: View {
                         Label("View Full Analysis", systemImage: "arrow.right")
                             .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.supportSecondary)
                 }
             } else if canRequestAnalysis {
-                VStack(spacing: 12) {
+                VStack(spacing: SupportTheme.Spacing.s) {
                     Text("Get personalized insights about your thoughts and feelings from this entry.")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
 
                     Button {
                         Task { await requestAnalysis() }
@@ -272,38 +283,36 @@ struct JournalDetailView: View {
                                 .frame(maxWidth: .infinity)
                         }
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.purple)
+                    .buttonStyle(.supportPrimary)
+                    .tint(SupportTheme.accent)
                     .disabled(isRequestingAnalysis || quotaRemaining == 0)
 
                     if quotaRemaining == 0 {
                         Text("Upgrade to Premium for unlimited analyses")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                 }
             } else {
                 Text("Write at least 50 words to unlock AI insights")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
         }
-        .padding()
-        .background(Color.purple.opacity(0.1))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .supportCard()
     }
 
     private func metadataSection(entry: JournalEntry) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             Text("Entry Details")
                 .font(.caption)
                 .fontWeight(.semibold)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 HStack {
                     Text("Created:")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                     Spacer()
                     Text(entry.createdAt.formatted(date: .abbreviated, time: .shortened))
                 }
@@ -311,7 +320,7 @@ struct JournalDetailView: View {
                 if entry.updatedAt != entry.createdAt {
                     HStack {
                         Text("Last edited:")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                         Spacer()
                         Text(entry.updatedAt.formatted(date: .abbreviated, time: .shortened))
                     }
@@ -320,18 +329,16 @@ struct JournalDetailView: View {
                 if analysis != nil {
                     HStack {
                         Text("Analyzed:")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                         Spacer()
                         Image(systemName: "checkmark.circle.fill")
-                            .foregroundStyle(.green)
+                            .foregroundStyle(SupportTheme.accent)
                     }
                 }
             }
             .font(.caption)
         }
-        .padding()
-        .background(Color(.systemGray6))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .supportCard()
     }
 
     // MARK: - Computed Properties

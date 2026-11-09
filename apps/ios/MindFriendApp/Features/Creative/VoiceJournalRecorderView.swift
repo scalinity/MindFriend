@@ -16,41 +16,41 @@ struct VoiceJournalRecorderView: View {
 
     var body: some View {
         SupportRootNavigation(embedded: supportRootEmbedded) {
-            VStack(spacing: 32) {
+            VStack(spacing: SupportTheme.Spacing.xl) {
                 Spacer()
 
                 // Instructions
                 if !recorder.isRecording && !recorder.hasRecording {
-                    VStack(spacing: 8) {
+                    VStack(spacing: SupportTheme.Spacing.xs) {
                         Text("Voice Journal")
                             .font(.title2.bold())
                         Text("Speak your thoughts freely. You can explore an AI interpretation of the transcript; it can be wrong.")
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                             .multilineTextAlignment(.center)
-                            .padding(.horizontal, 32)
+                            .padding(.horizontal, SupportTheme.Spacing.xl)
                     }
                 }
 
                 // Waveform Visualization
                 WaveformVisualization(levels: recorder.audioLevels, isRecording: recorder.isRecording)
                     .frame(height: 80)
-                    .padding(.horizontal)
+                    .padding(.horizontal, SupportTheme.Spacing.m)
 
                 // Timer
                 Text(recorder.formattedDuration)
-                    .font(.system(size: 56, weight: .light, design: .monospaced))
-                    .foregroundStyle(recorder.isRecording ? .primary : .secondary)
+                    .font(.system(.largeTitle, design: .monospaced).weight(.light))
+                    .foregroundStyle(recorder.isRecording ? .primary : SupportTheme.textSecondary)
 
                 // Status
                 Text(statusText)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
 
                 Spacer()
 
                 // Controls
-                HStack(spacing: 40) {
+                HStack(spacing: SupportTheme.Spacing.xl) {
                     // Playback button (only when recording exists)
                     if recorder.hasRecording {
                         Button {
@@ -59,8 +59,9 @@ struct VoiceJournalRecorderView: View {
                             Image(systemName: recorder.isPlaying ? "pause.fill" : "play.fill")
                                 .font(.title)
                                 .frame(width: 60, height: 60)
-                                .background(Color(.secondarySystemBackground))
+                                .background(SupportTheme.surface)
                                 .clipShape(Circle())
+                            .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                         }
                         .accessibilityLabel(recorder.isPlaying ? "Pause playback" : "Play recording")
                     }
@@ -75,19 +76,20 @@ struct VoiceJournalRecorderView: View {
                     } label: {
                         ZStack {
                             Circle()
-                                .fill(recorder.isRecording ? Color.red : Color.accentColor)
+                                .fill(recorder.isRecording ? Color.red : SupportTheme.accent)
                                 .frame(width: 80, height: 80)
 
                             if recorder.isRecording {
-                                RoundedRectangle(cornerRadius: 4)
-                                    .fill(Color.white)
+                                RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                                    .fill(SupportTheme.surface)
                                     .frame(width: 28, height: 28)
                             } else {
                                 Image(systemName: "mic.fill")
                                     .font(.title)
-                                    .foregroundStyle(.white)
+                                    .foregroundStyle(SupportTheme.textPrimary)
                             }
                         }
+                        .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                     }
                     .disabled(recorder.hasRecording && !recorder.isRecording)
                     .accessibilityLabel(recorder.isRecording ? "Stop recording" : "Start recording")
@@ -100,16 +102,17 @@ struct VoiceJournalRecorderView: View {
                             Group {
                                 if isSaving {
                                     ProgressView()
-                                        .tint(.white)
+                                        .tint(SupportTheme.accent)
                                 } else {
                                     Image(systemName: "checkmark")
                                 }
                             }
                             .font(.title)
                             .frame(width: 60, height: 60)
-                            .background(Color.green)
-                            .foregroundStyle(.white)
+                            .background(SupportTheme.accent)
+                            .foregroundStyle(SupportTheme.onAccent)
                             .clipShape(Circle())
+                            .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                         }
                         .disabled(isSaving)
                         .accessibilityLabel("Save recording")
@@ -124,7 +127,7 @@ struct VoiceJournalRecorderView: View {
                         Label("Discard & Record Again", systemImage: "trash")
                             .font(.subheadline)
                     }
-                    .padding(.top, 8)
+                    .padding(.top, SupportTheme.Spacing.xs)
                 }
 
                 Spacer()
@@ -132,10 +135,10 @@ struct VoiceJournalRecorderView: View {
                 // Quota info
                 Text("Free: 5 min/day • Premium: 60 min/day")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
-            .padding()
-            .background(Color(.systemBackground))
+            .padding(SupportTheme.Spacing.m)
+            .background(SupportTheme.canvas)
             .sentryMask()  // Voice journal content is highly sensitive PHI
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -146,11 +149,19 @@ struct VoiceJournalRecorderView: View {
                     }
                 }
             }
-            .alert("Error", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
-                Button("OK") { error = nil }
-            } message: {
-                if let error = error {
-                    Text(error)
+            .safeAreaInset(edge: .bottom) {
+                if error != nil {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
+                        if let error = error {
+                            Text(error)
+                        }
+
+                        Button("OK") { error = nil }
+                    }
+                    .foregroundStyle(SupportTheme.textSecondary)
+                    .buttonStyle(.supportSecondary)
+                    .supportCard()
+                    .padding(SupportTheme.Spacing.m)
                 }
             }
             .sheet(isPresented: $showAnalysis) {
@@ -384,16 +395,17 @@ extension VoiceJournalRecorder: AVAudioPlayerDelegate, AVAudioRecorderDelegate {
 // MARK: - Waveform Visualization
 
 struct WaveformVisualization: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let levels: [CGFloat]
     let isRecording: Bool
 
     var body: some View {
-        HStack(spacing: 2) {
+        HStack(spacing: SupportTheme.Spacing.xxs) {
             ForEach(Array(levels.enumerated()), id: \.offset) { index, level in
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(isRecording ? Color.red : Color.accentColor)
+                RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                    .fill(isRecording ? Color.red : SupportTheme.accent)
                     .frame(width: 4, height: max(4, level * 60))
-                    .animation(.easeOut(duration: 0.1), value: level)
+                    .animation(reduceMotion ? nil : .easeOut(duration: 0.1), value: level)
             }
         }
     }
@@ -416,16 +428,16 @@ struct VoiceJournalAnalysisView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 20) {
+                VStack(spacing: SupportTheme.Spacing.m) {
                     if isLoading {
-                        VStack(spacing: 16) {
+                        VStack(spacing: SupportTheme.Spacing.m) {
                             ProgressView()
                             Text("Analyzing your voice journal...")
                                 .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                         }
                         .frame(maxWidth: .infinity)
-                        .padding(.top, 60)
+                        .padding(.top, SupportTheme.Spacing.xl)
                     } else if let analysis = analysis {
                         analysisContent(analysis)
                     } else {
@@ -438,9 +450,10 @@ struct VoiceJournalAnalysisView: View {
                         }
                     }
                 }
-                .padding()
+                .padding(SupportTheme.Spacing.m)
             }
             .sentryMask()  // Voice journal analysis contains highly sensitive PHI
+            .supportScreen()
             .navigationTitle("Voice Journal")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -459,34 +472,34 @@ struct VoiceJournalAnalysisView: View {
     private func analysisContent(_ analysis: VoiceJournalAnalysis) -> some View {
         // Summary
         if let summary = analysis.aiSummary {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                 Label("Summary", systemImage: "text.quote")
                     .font(.headline)
                 Text(summary)
                     .font(.body)
             }
-            .padding()
+            .padding(SupportTheme.Spacing.m)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(.secondarySystemBackground))
-            .cornerRadius(12)
+            .background(SupportTheme.surface)
+            .cornerRadius(SupportTheme.controlRadius)
         }
 
         // Sentiment
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             Label("Sentiment", systemImage: "face.smiling")
                 .font(.headline)
 
             HStack {
                 Text("Negative")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
 
                 GeometryReader { geometry in
                     ZStack(alignment: .leading) {
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(Color(.systemGray4))
+                        RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                            .fill(SupportTheme.separator)
 
-                        RoundedRectangle(cornerRadius: 4)
+                        RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
                             .fill(sentimentColor(analysis.overallSentiment))
                             .frame(width: geometry.size.width * CGFloat((analysis.overallSentiment + 1) / 2))
                     }
@@ -495,93 +508,93 @@ struct VoiceJournalAnalysisView: View {
 
                 Text("Positive")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
         }
-        .padding()
+        .padding(SupportTheme.Spacing.m)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemBackground))
-        .cornerRadius(12)
+        .background(SupportTheme.surface)
+        .cornerRadius(SupportTheme.controlRadius)
 
         // Emotions
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Label("Possible emotions in the wording", systemImage: "heart")
                 .accessibilityHint("AI interpretation of the transcript, not an emotion measurement")
                 .font(.headline)
 
             Text("AI interpretation of transcript language. It can be wrong and does not measure your voice or how you feel.")
                 .font(.caption)
-                .foregroundStyle(.secondary)
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 100))], spacing: 8) {
+                .foregroundStyle(SupportTheme.textSecondary)
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 100))], spacing: SupportTheme.Spacing.xs) {
                 ForEach(Array(analysis.emotions.asDictionary.sorted(by: { $0.value > $1.value })), id: \.key) { emotion, value in
                     AnalysisEmotionBadge(emotion: emotion, value: value)
                 }
             }
         }
-        .padding()
+        .padding(SupportTheme.Spacing.m)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemBackground))
-        .cornerRadius(12)
+        .background(SupportTheme.surface)
+        .cornerRadius(SupportTheme.controlRadius)
 
         // Key Themes
         if !analysis.keyThemes.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                 Label("Key Themes", systemImage: "tag")
                     .font(.headline)
 
-                FlowLayout(spacing: 8) {
+                FlowLayout(spacing: SupportTheme.Spacing.xs) {
                     ForEach(analysis.keyThemes, id: \.self) { theme in
                         Text(theme)
                             .font(.caption)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(Color.blue.opacity(0.2))
-                            .cornerRadius(16)
+                            .padding(.horizontal, SupportTheme.Spacing.s)
+                            .padding(.vertical, SupportTheme.Spacing.xxs)
+                            .background(SupportTheme.surface)
+                            .cornerRadius(SupportTheme.cardRadius)
                     }
                 }
             }
-            .padding()
+            .padding(SupportTheme.Spacing.m)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(.secondarySystemBackground))
-            .cornerRadius(12)
+            .background(SupportTheme.surface)
+            .cornerRadius(SupportTheme.controlRadius)
         }
 
         // Reflection Prompts
         if !analysis.reflectionPrompts.isEmpty {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                 Label("Reflection Prompts", systemImage: "lightbulb")
                     .font(.headline)
 
                 ForEach(analysis.reflectionPrompts, id: \.self) { prompt in
-                    HStack(alignment: .top, spacing: 8) {
+                    HStack(alignment: .top, spacing: SupportTheme.Spacing.xs) {
                         Image(systemName: "circle.fill")
-                            .font(.system(size: 6))
-                            .padding(.top, 6)
-                            .foregroundStyle(.secondary)
+                            .font(.system(.caption2))
+                            .padding(.top, SupportTheme.Spacing.xxs)
+                            .foregroundStyle(SupportTheme.textSecondary)
                         Text(prompt)
                             .font(.subheadline)
                     }
                 }
             }
-            .padding()
+            .padding(SupportTheme.Spacing.m)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(.secondarySystemBackground))
-            .cornerRadius(12)
+            .background(SupportTheme.surface)
+            .cornerRadius(SupportTheme.controlRadius)
         }
 
         // Transcription
         if let transcription = analysis.fullTranscription {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                 Label("Transcription", systemImage: "text.alignleft")
                     .font(.headline)
                 Text(transcription)
                     .font(.body)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
-            .padding()
+            .padding(SupportTheme.Spacing.m)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(.secondarySystemBackground))
-            .cornerRadius(12)
+            .background(SupportTheme.surface)
+            .cornerRadius(SupportTheme.controlRadius)
         }
     }
 
@@ -589,9 +602,9 @@ struct VoiceJournalAnalysisView: View {
         if sentiment < -0.3 {
             return .red
         } else if sentiment > 0.3 {
-            return .green
+            return SupportTheme.accent
         } else {
-            return .orange
+            return SupportTheme.accent
         }
     }
 
@@ -633,15 +646,15 @@ private struct AnalysisEmotionBadge: View {
     let value: Double
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: SupportTheme.Spacing.xxs) {
             Text(emotionEmoji)
             Text(emotion.capitalized)
                 .font(.caption)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(Color(.tertiarySystemBackground))
-        .cornerRadius(12)
+        .padding(.horizontal, SupportTheme.Spacing.xs)
+        .padding(.vertical, SupportTheme.Spacing.xxs)
+        .background(SupportTheme.surface)
+        .cornerRadius(SupportTheme.controlRadius)
     }
 
     private var emotionEmoji: String {
@@ -664,18 +677,18 @@ struct EmotionPercentageBadge: View {
     let value: Double
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: SupportTheme.Spacing.xxs) {
             Text(emotionEmoji)
             Text(emotion.capitalized)
                 .font(.caption)
             Text("\(Int(value * 100))%")
                 .font(.caption2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(Color(.tertiarySystemBackground))
-        .cornerRadius(12)
+        .padding(.horizontal, SupportTheme.Spacing.xs)
+        .padding(.vertical, SupportTheme.Spacing.xxs)
+        .background(SupportTheme.surface)
+        .cornerRadius(SupportTheme.controlRadius)
     }
 
     private var emotionEmoji: String {

@@ -2,6 +2,8 @@ import SwiftUI
 
 /// Main view for the Sleep & Wind-Down feature
 struct SleepHomeView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var container: DependencyContainer
     @EnvironmentObject private var appState: AppState
     @Environment(\.supportRootEmbedded) private var supportRootEmbedded
@@ -19,24 +21,17 @@ struct SleepHomeView: View {
         SupportRootNavigation(embedded: supportRootEmbedded) {
             ZStack {
                 // Night-themed background gradient
-                LinearGradient(
-                    colors: [
-                        Color(red: 0.05, green: 0.05, blue: 0.15),
-                        Color(red: 0.1, green: 0.1, blue: 0.25)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
+                SupportTheme.canvas
                 .ignoresSafeArea()
 
                 if viewModel.isLoading {
                     ProgressView()
-                        .tint(.white)
+                        .tint(SupportTheme.accent)
                 } else if let error = viewModel.error {
                     errorView(error)
                 } else {
                     ScrollView {
-                        VStack(spacing: 24) {
+                        VStack(spacing: SupportTheme.Spacing.l) {
                             // Header
                             headerView
 
@@ -58,7 +53,7 @@ struct SleepHomeView: View {
                                 routinesSection
                             }
                         }
-                        .padding(.bottom, 100) // Space for mini player
+                        .padding(.bottom, SupportTheme.Spacing.xl) // Space for mini player
                     }
                 }
 
@@ -70,19 +65,15 @@ struct SleepHomeView: View {
                     }
                 }
             }
+            .supportScreen()
+            .navigationTitle("Sleep")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .principal) {
-                    Text("Sleep")
-                        .font(.headline)
-                        .foregroundStyle(.white)
-                }
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .secondaryAction) {
                     Button {
-                        // Show bedtime reminder settings
+                        // Show bedtime reminder settings.
                     } label: {
-                        Image(systemName: "bell.badge")
-                            .foregroundStyle(.white)
+                        Label("Bedtime reminder", systemImage: "bell.badge")
                     }
                 }
             }
@@ -105,19 +96,19 @@ struct SleepHomeView: View {
     // MARK: - Subviews
 
     private var headerView: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             Text(greeting)
                 .font(.title2)
                 .fontWeight(.semibold)
-                .foregroundStyle(.white)
+                .foregroundStyle(SupportTheme.textPrimary)
 
             Text("Ready for restful sleep?")
                 .font(.subheadline)
-                .foregroundStyle(.white.opacity(0.7))
+                .foregroundStyle(SupportTheme.textPrimary.opacity(0.7))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal)
-        .padding(.top)
+        .padding(.horizontal, SupportTheme.Spacing.m)
+        .padding(.top, SupportTheme.Spacing.m)
     }
 
     private var greeting: String {
@@ -133,48 +124,48 @@ struct SleepHomeView: View {
 
     private var contentTypeTabs: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 12) {
+            HStack(spacing: SupportTheme.Spacing.s) {
                 ForEach(SleepContentType.allCases) { type in
                     Button {
-                        withAnimation(.easeInOut(duration: 0.2)) {
+                        withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .easeInOut(duration: 0.2)) {
                             selectedTab = type
                         }
                     } label: {
-                        HStack(spacing: 6) {
+                        HStack(spacing: SupportTheme.Spacing.xxs) {
                             Image(systemName: type.icon)
                             Text(type.displayName)
                         }
                         .font(.subheadline)
                         .fontWeight(selectedTab == type ? .semibold : .regular)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
+                        .padding(.horizontal, SupportTheme.Spacing.m)
+                        .padding(.vertical, SupportTheme.Spacing.xs)
                         .background(
                             selectedTab == type
-                                ? Color.indigo
-                                : Color.white.opacity(0.1)
+                                ? SupportTheme.accent
+                                : SupportTheme.surface.opacity(0.1)
                         )
                         .foregroundStyle(
                             selectedTab == type
-                                ? .white
-                                : .white.opacity(0.8)
+                                ? SupportTheme.onAccent
+                                : SupportTheme.textPrimary.opacity(0.8)
                         )
-                        .cornerRadius(20)
+                        .cornerRadius(SupportTheme.cardRadius)
                     }
                 }
             }
-            .padding(.horizontal)
+            .padding(.horizontal, SupportTheme.Spacing.m)
         }
     }
 
     private var featuredSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("Featured Tonight")
                 .font(.headline)
-                .foregroundStyle(.white)
-                .padding(.horizontal)
+                .foregroundStyle(SupportTheme.textPrimary)
+                .padding(.horizontal, SupportTheme.Spacing.m)
 
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(alignment: .top, spacing: 16) {
+                HStack(alignment: .top, spacing: SupportTheme.Spacing.m) {
                     ForEach(viewModel.featuredContent) { content in
                         SleepContentCard(
                             content: content,
@@ -188,22 +179,22 @@ struct SleepHomeView: View {
                         .frame(width: 160, height: 180)
                     }
                 }
-                .padding(.horizontal)
+                .padding(.horizontal, SupportTheme.Spacing.m)
             }
         }
     }
 
     private var storiesSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("Sleep Stories")
                 .font(.headline)
-                .foregroundStyle(.white)
-                .padding(.horizontal)
+                .foregroundStyle(SupportTheme.textPrimary)
+                .padding(.horizontal, SupportTheme.Spacing.m)
 
             if viewModel.stories.isEmpty {
                 emptyStateView(for: .story)
             } else {
-                LazyVStack(spacing: 8) {
+                LazyVStack(spacing: SupportTheme.Spacing.xs) {
                     ForEach(viewModel.stories) { content in
                         SleepContentListItem(
                             content: content,
@@ -216,28 +207,26 @@ struct SleepHomeView: View {
                         }
                     }
                 }
-                .padding(.horizontal)
+                .padding(.horizontal, SupportTheme.Spacing.m)
             }
         }
     }
 
     private var soundscapesSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("Soundscapes")
                 .font(.headline)
-                .foregroundStyle(.white)
-                .padding(.horizontal)
+                .accessibilityAddTraits(.isHeader)
+                .foregroundStyle(SupportTheme.textPrimary)
+                .padding(.horizontal, SupportTheme.Spacing.m)
 
             if viewModel.soundscapes.isEmpty {
                 emptyStateView(for: .soundscape)
             } else {
                 // Grid layout for soundscapes
                 LazyVGrid(
-                    columns: [
-                        GridItem(.flexible(), alignment: .top),
-                        GridItem(.flexible(), alignment: .top)
-                    ],
-                    spacing: 16
+                    columns: Array(repeating: GridItem(.flexible(), alignment: .top), count: dynamicTypeSize.isAccessibilitySize ? 1 : 2),
+                    spacing: SupportTheme.Spacing.m
                 ) {
                     ForEach(viewModel.soundscapes) { content in
                         SleepContentCard(
@@ -249,52 +238,51 @@ struct SleepHomeView: View {
                                 await viewModel.play(content)
                             }
                         }
-                        .frame(height: 180)
                     }
                 }
-                .padding(.horizontal)
+                .padding(.horizontal, SupportTheme.Spacing.m)
             }
         }
     }
 
     private var routinesSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("Wind-Down Routines")
                 .font(.headline)
-                .foregroundStyle(.white)
-                .padding(.horizontal)
+                .foregroundStyle(SupportTheme.textPrimary)
+                .padding(.horizontal, SupportTheme.Spacing.m)
 
             Text("Guided routines coming soon...")
                 .font(.subheadline)
-                .foregroundStyle(.white.opacity(0.6))
+                .foregroundStyle(SupportTheme.textPrimary.opacity(0.6))
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 40)
+                .padding(.vertical, SupportTheme.Spacing.xl)
         }
     }
 
     private func emptyStateView(for type: SleepContentType) -> some View {
-        VStack(spacing: 12) {
+        VStack(spacing: SupportTheme.Spacing.s) {
             Image(systemName: type.icon)
                 .font(.largeTitle)
-                .foregroundStyle(.white.opacity(0.4))
+                .foregroundStyle(SupportTheme.textPrimary.opacity(0.4))
 
             Text("No \(type.displayName.lowercased()) available")
                 .font(.subheadline)
-                .foregroundStyle(.white.opacity(0.6))
+                .foregroundStyle(SupportTheme.textPrimary.opacity(0.6))
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 40)
+        .padding(.vertical, SupportTheme.Spacing.xl)
     }
 
     private func errorView(_ message: String) -> some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             Image(systemName: "exclamationmark.triangle")
                 .font(.largeTitle)
-                .foregroundStyle(.orange)
+                .foregroundStyle(SupportTheme.accent)
 
             Text(message)
                 .font(.subheadline)
-                .foregroundStyle(.white.opacity(0.8))
+                .foregroundStyle(SupportTheme.textPrimary.opacity(0.8))
                 .multilineTextAlignment(.center)
 
             Button("Try Again") {
@@ -302,52 +290,50 @@ struct SleepHomeView: View {
                     await viewModel.loadContent()
                 }
             }
-            .buttonStyle(.borderedProminent)
-            .tint(.indigo)
+            .buttonStyle(.supportPrimary)
+            .tint(SupportTheme.accent)
         }
-        .padding()
+        .padding(SupportTheme.Spacing.m)
     }
 
     private var miniPlayer: some View {
         Group {
             if let content = viewModel.playerState.currentContent {
-                HStack(spacing: 12) {
+                HStack(spacing: SupportTheme.Spacing.s) {
                     // Thumbnail
                     ZStack {
-                        LinearGradient(
-                            colors: [Color.indigo.opacity(0.8), Color.purple.opacity(0.6)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
+                        SupportTheme.surface
                         Image(systemName: content.contentType.icon)
-                            .foregroundStyle(.white)
+                            .foregroundStyle(SupportTheme.textPrimary)
                     }
                     .frame(width: 44, height: 44)
-                    .cornerRadius(8)
+                    .cornerRadius(SupportTheme.controlRadius)
 
                     // Info
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                         Text(content.title)
                             .font(.subheadline)
                             .fontWeight(.medium)
-                            .foregroundStyle(.white)
-                            .lineLimit(1)
+                            .foregroundStyle(SupportTheme.textPrimary)
+                            .fixedSize(horizontal: false, vertical: true)
 
                         Text(content.contentType.displayName)
                             .font(.caption)
-                            .foregroundStyle(.white.opacity(0.7))
+                            .foregroundStyle(SupportTheme.textPrimary.opacity(0.7))
                     }
 
                     Spacer()
 
                     // Controls
-                    HStack(spacing: 16) {
+                    HStack(spacing: SupportTheme.Spacing.m) {
                         Button {
                             viewModel.togglePlayPause()
                         } label: {
                             Image(systemName: viewModel.playerState.isPlaying ? "pause.fill" : "play.fill")
                                 .font(.title2)
-                                .foregroundStyle(.white)
+                                .foregroundStyle(SupportTheme.textPrimary)
+                                .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                                .accessibilityLabel(viewModel.playerState.isPlaying ? "Pause" : "Play")
                         }
 
                         Button {
@@ -356,15 +342,17 @@ struct SleepHomeView: View {
                         } label: {
                             Image(systemName: "chevron.up")
                                 .font(.title3)
-                                .foregroundStyle(.white.opacity(0.7))
+                                .foregroundStyle(SupportTheme.textPrimary.opacity(0.7))
+                                .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                                .accessibilityLabel("Open player")
                         }
                     }
                 }
-                .padding()
-                .background(.ultraThinMaterial)
-                .cornerRadius(16)
-                .padding(.horizontal)
-                .padding(.bottom, 8)
+                .padding(SupportTheme.Spacing.m)
+                .background(SupportTheme.elevated)
+                .cornerRadius(SupportTheme.cardRadius)
+                .padding(.horizontal, SupportTheme.Spacing.m)
+                .padding(.bottom, SupportTheme.Spacing.xs)
             }
         }
     }

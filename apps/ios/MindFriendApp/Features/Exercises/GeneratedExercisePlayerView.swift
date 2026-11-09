@@ -68,6 +68,7 @@ struct GeneratedExercisePlayerView: View {
                     }
                 }
             }
+            .supportScreen()
             .navigationTitle(content.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -80,7 +81,7 @@ struct GeneratedExercisePlayerView: View {
                 ToolbarItem(placement: .primaryAction) {
                     Button(action: { viewModel.showRatingPrompt = true }) {
                         Image(systemName: content.userRating != nil ? "star.fill" : "star")
-                            .foregroundColor(.yellow)
+                            .foregroundColor(SupportTheme.accent)
                     }
                 }
             }
@@ -108,46 +109,46 @@ struct GeneratedExercisePlayerView: View {
     private var textPlayerView: some View {
         VStack(spacing: 0) {
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
                     // Content type badge
                     HStack {
                         Image(systemName: content.contentType.icon)
-                            .foregroundColor(.blue)
+                            .foregroundColor(SupportTheme.accent)
                         Text(content.contentType.displayName)
                             .font(.subheadline)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(SupportTheme.textSecondary)
                     }
-                    .padding(.bottom, 4)
+                    .padding(.bottom, SupportTheme.Spacing.xxs)
 
                     Text(content.textContent)
                         .font(.body)
                         .lineSpacing(6)
                 }
-                .padding()
+                .padding(SupportTheme.Spacing.m)
             }
 
             Divider()
 
             // Playback controls
-            VStack(spacing: 12) {
+            VStack(spacing: SupportTheme.Spacing.s) {
                 // Progress bar
                 if viewModel.isAudioPlaying {
                     ProgressView(value: viewModel.audioProgress)
-                        .tint(.blue)
-                    
+                        .tint(SupportTheme.accent)
+
                     // Time display
                     HStack {
                         Text(viewModel.audioElapsedFormatted)
                             .font(.caption.monospacedDigit())
-                            .foregroundColor(.secondary)
+                            .foregroundColor(SupportTheme.textSecondary)
                         Spacer()
                         Text(viewModel.audioRemainingFormatted)
                             .font(.caption.monospacedDigit())
-                            .foregroundColor(.secondary)
+                            .foregroundColor(SupportTheme.textSecondary)
                     }
                 }
 
-                HStack(spacing: 24) {
+                HStack(spacing: SupportTheme.Spacing.l) {
                     // Play/Stop button
                     Button(action: {
                         if viewModel.isAudioPlaying {
@@ -156,16 +157,16 @@ struct GeneratedExercisePlayerView: View {
                             viewModel.playAudio(for: content)
                         }
                     }) {
-                        HStack(spacing: 8) {
+                        HStack(spacing: SupportTheme.Spacing.xs) {
                             Image(systemName: viewModel.isAudioPlaying ? "stop.fill" : "play.fill")
                             Text(viewModel.isAudioPlaying ? "Stop" : (content.hasAudio ? "Play Audio" : "Read Aloud"))
                                 .font(.subheadline.weight(.medium))
                         }
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .background(Color.blue)
-                        .foregroundStyle(.white)
-                        .cornerRadius(10)
+                        .padding(.vertical, SupportTheme.Spacing.s)
+                        .background(SupportTheme.accent)
+                        .foregroundStyle(SupportTheme.onAccent)
+                        .cornerRadius(SupportTheme.controlRadius)
                     }
 
                     // Done button
@@ -173,21 +174,21 @@ struct GeneratedExercisePlayerView: View {
                         viewModel.stopAudio()
                         viewModel.showRatingPrompt = true
                     }) {
-                        HStack(spacing: 8) {
+                        HStack(spacing: SupportTheme.Spacing.xs) {
                             Image(systemName: "checkmark")
                             Text("Done")
                                 .font(.subheadline.weight(.medium))
                         }
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .background(Color(.systemGray5))
-                        .foregroundStyle(.primary)
-                        .cornerRadius(10)
+                        .padding(.vertical, SupportTheme.Spacing.s)
+                        .background(SupportTheme.separator)
+                        .foregroundStyle(SupportTheme.textPrimary)
+                        .cornerRadius(SupportTheme.controlRadius)
                     }
                 }
             }
-            .padding()
-            .background(Color(.systemBackground))
+            .padding(SupportTheme.Spacing.m)
+            .background(SupportTheme.canvas)
         }
     }
 }
@@ -195,56 +196,56 @@ struct GeneratedExercisePlayerView: View {
 // MARK: - Breathing Player
 
 struct BreathingPlayerView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let exercise: ExerciseContent.BreathingExercise
     @ObservedObject var viewModel: ExercisePlayerViewModel
 
     var body: some View {
         ZStack {
             // Gradient background that changes with phase
-            LinearGradient(
-                colors: viewModel.currentPhaseColors,
-                startPoint: .top,
-                endPoint: .bottom
-            )
+            SupportTheme.canvas
             .ignoresSafeArea()
-            .animation(.easeInOut(duration: 0.5), value: viewModel.breathingPhase)
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.5), value: viewModel.breathingPhase)
 
-            VStack(spacing: 40) {
+            VStack(spacing: SupportTheme.Spacing.xl) {
                 Spacer()
 
                 // Phase text
                 Text(viewModel.breathingPhaseText)
                     .font(.title.weight(.medium))
-                    .foregroundColor(.white)
+                    .id(viewModel.breathingPhaseText)
+                    .transition(.opacity)
+                    .animation(.easeInOut(duration: 0.2), value: viewModel.breathingPhaseText)
+                    .foregroundColor(SupportTheme.textPrimary)
 
                 // Animated breathing circle
                 Circle()
-                    .fill(Color.white.opacity(0.3))
+                    .fill(SupportTheme.accent.opacity(0.3))
                     .frame(width: 200, height: 200)
-                    .scaleEffect(viewModel.breathingCircleScale)
+                    .scaleEffect(reduceMotion ? 1 : (viewModel.breathingCircleScale))
 
                 // Timer
                 Text(viewModel.timeRemainingFormatted)
-                    .font(.system(size: 48, weight: .light, design: .rounded))
-                    .foregroundColor(.white)
+                    .font(.system(.largeTitle, design: .rounded).weight(.light))
+                    .foregroundColor(SupportTheme.textPrimary)
                     .monospacedDigit()
 
                 // Cycle counter
                 Text("Cycle \(viewModel.currentCycle) of \(exercise.cycles)")
                     .font(.subheadline)
-                    .foregroundColor(.white.opacity(0.7))
+                    .foregroundColor(SupportTheme.textPrimary.opacity(0.7))
 
                 Spacer()
 
                 // Controls
-                HStack(spacing: 32) {
+                HStack(spacing: SupportTheme.Spacing.xl) {
                     Button(action: viewModel.togglePlayPause) {
                         Image(systemName: viewModel.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                            .font(.system(size: 44))
-                            .foregroundColor(.white)
+                            .font(.system(.largeTitle))
+                            .foregroundColor(SupportTheme.textPrimary)
                     }
                 }
-                .padding(.bottom, 40)
+                .padding(.bottom, SupportTheme.Spacing.xl)
             }
         }
     }
@@ -253,6 +254,7 @@ struct BreathingPlayerView: View {
 // MARK: - Meditation/Mindfulness Player
 
 struct MeditationPlayerView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let exercise: ExerciseContent.MeditationExercise
     @ObservedObject var viewModel: ExercisePlayerViewModel
 
@@ -261,21 +263,21 @@ struct MeditationPlayerView: View {
             // Scrollable script
             ScrollViewReader { proxy in
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 24) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.l) {
                         ForEach(Array(exercise.script.enumerated()), id: \.offset) { index, segment in
-                            VStack(alignment: .leading, spacing: 8) {
+                            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                                 Text(segment.text)
                                     .font(.body)
-                                    .foregroundColor(index == viewModel.currentSegmentIndex ? .primary : .secondary)
+                                    .foregroundColor(index == viewModel.currentSegmentIndex ? .primary : SupportTheme.textSecondary)
                             }
                             .id(index)
-                            .padding(.horizontal)
+                            .padding(.horizontal, SupportTheme.Spacing.m)
                         }
                     }
-                    .padding(.vertical)
+                    .padding(.vertical, SupportTheme.Spacing.m)
                 }
                 .onChange(of: viewModel.currentSegmentIndex) {
-                    withAnimation {
+                    withAnimation(.easeInOut(duration: 0.2)) {
                         proxy.scrollTo(viewModel.currentSegmentIndex, anchor: .center)
                     }
                 }
@@ -289,10 +291,10 @@ struct MeditationPlayerView: View {
     }
 
     private var controlsView: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             // Progress bar
             ProgressView(value: viewModel.progress)
-                .tint(.blue)
+                .tint(SupportTheme.accent)
 
             // Time display
             HStack {
@@ -301,16 +303,16 @@ struct MeditationPlayerView: View {
                 Text(viewModel.timeRemainingFormatted)
             }
             .font(.caption.monospacedDigit())
-            .foregroundColor(.secondary)
+            .foregroundColor(SupportTheme.textSecondary)
 
             // Play/Pause button
             Button(action: viewModel.togglePlayPause) {
                 Image(systemName: viewModel.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                    .font(.system(size: 44))
+                    .font(.system(.largeTitle))
             }
         }
-        .padding()
-        .background(Color(.systemBackground))
+        .padding(SupportTheme.Spacing.m)
+        .background(SupportTheme.canvas)
     }
 }
 
@@ -324,23 +326,23 @@ struct GroundingPlayerView: View {
         VStack(spacing: 0) {
             // Current prompt display
             ZStack {
-                Color(.systemGray6)
+                SupportTheme.separator
                     .ignoresSafeArea()
 
                 if viewModel.currentSegmentIndex < exercise.prompts.count {
                     let prompt = exercise.prompts[viewModel.currentSegmentIndex]
 
-                    VStack(spacing: 24) {
+                    VStack(spacing: SupportTheme.Spacing.l) {
                         if let sense = prompt.sense {
                             Image(systemName: senseIcon(for: sense))
-                                .font(.system(size: 60))
-                                .foregroundColor(.blue)
+                                .font(.system(.largeTitle))
+                                .foregroundColor(SupportTheme.accent)
                         }
 
                         Text(prompt.text)
                             .font(.title3)
                             .multilineTextAlignment(.center)
-                            .padding()
+                            .padding(SupportTheme.Spacing.m)
                     }
                 }
             }
@@ -348,20 +350,20 @@ struct GroundingPlayerView: View {
             Divider()
 
             // Controls
-            VStack(spacing: 16) {
+            VStack(spacing: SupportTheme.Spacing.m) {
                 // Progress
                 HStack {
                     Text("Step \(viewModel.currentSegmentIndex + 1) of \(exercise.prompts.count)")
                         .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(SupportTheme.textSecondary)
                     Spacer()
                     Text(viewModel.timeRemainingFormatted)
                         .font(.caption.monospacedDigit())
-                        .foregroundColor(.secondary)
+                        .foregroundColor(SupportTheme.textSecondary)
                 }
 
                 // Buttons
-                HStack(spacing: 20) {
+                HStack(spacing: SupportTheme.Spacing.m) {
                     Button("Previous") {
                         viewModel.previousSegment()
                     }
@@ -369,7 +371,7 @@ struct GroundingPlayerView: View {
 
                     Button(action: viewModel.togglePlayPause) {
                         Image(systemName: viewModel.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                            .font(.system(size: 44))
+                            .font(.system(.largeTitle))
                     }
 
                     Button("Next") {
@@ -378,8 +380,8 @@ struct GroundingPlayerView: View {
                     .disabled(viewModel.currentSegmentIndex >= exercise.prompts.count - 1)
                 }
             }
-            .padding()
-            .background(Color(.systemBackground))
+            .padding(SupportTheme.Spacing.m)
+            .background(SupportTheme.canvas)
         }
     }
 
@@ -405,29 +407,29 @@ struct JournalingPlayerView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.l) {
                 // Header
                 Text("Journaling Prompts")
                     .font(.title2.bold())
-                    .padding(.horizontal)
+                    .padding(.horizontal, SupportTheme.Spacing.m)
 
                 // Prompts
                 ForEach(Array(exercise.prompts.enumerated()), id: \.offset) { index, prompt in
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                         HStack {
                             Text(prompt.category.capitalized)
                                 .font(.caption)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color.blue.opacity(0.1))
-                                .foregroundColor(.blue)
-                                .cornerRadius(4)
+                                .padding(.horizontal, SupportTheme.Spacing.xs)
+                                .padding(.vertical, SupportTheme.Spacing.xxs)
+                                .background(SupportTheme.surface)
+                                .foregroundColor(SupportTheme.accent)
+                                .cornerRadius(SupportTheme.controlRadius)
 
                             Spacer()
 
                             Text("\(index + 1)/\(exercise.prompts.count)")
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(SupportTheme.textSecondary)
                         }
 
                         Text(prompt.text)
@@ -435,44 +437,44 @@ struct JournalingPlayerView: View {
 
                         TextEditor(text: binding(for: index))
                             .frame(height: 120)
-                            .padding(8)
-                            .background(Color(.systemGray6))
-                            .cornerRadius(8)
+                            .padding(SupportTheme.Spacing.xs)
+                            .background(SupportTheme.separator)
+                            .cornerRadius(SupportTheme.controlRadius)
                     }
-                    .padding(.horizontal)
+                    .padding(.horizontal, SupportTheme.Spacing.m)
                 }
 
                 // Reflection questions
                 if !exercise.reflectionQuestions.isEmpty {
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                         Text("Reflection Questions")
                             .font(.headline)
-                            .padding(.horizontal)
+                            .padding(.horizontal, SupportTheme.Spacing.m)
 
                         ForEach(exercise.reflectionQuestions, id: \.self) { question in
-                            HStack(alignment: .top, spacing: 8) {
+                            HStack(alignment: .top, spacing: SupportTheme.Spacing.xs) {
                                 Image(systemName: "lightbulb.fill")
-                                    .foregroundColor(.yellow)
+                                    .foregroundColor(SupportTheme.accent)
                                     .font(.caption)
 
                                 Text(question)
                                     .font(.subheadline)
-                                    .foregroundColor(.secondary)
+                                    .foregroundColor(SupportTheme.textSecondary)
                             }
-                            .padding(.horizontal)
+                            .padding(.horizontal, SupportTheme.Spacing.m)
                         }
                     }
-                    .padding(.vertical)
+                    .padding(.vertical, SupportTheme.Spacing.m)
                 }
 
                 // Done button
                 Button("Complete") {
                     viewModel.showRatingPrompt = true
                 }
-                .buttonStyle(PrimaryButtonStyle())
-                .padding()
+                .buttonStyle(.supportPrimary)
+                .padding(SupportTheme.Spacing.m)
             }
-            .padding(.vertical)
+            .padding(.vertical, SupportTheme.Spacing.m)
         }
         .onAppear {
             responses = Array(repeating: "", count: exercise.prompts.count)
@@ -497,6 +499,7 @@ struct JournalingPlayerView: View {
 // MARK: - Rating Prompt
 
 struct RatingPromptView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let content: GeneratedContent
     let onRate: (Int, String?) -> Void
     let onDismiss: () -> Void
@@ -507,24 +510,24 @@ struct RatingPromptView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 24) {
+            VStack(spacing: SupportTheme.Spacing.l) {
                 Text("How was this exercise?")
                     .font(.title2.weight(.semibold))
 
                 // Star rating
-                HStack(spacing: 12) {
+                HStack(spacing: SupportTheme.Spacing.s) {
                     ForEach(1...5, id: \.self) { star in
                         Button(action: { rating = star }) {
                             Image(systemName: star <= rating ? "star.fill" : "star")
                                 .font(.largeTitle)
-                                .foregroundColor(star <= rating ? .yellow : .gray)
+                                .foregroundColor(star <= rating ? .yellow : SupportTheme.textSecondary)
                         }
                     }
                 }
 
                 if rating > 0 {
                     Button(showFeedback ? "Hide Feedback" : "Add Feedback (Optional)") {
-                        withAnimation {
+                        withAnimation(.easeInOut(duration: 0.2)) {
                             showFeedback.toggle()
                         }
                     }
@@ -533,27 +536,28 @@ struct RatingPromptView: View {
                     if showFeedback {
                         TextEditor(text: $feedback)
                             .frame(height: 100)
-                            .padding(8)
-                            .background(Color(.systemGray6))
-                            .cornerRadius(8)
+                            .padding(SupportTheme.Spacing.xs)
+                            .background(SupportTheme.separator)
+                            .cornerRadius(SupportTheme.controlRadius)
                     }
 
                     Button("Submit Rating") {
                         onRate(rating, feedback.isEmpty ? nil : feedback)
                         onDismiss()
                     }
-                    .buttonStyle(PrimaryButtonStyle())
+                    .buttonStyle(.supportPrimary)
                 }
 
                 Button("Skip") {
                     onDismiss()
                 }
                 .font(.subheadline)
-                .foregroundColor(.secondary)
+                .foregroundColor(SupportTheme.textSecondary)
 
                 Spacer()
             }
-            .padding()
+            .padding(SupportTheme.Spacing.m)
+            .supportScreen()
             .navigationTitle("Rate Exercise")
             .navigationBarTitleDisplayMode(.inline)
         }
@@ -613,10 +617,10 @@ class ExercisePlayerViewModel: ObservableObject {
 
     var currentPhaseColors: [Color] {
         switch breathingPhase {
-        case .inhale: return [.blue.opacity(0.6), .cyan.opacity(0.4)]
-        case .hold: return [.purple.opacity(0.5), .blue.opacity(0.4)]
-        case .exhale: return [.green.opacity(0.5), .teal.opacity(0.4)]
-        case .pause: return [.indigo.opacity(0.5), .purple.opacity(0.4)]
+        case .inhale: return [SupportTheme.accent.opacity(0.6), SupportTheme.accent.opacity(0.4)]
+        case .hold: return [SupportTheme.accent.opacity(0.5), SupportTheme.accent.opacity(0.4)]
+        case .exhale: return [SupportTheme.accent.opacity(0.5), SupportTheme.accent.opacity(0.4)]
+        case .pause: return [SupportTheme.accent.opacity(0.5), SupportTheme.accent.opacity(0.4)]
         }
     }
 
@@ -921,14 +925,3 @@ enum BreathingPhase {
 }
 
 // MARK: - Primary Button Style
-
-private struct PrimaryButtonStyle: ButtonStyle {
-    func makeBody(configuration: Self.Configuration) -> some View {
-        configuration.label
-            .frame(maxWidth: .infinity, alignment: .center)
-            .padding()
-            .background(configuration.isPressed ? Color.blue.opacity(0.8) : Color.blue)
-            .foregroundStyle(.white)
-            .cornerRadius(12)
-    }
-}

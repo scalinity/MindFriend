@@ -5,6 +5,7 @@ import SwiftUI
 /// B = Belief (Automatic Thought)
 /// C = Consequence (Emotions)
 struct ThoughtRecordView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dismiss) private var dismiss
     @StateObject private var viewModel: ThoughtRecordViewModel
 
@@ -31,7 +32,7 @@ struct ThoughtRecordView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: SupportTheme.Spacing.l) {
                     // Phase indicator
                     phaseIndicator
 
@@ -51,11 +52,12 @@ struct ThoughtRecordView: View {
                         analysisPhase
                     }
 
-                    Spacer(minLength: 100)
+                    Spacer(minLength: SupportTheme.Spacing.xl)
                 }
-                .padding()
+                .padding(SupportTheme.Spacing.m)
             }
             .scrollDismissesKeyboard(.interactively)
+            .supportScreen()
             .navigationTitle("Thought Record")
             .navigationBarTitleDisplayMode(.inline)
             .keyboardDoneButton()
@@ -75,20 +77,20 @@ struct ThoughtRecordView: View {
     // MARK: - Phase Indicator
 
     private var phaseIndicator: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: SupportTheme.Spacing.xs) {
             ForEach(ThoughtRecordPhase.allCases, id: \.self) { phase in
                 Circle()
-                    .fill(phase.rawValue <= viewModel.currentPhase.rawValue ? Color.accentColor : Color(.systemGray4))
+                    .fill(phase.rawValue <= viewModel.currentPhase.rawValue ? SupportTheme.accent : SupportTheme.separator)
                     .frame(width: 10, height: 10)
             }
         }
-        .padding(.top, 8)
+        .padding(.top, SupportTheme.Spacing.xs)
     }
 
     // MARK: - Phase 1: Situation
 
     private var situationPhase: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
             phaseHeader(
                 title: "What happened?",
                 subtitle: "Describe the situation or event that triggered your thoughts."
@@ -96,12 +98,12 @@ struct ThoughtRecordView: View {
 
             TextEditor(text: $viewModel.situation)
                 .frame(minHeight: 150)
-                .padding(12)
-                .background(Color(.systemGray6))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .padding(SupportTheme.Spacing.s)
+                .background(SupportTheme.separator)
+                .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color(.systemGray4), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                        .stroke(SupportTheme.separator, lineWidth: 1)
                 )
 
             promptCard(
@@ -114,7 +116,7 @@ struct ThoughtRecordView: View {
     // MARK: - Phase 2: Automatic Thought
 
     private var thoughtPhase: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
             phaseHeader(
                 title: "What thought went through your mind?",
                 subtitle: "Capture the automatic thought that appeared."
@@ -122,12 +124,12 @@ struct ThoughtRecordView: View {
 
             TextEditor(text: $viewModel.automaticThought)
                 .frame(minHeight: 150)
-                .padding(12)
-                .background(Color(.systemGray6))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .padding(SupportTheme.Spacing.s)
+                .background(SupportTheme.separator)
+                .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color(.systemGray4), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                        .stroke(SupportTheme.separator, lineWidth: 1)
                 )
 
             promptCard(
@@ -140,14 +142,14 @@ struct ThoughtRecordView: View {
     // MARK: - Phase 3: Emotions
 
     private var emotionsPhase: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
             phaseHeader(
                 title: "What emotions did you feel?",
                 subtitle: "Select the emotions and rate their intensity."
             )
 
             // Emotion chips
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 100))], spacing: 12) {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 100))], spacing: SupportTheme.Spacing.s) {
                 ForEach(commonEmotions, id: \.self) { emotion in
                     emotionChip(emotion)
                 }
@@ -155,10 +157,10 @@ struct ThoughtRecordView: View {
 
             // Selected emotions with intensity
             if !viewModel.selectedEmotions.isEmpty {
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                     Text("Intensity")
                         .font(.headline)
-                        .padding(.top, 8)
+                        .padding(.top, SupportTheme.Spacing.xs)
 
                     ForEach(Array(viewModel.selectedEmotions.keys.sorted()), id: \.self) { emotion in
                         emotionIntensityRow(emotion)
@@ -184,24 +186,24 @@ struct ThoughtRecordView: View {
         }) {
             Text(emotion)
                 .font(.subheadline)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .background(isSelected ? Color.accentColor : Color(.systemGray6))
-                .foregroundStyle(isSelected ? .white : .primary)
+                .padding(.horizontal, SupportTheme.Spacing.m)
+                .padding(.vertical, SupportTheme.Spacing.xs)
+                .background(isSelected ? SupportTheme.accent : SupportTheme.separator)
+                .foregroundStyle(isSelected ? SupportTheme.onAccent : SupportTheme.textPrimary)
                 .clipShape(Capsule())
         }
         .buttonStyle(.plain)
     }
 
     private func emotionIntensityRow(_ emotion: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
             HStack {
                 Text(emotion)
                     .font(.subheadline)
                 Spacer()
                 Text("\(Int(viewModel.selectedEmotions[emotion] ?? 50))%")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
 
             Slider(
@@ -212,53 +214,51 @@ struct ThoughtRecordView: View {
                 in: 0...100,
                 step: 5
             )
-            .tint(.accentColor)
+            .tint(SupportTheme.accent)
         }
-        .padding()
-        .background(Color(.systemGray6))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .supportCard()
     }
 
     // MARK: - Phase 4: Evidence
 
     private var evidencePhase: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
             phaseHeader(
                 title: "Examine the evidence",
                 subtitle: "What facts support or contradict your thought?"
             )
 
             // Evidence for
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                 Label("Evidence FOR the thought", systemImage: "plus.circle")
                     .font(.headline)
                     .foregroundStyle(.red)
 
                 TextEditor(text: $viewModel.evidenceFor)
                     .frame(minHeight: 100)
-                    .padding(12)
+                    .padding(SupportTheme.Spacing.s)
                     .background(Color.red.opacity(0.05))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 12)
+                        RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
                             .stroke(Color.red.opacity(0.3), lineWidth: 1)
                     )
             }
 
             // Evidence against
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                 Label("Evidence AGAINST the thought", systemImage: "minus.circle")
                     .font(.headline)
-                    .foregroundStyle(.green)
+                    .foregroundStyle(SupportTheme.accent)
 
                 TextEditor(text: $viewModel.evidenceAgainst)
                     .frame(minHeight: 100)
-                    .padding(12)
-                    .background(Color.green.opacity(0.05))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .padding(SupportTheme.Spacing.s)
+                    .background(SupportTheme.surface)
+                    .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(Color.green.opacity(0.3), lineWidth: 1)
+                        RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                            .stroke(SupportTheme.accent.opacity(0.3), lineWidth: 1)
                     )
             }
 
@@ -272,7 +272,7 @@ struct ThoughtRecordView: View {
     // MARK: - Phase 5: Reframe
 
     private var reframePhase: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
             phaseHeader(
                 title: "Create a balanced thought",
                 subtitle: "Write a more realistic alternative thought."
@@ -280,12 +280,12 @@ struct ThoughtRecordView: View {
 
             TextEditor(text: $viewModel.balancedThought)
                 .frame(minHeight: 150)
-                .padding(12)
-                .background(Color(.systemGray6))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .padding(SupportTheme.Spacing.s)
+                .background(SupportTheme.separator)
+                .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color(.systemGray4), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                        .stroke(SupportTheme.separator, lineWidth: 1)
                 )
 
             promptCard(
@@ -294,21 +294,21 @@ struct ThoughtRecordView: View {
             )
 
             // New emotion intensity
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                 Text("How intense are your emotions now?")
                     .font(.headline)
 
                 HStack {
                     Text("0")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
 
                     Slider(value: $viewModel.newEmotionIntensity, in: 0...100, step: 5)
-                        .tint(.accentColor)
+                        .tint(SupportTheme.accent)
 
                     Text("100")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
 
                 Text("\(Int(viewModel.newEmotionIntensity))%")
@@ -316,40 +316,38 @@ struct ThoughtRecordView: View {
                     .fontWeight(.semibold)
                     .frame(maxWidth: .infinity)
             }
-            .padding()
-            .background(Color(.systemGray6))
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .supportCard()
         }
     }
 
     // MARK: - Phase 6: Analysis
 
     private var analysisPhase: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
             if viewModel.isAnalyzing {
-                VStack(spacing: 16) {
+                VStack(spacing: SupportTheme.Spacing.m) {
                     ProgressView()
                         .scaleEffect(1.5)
                     Text("Analyzing your thought record...")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 40)
+                .padding(.vertical, SupportTheme.Spacing.xl)
             } else if let analysis = viewModel.aiAnalysis {
                 analysisResultView(analysis)
             } else {
                 // Request analysis
-                VStack(spacing: 16) {
+                VStack(spacing: SupportTheme.Spacing.m) {
                     Image(systemName: "wand.and.stars")
-                        .font(.system(size: 48))
-                        .foregroundStyle(.secondary)
+                        .font(.system(.largeTitle))
+                        .foregroundStyle(SupportTheme.textSecondary)
 
                     Text("Get AI Insights")
                         .font(.headline)
 
                     Text("Our AI can help identify thinking patterns and suggest alternative perspectives.")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                         .multilineTextAlignment(.center)
 
                     Button(action: {
@@ -359,15 +357,13 @@ struct ThoughtRecordView: View {
                     }) {
                         Label("Analyze Thought Record", systemImage: "sparkles")
                             .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.accentColor)
-                            .foregroundStyle(.white)
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .padding(SupportTheme.Spacing.m)
+                            .background(SupportTheme.accent)
+                            .foregroundStyle(SupportTheme.onAccent)
+                            .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
                     }
                 }
-                .padding()
-                .background(Color(.systemGray6))
-                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .supportCard()
             }
 
             // Summary card
@@ -378,26 +374,26 @@ struct ThoughtRecordView: View {
     }
 
     private func analysisResultView(_ analysis: AIThoughtAnalysis) -> some View {
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
             // Validation
             if let validation = analysis.validationStatement {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                     Label("Understanding", systemImage: "heart")
                         .font(.headline)
-                        .foregroundStyle(.pink)
+                        .foregroundStyle(SupportTheme.accent)
 
                     Text(validation)
                         .font(.body)
                 }
-                .padding()
+                .padding(SupportTheme.Spacing.m)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.pink.opacity(0.1))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .background(SupportTheme.surface)
+                .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
             }
 
             // Cognitive distortions
             if !analysis.identifiedDistortions.isEmpty {
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                     Label("Thinking Patterns Identified", systemImage: "brain.head.profile")
                         .font(.headline)
 
@@ -411,46 +407,46 @@ struct ThoughtRecordView: View {
 
             // Reframing suggestions
             if !analysis.reframingSuggestions.isEmpty {
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                     Label("Alternative Perspectives", systemImage: "arrow.triangle.2.circlepath")
                         .font(.headline)
-                        .foregroundStyle(.green)
+                        .foregroundStyle(SupportTheme.accent)
 
                     ForEach(analysis.reframingSuggestions, id: \.self) { suggestion in
-                        HStack(alignment: .top, spacing: 12) {
+                        HStack(alignment: .top, spacing: SupportTheme.Spacing.s) {
                             Image(systemName: "lightbulb.fill")
-                                .foregroundStyle(.yellow)
+                                .foregroundStyle(SupportTheme.accent)
 
                             Text(suggestion)
                                 .font(.subheadline)
                         }
-                        .padding()
+                        .padding(SupportTheme.Spacing.m)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.green.opacity(0.1))
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .background(SupportTheme.surface)
+                        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
                     }
                 }
             }
 
             // Coping strategies
             if !analysis.copingStrategies.isEmpty {
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                     Label("Coping Strategies", systemImage: "figure.mind.and.body")
                         .font(.headline)
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(SupportTheme.accent)
 
                     ForEach(analysis.copingStrategies, id: \.self) { strategy in
-                        HStack(alignment: .top, spacing: 12) {
+                        HStack(alignment: .top, spacing: SupportTheme.Spacing.s) {
                             Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(.blue)
+                                .foregroundStyle(SupportTheme.accent)
 
                             Text(strategy)
                                 .font(.subheadline)
                         }
-                        .padding()
+                        .padding(SupportTheme.Spacing.m)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.blue.opacity(0.1))
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .background(SupportTheme.surface)
+                        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
                     }
                 }
             }
@@ -458,10 +454,10 @@ struct ThoughtRecordView: View {
     }
 
     private func distortionCard(_ type: CognitiveDistortionType, explanation: String?) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             HStack {
                 Image(systemName: type.icon)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(SupportTheme.accent)
                 Text(type.displayName)
                     .font(.subheadline)
                     .fontWeight(.medium)
@@ -470,79 +466,79 @@ struct ThoughtRecordView: View {
             if let explanation = explanation {
                 Text(explanation)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
 
             Text(type.reframingTip)
                 .font(.caption)
-                .foregroundStyle(.blue)
-                .padding(.top, 4)
+                .foregroundStyle(SupportTheme.accent)
+                .padding(.top, SupportTheme.Spacing.xxs)
         }
-        .padding()
+        .padding(SupportTheme.Spacing.m)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.orange.opacity(0.1))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .background(SupportTheme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
     }
 
     private var summaryCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Label("Great Work!", systemImage: "star.fill")
                 .font(.headline)
-                .foregroundStyle(.yellow)
+                .foregroundStyle(SupportTheme.accent)
 
             if let improvement = viewModel.emotionImprovement {
                 HStack {
                     Text("Emotion intensity reduced by")
                     Text("\(improvement)%")
                         .fontWeight(.bold)
-                        .foregroundStyle(.green)
+                        .foregroundStyle(SupportTheme.accent)
                 }
                 .font(.subheadline)
             }
 
             Text("You've completed this thought record. Keep practicing to strengthen your CBT skills.")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
-        .padding()
+        .padding(SupportTheme.Spacing.m)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.yellow.opacity(0.1))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .background(SupportTheme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
     }
 
     // MARK: - Helper Views
 
     private func phaseHeader(title: String, subtitle: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             Text(title)
                 .font(.title2)
                 .fontWeight(.bold)
 
             Text(subtitle)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
     }
 
     private func promptCard(icon: String, text: String) -> some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: SupportTheme.Spacing.s) {
             Image(systemName: icon)
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(SupportTheme.accent)
 
             Text(text)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
-        .padding()
+        .padding(SupportTheme.Spacing.m)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.accentColor.opacity(0.1))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .background(SupportTheme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
     }
 
     // MARK: - Navigation Buttons
 
     private var navigationButtons: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: SupportTheme.Spacing.m) {
             if viewModel.currentPhase != .situation {
                 Button(action: viewModel.previousPhase) {
                     HStack {
@@ -550,10 +546,10 @@ struct ThoughtRecordView: View {
                         Text("Back")
                     }
                     .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color(.systemGray6))
-                    .foregroundStyle(.primary)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .padding(SupportTheme.Spacing.m)
+                    .background(SupportTheme.separator)
+                    .foregroundStyle(SupportTheme.textPrimary)
+                    .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
                 }
             }
 
@@ -566,10 +562,10 @@ struct ThoughtRecordView: View {
                 }) {
                     Text("Done")
                         .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.accentColor)
-                        .foregroundStyle(.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .padding(SupportTheme.Spacing.m)
+                        .background(SupportTheme.accent)
+                        .foregroundStyle(SupportTheme.onAccent)
+                        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
                 }
             } else {
                 Button(action: {
@@ -580,23 +576,23 @@ struct ThoughtRecordView: View {
                     HStack {
                         if viewModel.isSaving {
                             ProgressView()
-                                .tint(.white)
+                                .tint(SupportTheme.accent)
                         } else {
                             Text(viewModel.currentPhase == .reframe ? "Save & Continue" : "Next")
                             Image(systemName: "chevron.right")
                         }
                     }
                     .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(viewModel.canProceed ? Color.accentColor : Color(.systemGray4))
-                    .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .padding(SupportTheme.Spacing.m)
+                    .background(viewModel.canProceed ? SupportTheme.accent : SupportTheme.separator)
+                    .foregroundStyle(SupportTheme.textPrimary)
+                    .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
                 }
                 .disabled(!viewModel.canProceed || viewModel.isSaving)
             }
         }
-        .padding()
-        .background(Color(.systemBackground))
+        .padding(SupportTheme.Spacing.m)
+        .background(SupportTheme.canvas)
     }
 }
 

@@ -2,6 +2,8 @@ import SwiftUI
 
 /// Quick 15-second breathing exercise with haptic feedback
 struct QuickBreathingView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.supportRootEmbedded) private var supportEmbedded
     @Environment(\.dismiss) private var dismiss
     let onComplete: ((MicroCompletionData) -> Void)?
 
@@ -43,37 +45,36 @@ struct QuickBreathingView: View {
     }
 
     var body: some View {
-        VStack(spacing: 40) {
+        VStack(spacing: SupportTheme.Spacing.xl) {
             Spacer()
 
             // Breathing circle
             ZStack {
                 Circle()
                     .fill(
-                        RadialGradient(
-                            colors: [.blue.opacity(0.3), .blue.opacity(0.1)],
-                            center: .center,
-                            startRadius: 0,
-                            endRadius: 150
-                        )
+                        SupportTheme.surface
                     )
                     .frame(width: 300, height: 300)
-                    .scaleEffect(circleScale)
+                    .scaleEffect(reduceMotion ? 1 : (circleScale))
 
                 Circle()
-                    .stroke(Color.blue.opacity(0.5), lineWidth: 2)
+                    .stroke(SupportTheme.accent.opacity(0.5), lineWidth: 2)
                     .frame(width: 300, height: 300)
-                    .scaleEffect(circleScale)
+                    .scaleEffect(reduceMotion ? 1 : (circleScale))
 
-                VStack(spacing: 8) {
+                VStack(spacing: SupportTheme.Spacing.xs) {
                     Text(phase.instruction)
                         .font(.title2)
                         .fontWeight(.medium)
+                        .multilineTextAlignment(.center)
+                        .id(phase)
+                        .transition(.opacity)
+                        .animation(.easeInOut(duration: 0.2), value: phase)
 
                     if phase != .ready && phase != .complete {
                         Text("\(breathCount + 1) of \(totalBreaths)")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                 }
             }
@@ -90,26 +91,30 @@ struct QuickBreathingView: View {
 
             // Progress indicators
             if isActive {
-                HStack(spacing: 8) {
+                HStack(spacing: SupportTheme.Spacing.xs) {
                     ForEach(0..<totalBreaths, id: \.self) { index in
                         Circle()
-                            .fill(index < breathCount ? Color.blue : Color.gray.opacity(0.3))
+                            .fill(index < breathCount ? SupportTheme.accent : SupportTheme.textSecondary.opacity(0.3))
                             .frame(width: 10, height: 10)
                     }
                 }
                 .accessibilityLabel("Breath \(breathCount) of \(totalBreaths)")
             }
 
-            // Close button
-            Button("Close") {
-                breathingTask?.cancel()
-                dismiss()
+            if !supportEmbedded {
+                Button("Close") {
+                    breathingTask?.cancel()
+                    dismiss()
+                }
+                .buttonStyle(.supportSecondary)
+                .padding(.horizontal, SupportTheme.Spacing.m)
+                .padding(.bottom, SupportTheme.Spacing.xl)
             }
-            .buttonStyle(.bordered)
-            .padding(.bottom, 40)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(.systemBackground))
+        .supportScreen()
+        .navigationTitle("Quick breathing")
+        .navigationBarTitleDisplayMode(.inline)
         .onDisappear {
             breathingTask?.cancel()
             breathingTask = nil
@@ -139,7 +144,7 @@ struct QuickBreathingView: View {
             await MainActor.run {
                 phase = .inhale
                 triggerHaptic(.inhale)
-                withAnimation(.easeInOut(duration: inhaleDuration)) {
+                withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .easeInOut(duration: inhaleDuration)) {
                     circleScale = 1.0
                 }
             }
@@ -158,7 +163,7 @@ struct QuickBreathingView: View {
             await MainActor.run {
                 phase = .exhale
                 triggerHaptic(.exhale)
-                withAnimation(.easeInOut(duration: exhaleDuration)) {
+                withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .easeInOut(duration: exhaleDuration)) {
                     circleScale = 0.5
                 }
             }

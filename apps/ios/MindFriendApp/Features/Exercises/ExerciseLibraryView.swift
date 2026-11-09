@@ -1,12 +1,14 @@
 import SwiftUI
 
 struct ExerciseLibraryView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var container: DependencyContainer
     @State private var exercises: [Exercise] = []
     @State private var skillProgress: [SkillProgress] = []
     @State private var selectedType: ExerciseType?
     @State private var isLoading = true
+    @State private var loadError: String?
     @State private var showOnlyRecommended = false
     @State private var showGenerateExercise = false
     @State private var showSavedExercises = false
@@ -63,9 +65,9 @@ struct ExerciseLibraryView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 20) {
+            VStack(spacing: SupportTheme.Spacing.m) {
                 // AI-Generated Exercise Actions
-                VStack(spacing: 12) {
+                VStack(spacing: SupportTheme.Spacing.s) {
                     Button {
                         showGenerateExercise = true
                     } label: {
@@ -77,14 +79,14 @@ struct ExerciseLibraryView: View {
                             Spacer()
                             Image(systemName: "chevron.right")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                         }
-                        .padding()
-                        .background(Color.accentColor.opacity(0.1))
-                        .foregroundStyle(Color.accentColor)
-                        .cornerRadius(12)
+                        .padding(SupportTheme.Spacing.m)
+                        .background(SupportTheme.surface)
+                        .foregroundStyle(SupportTheme.accent)
+                        .cornerRadius(SupportTheme.controlRadius)
                     }
-                    
+
                     Button {
                         showSavedExercises = true
                     } label: {
@@ -96,22 +98,22 @@ struct ExerciseLibraryView: View {
                             Spacer()
                             Image(systemName: "chevron.right")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                         }
-                        .padding()
-                        .background(Color(.secondarySystemBackground))
-                        .foregroundStyle(.primary)
-                        .cornerRadius(12)
+                        .padding(SupportTheme.Spacing.m)
+                        .background(SupportTheme.surface)
+                        .foregroundStyle(SupportTheme.textPrimary)
+                        .cornerRadius(SupportTheme.controlRadius)
                     }
                 }
-                .padding(.horizontal)
-                
+                .padding(.horizontal, SupportTheme.Spacing.m)
+
                 Divider()
-                    .padding(.vertical, 8)
-                
+                    .padding(.vertical, SupportTheme.Spacing.xs)
+
                 // Type filter
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 12) {
+                    HStack(spacing: SupportTheme.Spacing.s) {
                         ExerciseFilterChip(
                             title: "All",
                             isSelected: selectedType == nil,
@@ -127,13 +129,13 @@ struct ExerciseLibraryView: View {
                             )
                         }
                     }
-                    .padding(.horizontal)
+                    .padding(.horizontal, SupportTheme.Spacing.m)
                 }
 
                 // Recommended filter
                 Toggle("Show only recommended for you", isOn: $showOnlyRecommended)
                     .font(.subheadline)
-                    .padding(.horizontal)
+                    .padding(.horizontal, SupportTheme.Spacing.m)
 
                 // Skill progress indicator (shown when a type is selected)
                 if let skill = selectedSkillProgress {
@@ -142,34 +144,38 @@ struct ExerciseLibraryView: View {
                         level: skill.skillLevel,
                         xp: skill.xp
                     )
-                    .transition(.opacity.combined(with: .move(edge: .top)))
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
                 } else if selectedType != nil {
                     // Show starter indicator for types with no progress
-                    HStack(spacing: 6) {
+                    HStack(spacing: SupportTheme.Spacing.xxs) {
                         Image(systemName: "sparkles")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(SupportTheme.textSecondary)
                         Text("Complete exercises to level up this skill")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(SupportTheme.textSecondary)
                     }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(Color(.systemGray5))
-                    .cornerRadius(12)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
+                    .padding(.horizontal, SupportTheme.Spacing.xs)
+                    .padding(.vertical, SupportTheme.Spacing.xxs)
+                    .background(SupportTheme.separator)
+                    .cornerRadius(SupportTheme.controlRadius)
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
                 }
 
                 // Exercises
                 if isLoading {
                     ProgressView()
-                        .padding(.top, 40)
-                } else if filteredExercises.isEmpty {
+                        .padding(.top, SupportTheme.Spacing.xl)
+                } else if let loadError {
+                        SupportUnavailableState(title: "Exercises unavailable", message: loadError, actionTitle: "Try again") {
+                            Task { await loadExercises() }
+                        }
+                    } else if filteredExercises.isEmpty {
                     Text("No exercises found")
-                        .foregroundStyle(.secondary)
-                        .padding(.top, 40)
+                        .foregroundStyle(SupportTheme.textSecondary)
+                        .padding(.top, SupportTheme.Spacing.xl)
                 } else {
-                    LazyVStack(spacing: 12) {
+                    LazyVStack(spacing: SupportTheme.Spacing.s) {
                         ForEach(filteredExercises) { exercise in
                             NavigationLink {
                                 LibraryExercisePlayerView(exercise: exercise, container: container)
@@ -182,15 +188,16 @@ struct ExerciseLibraryView: View {
                             .buttonStyle(.plain)
                         }
                     }
-                    .padding(.horizontal)
+                    .padding(.horizontal, SupportTheme.Spacing.m)
                 }
             }
-            .padding(.vertical)
+            .padding(.vertical, SupportTheme.Spacing.m)
         }
         .scrollClipDisabled(false)
+        .supportScreen()
         .navigationTitle("Exercises")
         .navigationBarTitleDisplayMode(.large)
-        .toolbarBackground(.visible, for: .navigationBar)
+
         // Load exercises on appear
         .task {
             await loadExercises()
@@ -218,6 +225,7 @@ struct ExerciseLibraryView: View {
 
     private func loadExercises() async {
         isLoading = true
+        loadError = nil
         defer { isLoading = false }
 
         do {
@@ -228,7 +236,7 @@ struct ExerciseLibraryView: View {
             skillProgress = try await skillsTask
         } catch {
             Log.quests.error("ExerciseLibraryView loadExercises error", error: error)
-            appState.showError(.apiError(error.localizedDescription))
+            loadError = error.localizedDescription
         }
     }
 }
@@ -241,18 +249,18 @@ private struct ExerciseFilterChip: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 6) {
+            HStack(spacing: SupportTheme.Spacing.xxs) {
                 if let icon = icon {
                     Image(systemName: icon)
                 }
                 Text(title)
             }
             .font(.subheadline)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .background(isSelected ? Color.accentColor : Color(.secondarySystemBackground))
-            .foregroundStyle(isSelected ? .white : .primary)
-            .cornerRadius(20)
+            .padding(.horizontal, SupportTheme.Spacing.m)
+            .padding(.vertical, SupportTheme.Spacing.xs)
+            .background(isSelected ? SupportTheme.accent : SupportTheme.surface)
+            .foregroundStyle(isSelected ? SupportTheme.onAccent : SupportTheme.textPrimary)
+            .cornerRadius(SupportTheme.cardRadius)
         }
     }
 }
@@ -267,44 +275,44 @@ struct ExerciseCard: View {
     }
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: SupportTheme.Spacing.s) {
             // Icon - fixed size
             Image(systemName: exercise.type.icon)
                 .font(.title2)
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(SupportTheme.accent)
                 .frame(width: 50, height: 50)
-                .background(Color.accentColor.opacity(0.1))
-                .cornerRadius(10)
+                .background(SupportTheme.surface)
+                .cornerRadius(SupportTheme.controlRadius)
                 .accessibilityHidden(true)
 
             // Content - flexible, takes remaining space
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 // Title row
-                HStack(spacing: 6) {
+                HStack(spacing: SupportTheme.Spacing.xxs) {
                     Text(exercise.title)
                         .font(.headline)
-                        .foregroundStyle(.primary)
-                        .lineLimit(2)
+                        .foregroundStyle(SupportTheme.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
                         .fixedSize(horizontal: false, vertical: true)
 
                     if isRecommended {
                         Image(systemName: "star.fill")
                             .font(.caption2)
-                            .foregroundColor(.orange)
+                            .foregroundColor(SupportTheme.accent)
                     }
                 }
 
                 // Description
                 Text(exercise.description)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
+                    .foregroundStyle(SupportTheme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 // Metadata row - wrap to fit
-                HStack(spacing: 6) {
+                HStack(spacing: SupportTheme.Spacing.xxs) {
                     Label("\(durationMinutes) min", systemImage: "clock")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
 
                     if let basis = exercise.evidenceBasis {
                         EvidenceBadge(
@@ -317,11 +325,11 @@ struct ExerciseCard: View {
                     if isRecommended {
                         Text("For you")
                             .font(.caption2)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Color.orange.opacity(0.15))
-                            .foregroundColor(.orange)
-                            .cornerRadius(4)
+                            .padding(.horizontal, SupportTheme.Spacing.xxs)
+                            .padding(.vertical, SupportTheme.Spacing.xxs)
+                            .background(SupportTheme.surface)
+                            .foregroundColor(SupportTheme.accent)
+                            .cornerRadius(SupportTheme.controlRadius)
                     }
                 }
             }
@@ -330,12 +338,12 @@ struct ExerciseCard: View {
             // Chevron
             Image(systemName: "chevron.right")
                 .font(.caption)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .accessibilityHidden(true)
         }
-        .padding(12)
-        .background(Color(.secondarySystemBackground))
-        .cornerRadius(12)
+        .padding(SupportTheme.Spacing.s)
+        .background(SupportTheme.surface)
+        .cornerRadius(SupportTheme.controlRadius)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityDescription)
         .accessibilityHint("Double tap to start this exercise")
@@ -354,6 +362,7 @@ struct ExerciseCard: View {
 }
 
 struct ExercisePlayerView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var container: DependencyContainer
     @Environment(\.dismiss) var dismiss
@@ -389,19 +398,19 @@ struct ExercisePlayerView: View {
     }
 
     var body: some View {
-        VStack(spacing: 32) {
+        VStack(spacing: SupportTheme.Spacing.xl) {
             Spacer()
 
             // Timer circle
             ZStack {
                 Circle()
-                    .stroke(Color.secondary.opacity(0.2), lineWidth: 12)
+                    .stroke(SupportTheme.textSecondary.opacity(0.2), lineWidth: 12)
 
                 Circle()
                     .trim(from: 0, to: progress)
-                    .stroke(Color.accentColor, style: StrokeStyle(lineWidth: 12, lineCap: .round))
+                    .stroke(SupportTheme.accent, style: StrokeStyle(lineWidth: 12, lineCap: .round))
                     .rotationEffect(.degrees(-90))
-                    .animation(.linear(duration: 1), value: progress)
+                    .animation(reduceMotion ? nil : .linear(duration: 1), value: progress)
 
                 VStack {
                     Text(timeString)
@@ -410,7 +419,7 @@ struct ExercisePlayerView: View {
 
                     Text(isPlaying ? "In Progress" : "Ready")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel("Timer: \(timeString), \(isPlaying ? "in progress" : "ready")")
@@ -423,7 +432,7 @@ struct ExercisePlayerView: View {
                     trajectory: currentTrajectory,
                     isLive: isPlaying
                 )
-                .transition(.opacity.combined(with: .move(edge: .top)))
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
             }
 
             // Exercise content
@@ -431,19 +440,21 @@ struct ExercisePlayerView: View {
                 Text(text)
                     .font(.body)
                     .multilineTextAlignment(.center)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 32)
+                    .foregroundStyle(SupportTheme.textSecondary)
+                    .padding(.horizontal, SupportTheme.Spacing.xl)
             }
 
             Spacer()
 
             // Controls
-            HStack(spacing: 32) {
+            HStack(spacing: SupportTheme.Spacing.xl) {
                 Button {
                     resetTimer()
                 } label: {
                     Image(systemName: "arrow.counterclockwise")
                         .font(.title)
+                    .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                    .accessibilityLabel("Restart")
                 }
                 .disabled(!isPlaying && timeRemaining == exercise.durationSeconds)
 
@@ -455,8 +466,10 @@ struct ExercisePlayerView: View {
                     }
                 } label: {
                     Image(systemName: isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                        .font(.system(size: 80))
-                        .foregroundStyle(Color.accentColor)
+                        .font(.system(.largeTitle))
+                        .foregroundStyle(SupportTheme.accent)
+                        .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                        .accessibilityLabel(isPlaying ? "Pause" : "Play")
                 }
 
                 Button {
@@ -464,10 +477,13 @@ struct ExercisePlayerView: View {
                 } label: {
                     Image(systemName: "checkmark.circle")
                         .font(.title)
+                    .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                    .accessibilityLabel("Complete exercise")
                 }
             }
-            .padding(.bottom, 32)
+            .padding(.bottom, SupportTheme.Spacing.xl)
         }
+        .supportScreen()
         .navigationTitle(exercise.title)
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showCompletion) {
@@ -538,12 +554,12 @@ struct ExercisePlayerView: View {
 
     private func startTimer() {
         isPlaying = true
-        
+
         // Start efficacy tracking
         Task {
             await startEfficacyTracking()
         }
-        
+
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
             if timeRemaining > 0 {
                 timeRemaining -= 1
@@ -561,7 +577,7 @@ struct ExercisePlayerView: View {
     private func resetTimer() {
         pauseTimer()
         timeRemaining = exercise.durationSeconds
-        
+
         // Reset efficacy tracking
         Task {
             if isTrackingEfficacy {
@@ -575,16 +591,16 @@ struct ExercisePlayerView: View {
 
     private func completeExercise() {
         pauseTimer()
-        
+
         // Stop efficacy tracking
         Task {
             await stopEfficacyTracking()
             showCompletion = true
         }
     }
-    
+
     // MARK: - Efficacy Tracking
-    
+
     private func startEfficacyTracking() async {
         guard let session = session,
               let sessionIdUUID = UUID(uuidString: session.id),
@@ -623,17 +639,17 @@ struct ExercisePlayerView: View {
             }
         }
     }
-    
+
     private func checkForBreakthrough() {
         guard currentTrajectory.count >= 2 else { return }
-        
+
         let lastIndex = currentTrajectory.count - 1
         let current = currentTrajectory[lastIndex]
         let previous = currentTrajectory[lastIndex - 1]
-        
+
         let change = current.compositeScore - previous.compositeScore
         let duration = current.secondsFromStart - previous.secondsFromStart
-        
+
         if change > 0.4 && duration <= 60 {
             breakthroughSecond = current.secondsFromStart
             showBreakthroughCelebration = true
@@ -695,10 +711,10 @@ struct ExerciseCompletionView: View {
     @Environment(\.dismiss) var dismiss
 
     var body: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: SupportTheme.Spacing.l) {
             Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 80))
-                .foregroundStyle(.green)
+                .font(.system(.largeTitle))
+                .foregroundStyle(SupportTheme.accent)
 
             Text("Exercise Complete!")
                 .font(.title)
@@ -707,14 +723,16 @@ struct ExerciseCompletionView: View {
             Text("How was this exercise?")
                 .font(.headline)
 
-            HStack(spacing: 8) {
+            HStack(spacing: SupportTheme.Spacing.xs) {
                 ForEach(1...5, id: \.self) { star in
                     Button {
                         rating = star
                     } label: {
                         Image(systemName: star <= rating ? "star.fill" : "star")
                             .font(.title)
-                            .foregroundStyle(star <= rating ? .yellow : .secondary)
+                            .foregroundStyle(star <= rating ? .yellow : SupportTheme.textSecondary)
+                            .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                            .accessibilityLabel("\(star) stars")
                     }
                 }
             }
@@ -736,15 +754,12 @@ struct ExerciseCompletionView: View {
                 Text(isSubmitting ? "Saving…" : (errorMessage == nil ? "Done" : "Retry Save"))
                     .font(.headline)
                     .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.accentColor)
-                    .foregroundStyle(.white)
-                    .cornerRadius(12)
             }
-            .padding()
+            .buttonStyle(.supportPrimary)
+            .padding(SupportTheme.Spacing.m)
             .disabled(isSubmitting)
         }
-        .padding()
+        .padding(SupportTheme.Spacing.m)
         .interactiveDismissDisabled(isSubmitting)
     }
 }

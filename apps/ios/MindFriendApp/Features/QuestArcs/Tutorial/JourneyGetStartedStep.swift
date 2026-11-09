@@ -9,30 +9,31 @@ import SwiftUI
 
 /// Step 4: Encourage user to start their first journey
 struct JourneyGetStartedStep: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let onComplete: () -> Void
 
     @State private var showSparkle = false
     @State private var showCards = false
 
     private let sampleJourneys = [
-        ("Stress Relief", "brain.head.profile", Color.blue, "14 days"),
-        ("Better Sleep", "moon.zzz.fill", Color.indigo, "21 days"),
-        ("Build Confidence", "figure.stand", Color.purple, "14 days")
+        ("Stress Relief", "brain.head.profile", SupportTheme.accent, "14 days"),
+        ("Better Sleep", "moon.zzz.fill", SupportTheme.accent, "21 days"),
+        ("Build Confidence", "figure.stand", SupportTheme.accent, "14 days")
     ]
 
     var body: some View {
         JourneyTutorialStepLayout(
             icon: "sparkles",
-            iconColor: .purple,
+            iconColor: SupportTheme.accent,
             headline: "Choose Your Path",
             subheadline: "Browse our journeys and find one that speaks to where you are right now.",
             primaryLabel: "Explore Journeys",
             primaryAction: onComplete,
             skipAction: nil
         ) {
-            VStack(spacing: 16) {
+            VStack(spacing: SupportTheme.Spacing.m) {
                 // Sample journey cards
-                VStack(spacing: 8) {
+                VStack(spacing: SupportTheme.Spacing.xs) {
                     ForEach(Array(sampleJourneys.enumerated()), id: \.offset) { index, journey in
                         journeyPreviewCard(
                             title: journey.0,
@@ -43,32 +44,32 @@ struct JourneyGetStartedStep: View {
                         )
                     }
                 }
-                .padding(.horizontal, 20)
+                .padding(.horizontal, SupportTheme.Spacing.m)
 
                 // Tips
-                HStack(spacing: 12) {
+                HStack(spacing: SupportTheme.Spacing.s) {
                     tipItem(icon: "heart.fill", text: "Pick what resonates")
                     tipItem(icon: "clock.fill", text: "Start when ready")
                 }
-                .padding(.horizontal, 20)
+                .padding(.horizontal, SupportTheme.Spacing.m)
 
                 // Encouragement
-                HStack(spacing: 8) {
+                HStack(spacing: SupportTheme.Spacing.xs) {
                     Image(systemName: "sparkles")
-                        .foregroundStyle(.yellow)
-                        .scaleEffect(showSparkle ? 1.2 : 1.0)
+                        .foregroundStyle(SupportTheme.accent)
+                        .scaleEffect(reduceMotion ? 1 : (showSparkle ? 1.2 : 1.0))
 
                     Text("Your transformation begins with a single step")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
-                .padding(.horizontal, 20)
+                .padding(.horizontal, SupportTheme.Spacing.m)
             }
             .onAppear {
-                withAnimation {
+                withAnimation(.easeInOut(duration: 0.2)) {
                     showCards = true
                 }
-                withAnimation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true)) {
+                withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .easeInOut(duration: 0.6).repeatForever(autoreverses: true)) {
                     showSparkle = true
                 }
             }
@@ -77,47 +78,47 @@ struct JourneyGetStartedStep: View {
 
     @ViewBuilder
     private func journeyPreviewCard(title: String, icon: String, color: Color, duration: String, index: Int) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: SupportTheme.Spacing.s) {
             Image(systemName: icon)
                 .font(.title3)
                 .foregroundStyle(color)
                 .frame(width: 36, height: 36)
-                .background(color.opacity(0.15))
+                .background(SupportTheme.surface)
                 .clipShape(Circle())
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text(title)
                     .font(.subheadline.weight(.medium))
 
                 Text(duration)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
 
             Spacer()
 
             Image(systemName: "chevron.right")
                 .font(.caption)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
-        .padding(12)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .padding(SupportTheme.Spacing.s)
+        .background(SupportTheme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
         .opacity(showCards ? 1 : 0)
-        .offset(x: showCards ? 0 : 30)
-        .animation(.easeOut(duration: 0.4).delay(Double(index) * 0.1), value: showCards)
+        .offset(x: reduceMotion ? 0 : (showCards ? 0 : 30))
+        .animation(reduceMotion ? .easeInOut(duration: 0.2) : .easeOut(duration: 0.4).delay(Double(index) * 0.1), value: showCards)
     }
 
     @ViewBuilder
     private func tipItem(icon: String, text: String) -> some View {
-        HStack(spacing: 6) {
+        HStack(spacing: SupportTheme.Spacing.xxs) {
             Image(systemName: icon)
                 .font(.caption)
-                .foregroundStyle(.blue)
+                .foregroundStyle(SupportTheme.accent)
 
             Text(text)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
     }
 }

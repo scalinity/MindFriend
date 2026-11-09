@@ -13,42 +13,42 @@ struct ActivePathwayCard: View {
 
     var body: some View {
         Button(action: onTap) {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
+                HStack(spacing: SupportTheme.Spacing.s) {
                     // Pathway icon
                     if let iconName = userPathway.pathway?.iconName {
                         Image(systemName: iconName)
-                            .font(.system(size: 28))
-                            .foregroundColor(colorFromHex(userPathway.pathway?.color ?? "#5C6BC0"))
+                            .font(.system(.title))
+                            .foregroundColor(SupportTheme.accent)
                             .frame(width: 44, height: 44)
                             .background(
                                 Circle()
-                                    .fill(colorFromHex(userPathway.pathway?.color ?? "#5C6BC0").opacity(0.1))
+                                    .fill(SupportTheme.accent.opacity(0.1))
                             )
                     }
 
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                         Text(userPathway.pathway?.name ?? "Pathway")
                             .font(.headline)
-                            .foregroundColor(.primary)
+                            .foregroundColor(SupportTheme.textPrimary)
 
                         Text("Day \(userPathway.currentDay) • \(userPathway.currentPhaseName)")
                             .font(.subheadline)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(SupportTheme.textSecondary)
                     }
 
                     Spacer()
 
                     // Progress percentage
-                    VStack(alignment: .trailing, spacing: 2) {
+                    VStack(alignment: .trailing, spacing: SupportTheme.Spacing.xxs) {
                         Text("\(Int(userPathway.progressPercentage * 100))%")
                             .font(.title3)
                             .fontWeight(.semibold)
-                            .foregroundColor(.primary)
+                            .foregroundColor(SupportTheme.textPrimary)
 
                         Text("Complete")
                             .font(.caption2)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(SupportTheme.textSecondary)
                     }
                 }
 
@@ -56,24 +56,20 @@ struct ActivePathwayCard: View {
                 GeometryReader { geometry in
                     ZStack(alignment: .leading) {
                         // Background
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(Color.gray.opacity(0.2))
+                        RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                            .fill(SupportTheme.textSecondary.opacity(0.2))
                             .frame(height: 6)
 
                         // Progress fill
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(colorFromHex(userPathway.pathway?.color ?? "#5C6BC0"))
+                        RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                            .fill(SupportTheme.accent)
                             .frame(width: geometry.size.width * userPathway.progressPercentage, height: 6)
                     }
                 }
                 .frame(height: 6)
             }
-            .padding(16)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color(.systemBackground))
-                    .shadow(color: Color.black.opacity(0.06), radius: 8, x: 0, y: 2)
-            )
+            .padding(SupportTheme.Spacing.m)
+            .background(SupportTheme.surface, in: RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
         }
         .buttonStyle(PlainButtonStyle())
         .accessibilityLabel(
@@ -82,23 +78,11 @@ struct ActivePathwayCard: View {
         .accessibilityHint("Double tap to view pathway details")
     }
 
-    private func colorFromHex(_ hex: String) -> Color {
-        var hexSanitized = hex.trimmingCharacters(in: .whitespacesAndNewlines)
-        hexSanitized = hexSanitized.replacingOccurrences(of: "#", with: "")
 
-        var rgb: UInt64 = 0
-        Scanner(string: hexSanitized).scanHexInt64(&rgb)
-
-        let r = Double((rgb & 0xFF0000) >> 16) / 255.0
-        let g = Double((rgb & 0x00FF00) >> 8) / 255.0
-        let b = Double((rgb & 0x0000FF)) / 255.0
-
-        return Color(red: r, green: g, blue: b)
-    }
 }
 
 #Preview {
-    VStack(spacing: 16) {
+    VStack(spacing: SupportTheme.Spacing.m) {
         ActivePathwayCard(
             userPathway: UserPathway(
                 id: UUID(),
@@ -132,7 +116,7 @@ struct ActivePathwayCard: View {
             ),
             onTap: {}
         )
-        .padding()
+        .padding(SupportTheme.Spacing.m)
 
         ActivePathwayCard(
             userPathway: UserPathway(
@@ -167,7 +151,7 @@ struct ActivePathwayCard: View {
             ),
             onTap: {}
         )
-        .padding()
+        .padding(SupportTheme.Spacing.m)
     }
-    .background(Color(.systemGroupedBackground))
+    .background(SupportTheme.surface)
 }

@@ -16,7 +16,7 @@ struct JournalPromptsView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: SupportTheme.Spacing.l) {
                     // Mood-based suggestions
                     if !suggestedPrompts.isEmpty {
                         suggestedSection
@@ -28,8 +28,9 @@ struct JournalPromptsView: View {
                     // Prompts list
                     promptsList
                 }
-                .padding()
+                .padding(SupportTheme.Spacing.m)
             }
+            .supportScreen()
             .navigationTitle("Writing Prompts")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -48,17 +49,18 @@ struct JournalPromptsView: View {
     // MARK: - Sections
 
     private var suggestedSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             HStack {
                 Image(systemName: "sparkles")
-                    .foregroundStyle(.purple)
+                    .foregroundStyle(SupportTheme.accent)
                 Text("Suggested for You")
                     .font(.headline)
+                .accessibilityAddTraits(.isHeader)
             }
 
             Text("Based on how you're feeling")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
 
             ForEach(suggestedPrompts) { prompt in
                 PromptCard(
@@ -74,12 +76,12 @@ struct JournalPromptsView: View {
     }
 
     private var categoryPicker: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("Browse by Category")
                 .font(.headline)
 
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
+                HStack(spacing: SupportTheme.Spacing.xs) {
                     CategoryChip(
                         title: "All",
                         icon: "tray.full",
@@ -103,7 +105,7 @@ struct JournalPromptsView: View {
     }
 
     private var promptsList: some View {
-        LazyVStack(spacing: 12) {
+        LazyVStack(spacing: SupportTheme.Spacing.s) {
             let filtered = selectedCategory == nil
                 ? prompts
                 : prompts.filter { $0.category == selectedCategory }
@@ -159,16 +161,16 @@ private struct CategoryChip: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 4) {
+            HStack(spacing: SupportTheme.Spacing.xxs) {
                 Image(systemName: icon)
                     .font(.caption)
                 Text(title)
                     .font(.caption)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(isSelected ? Color.accentColor : Color(.systemGray6))
-            .foregroundStyle(isSelected ? .white : .primary)
+            .padding(.horizontal, SupportTheme.Spacing.s)
+            .padding(.vertical, SupportTheme.Spacing.xs)
+            .background(isSelected ? SupportTheme.accent : SupportTheme.separator)
+            .foregroundStyle(isSelected ? SupportTheme.onAccent : SupportTheme.textPrimary)
             .clipShape(Capsule())
         }
         .buttonStyle(.plain)
@@ -183,41 +185,41 @@ struct PromptCard: View {
 
     var body: some View {
         Button(action: onSelect) {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                 HStack {
                     Image(systemName: prompt.category.icon)
-                        .foregroundStyle(isHighlighted ? .purple : .accentColor)
+                        .foregroundStyle(SupportTheme.accent)
                     Text(prompt.category.displayName)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                     Spacer()
                     if prompt.isPremium && !isPremiumUser {
                         Image(systemName: "crown.fill")
                             .font(.caption)
-                            .foregroundStyle(.yellow)
+                            .foregroundStyle(SupportTheme.accent)
                     }
                 }
 
                 Text(prompt.promptText)
                     .font(.subheadline)
                     .multilineTextAlignment(.leading)
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(SupportTheme.textPrimary)
 
                 HStack {
                     if let moods = prompt.moodAffinity, !moods.isEmpty {
                         Text("Good for: \(moodLabels(moods))")
                             .font(.caption2)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                     Spacer()
                     Image(systemName: "chevron.right")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
             }
-            .padding()
-            .background(isHighlighted ? Color.purple.opacity(0.1) : Color(.systemGray6))
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .padding(SupportTheme.Spacing.m)
+            .background(isHighlighted ? SupportTheme.accent.opacity(0.1) : SupportTheme.separator)
+            .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
         }
         .buttonStyle(.plain)
     }

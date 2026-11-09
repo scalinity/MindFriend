@@ -2,6 +2,7 @@ import SwiftUI
 
 /// View for generating a new personalized exercise
 struct GenerateExerciseView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @StateObject private var viewModel: GenerateExerciseViewModel
     @EnvironmentObject private var appState: AppState
     @Environment(\.dismiss) private var dismiss
@@ -19,29 +20,29 @@ struct GenerateExerciseView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: SupportTheme.Spacing.l) {
                     // Header
-                    VStack(spacing: 8) {
+                    VStack(spacing: SupportTheme.Spacing.xs) {
                         Image(systemName: "sparkles")
-                            .font(.system(size: 48))
-                            .foregroundColor(.blue)
+                            .font(.system(.largeTitle))
+                            .foregroundColor(SupportTheme.accent)
 
                         Text("Generate Exercise")
                             .font(.title2.bold())
 
                         Text("Create a personalized exercise just for you")
                             .font(.subheadline)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(SupportTheme.textSecondary)
                             .multilineTextAlignment(.center)
                     }
-                    .padding(.top, 20)
+                    .padding(.top, SupportTheme.Spacing.m)
 
                     // Exercise type selector
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                         Text("Exercise Type")
                             .font(.headline)
 
-                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), alignment: .top), count: dynamicTypeSize.isAccessibilitySize ? 1 : 2), spacing: SupportTheme.Spacing.s) {
                             ForEach([GeneratedContentType.breathing, .meditation, .grounding, .journaling]) { type in
                                 ExerciseTypeCard(
                                     type: type,
@@ -53,7 +54,7 @@ struct GenerateExerciseView: View {
                     }
 
                     // Duration picker
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                         Text("Duration")
                             .font(.headline)
 
@@ -66,15 +67,15 @@ struct GenerateExerciseView: View {
                     }
 
                     // Optional: Current mood input
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                         Toggle("Include my current mood", isOn: $viewModel.includeMood)
                             .font(.headline)
 
                         if viewModel.includeMood {
-                            VStack(spacing: 8) {
+                            VStack(spacing: SupportTheme.Spacing.xs) {
                                 Text("How are you feeling?")
                                     .font(.subheadline)
-                                    .foregroundColor(.secondary)
+                                    .foregroundColor(SupportTheme.textSecondary)
 
                                 Picker("Mood", selection: $viewModel.mood) {
                                     ForEach(MoodOption.allCases) { mood in
@@ -90,9 +91,7 @@ struct GenerateExerciseView: View {
                                     Stepper("", value: $viewModel.energyLevel, in: 1...10)
                                 }
                             }
-                            .padding()
-                            .background(Color(.systemGray6))
-                            .cornerRadius(12)
+                            .supportCard()
                         }
                     }
 
@@ -108,51 +107,52 @@ struct GenerateExerciseView: View {
                         if viewModel.isGenerating {
                             HStack {
                                 ProgressView()
-                                    .tint(.white)
+                                    .tint(SupportTheme.accent)
                                 Text("Generating...")
                             }
                             .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.blue.opacity(0.8))
-                            .foregroundStyle(.white)
-                            .cornerRadius(12)
+                            .padding(SupportTheme.Spacing.m)
+                            .background(SupportTheme.surface)
+                            .foregroundStyle(SupportTheme.textPrimary)
+                            .cornerRadius(SupportTheme.controlRadius)
                         } else if appState.entitlements.tier == .premium || viewModel.canGenerate {
                             Text("Generate Exercise for Me")
                                 .font(.headline)
                                 .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(Color.blue)
-                                .foregroundStyle(.white)
-                                .cornerRadius(12)
+                                .padding(SupportTheme.Spacing.m)
+                                .background(SupportTheme.accent)
+                                .foregroundStyle(SupportTheme.onAccent)
+                                .cornerRadius(SupportTheme.controlRadius)
                         } else {
                             Text("Upgrade to Generate")
                                 .font(.headline)
                                 .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(Color.orange)
-                                .foregroundStyle(.white)
-                                .cornerRadius(12)
+                                .padding(SupportTheme.Spacing.m)
+                                .background(SupportTheme.accent)
+                                .foregroundStyle(SupportTheme.onAccent)
+                                .cornerRadius(SupportTheme.controlRadius)
                         }
                     }
                     .disabled(viewModel.isGenerating)
-                    .padding(.top, 8)
+                    .padding(.top, SupportTheme.Spacing.xs)
 
                     // Quota status (free users only)
                     if appState.entitlements.tier != .premium, let quota = viewModel.quotaStatus {
                         HStack {
                             Image(systemName: "sparkles")
-                                .foregroundColor(.blue)
+                                .foregroundColor(SupportTheme.accent)
 
                             Text(quota.remaining > 0
                                 ? "1 free generation per month"
                                 : "Free generation used this month")
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(SupportTheme.textSecondary)
                         }
                     }
                 }
-                .padding()
+                .padding(SupportTheme.Spacing.m)
             }
+            .supportScreen()
             .navigationTitle("Create Exercise")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -186,27 +186,27 @@ struct ExerciseTypeCard: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 8) {
+            VStack(spacing: SupportTheme.Spacing.xs) {
                 Image(systemName: type.icon)
-                    .font(.system(size: 32))
-                    .foregroundColor(isSelected ? .white : .blue)
+                    .font(.system(.largeTitle))
+                    .foregroundColor(isSelected ? SupportTheme.onAccent : SupportTheme.accent)
 
                 Text(type.displayName)
                     .font(.subheadline.weight(.medium))
-                    .foregroundColor(isSelected ? .white : .primary)
+                    .foregroundColor(isSelected ? SupportTheme.onAccent : SupportTheme.textPrimary)
 
                 Text(type.description)
                     .font(.caption2)
-                    .foregroundColor(isSelected ? .white.opacity(0.9) : .secondary)
+                    .foregroundColor(isSelected ? SupportTheme.onAccent.opacity(0.9) : SupportTheme.textSecondary)
                     .multilineTextAlignment(.center)
-                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity)
             .frame(height: 140)
-            .padding()
+            .padding(SupportTheme.Spacing.m)
             .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(isSelected ? Color.blue : Color(.systemGray6))
+                RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                    .fill(isSelected ? SupportTheme.accent : SupportTheme.separator)
             )
         }
     }
@@ -280,14 +280,14 @@ class GenerateExerciseViewModel: ObservableObject {
                 let contentType: String
                 let params: GenerateContentParams
             }
-            
+
             struct GenerateContentParams: Encodable {
                 let duration: Int
                 let theme: String?
                 let customPrompt: String?
                 let timezone: String
             }
-            
+
             // Response matches Edge Function generate-content response
             struct GenerateContentResponse: Decodable {
                 let contentId: String
@@ -303,7 +303,7 @@ class GenerateExerciseViewModel: ObservableObject {
                 let qualityScore: Int?
                 let triggerWarnings: [String]?
             }
-            
+
             let request = GenerateContentRequest(
                 contentType: selectedType.rawValue,
                 params: GenerateContentParams(

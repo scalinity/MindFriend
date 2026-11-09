@@ -3,6 +3,7 @@ import SwiftUI
 /// Full-screen meditation/breathing/affirmation player view
 /// Features audio playback, text follow-along, rating, and favorites
 struct GeneratedMeditationView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let content: GeneratedContent
     @Environment(\.dismiss) private var dismiss
     @StateObject private var player = AudioPlayerViewModel()
@@ -24,7 +25,7 @@ struct GeneratedMeditationView: View {
             // Ambient background
             ambientBackground
 
-            VStack(spacing: 24) {
+            VStack(spacing: SupportTheme.Spacing.l) {
                 // Header
                 headerView
 
@@ -46,7 +47,7 @@ struct GeneratedMeditationView: View {
                     textFollowAlongView
                 }
             }
-            .padding()
+            .padding(SupportTheme.Spacing.m)
         }
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -55,7 +56,9 @@ struct GeneratedMeditationView: View {
                     dismiss()
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
+                        .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                        .accessibilityLabel("Close")
                 }
             }
         }
@@ -94,11 +97,7 @@ struct GeneratedMeditationView: View {
     // MARK: - Ambient Background
 
     private var ambientBackground: some View {
-        LinearGradient(
-            colors: content.contentType.gradientColors,
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
+        SupportTheme.canvas
         .ignoresSafeArea()
         .opacity(0.3)
     }
@@ -106,10 +105,10 @@ struct GeneratedMeditationView: View {
     // MARK: - Header
 
     private var headerView: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: SupportTheme.Spacing.xs) {
             Image(systemName: content.contentType.icon)
-                .font(.system(size: 48))
-                .foregroundStyle(content.contentType.backgroundColor)
+                .font(.system(.largeTitle))
+                .foregroundStyle(SupportTheme.accent)
 
             Text(content.title)
                 .font(.title2.bold())
@@ -117,49 +116,49 @@ struct GeneratedMeditationView: View {
 
             Text(content.contentType.displayName)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
     }
 
     // MARK: - Main Content Area
 
     private var mainContentArea: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             // Duration indicator
-            HStack(spacing: 8) {
+            HStack(spacing: SupportTheme.Spacing.xs) {
                 if let duration = content.duration {
                     Image(systemName: "clock")
                     Text("\(duration / 60) min")
                 }
             }
             .font(.caption)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(SupportTheme.textSecondary)
 
             if player.usesBuiltInVoice {
                 Label("Built-in voice", systemImage: "speaker.wave.2")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
 
             // Loading indicator
             if player.isLoading {
                 ProgressView("Preparing audio...")
-                    .padding()
+                    .padding(SupportTheme.Spacing.m)
             }
 
             // Error state
             if let error = player.error {
-                VStack(spacing: 8) {
+                VStack(spacing: SupportTheme.Spacing.xs) {
                     Image(systemName: "exclamationmark.triangle")
                         .font(.title)
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(SupportTheme.accent)
                     Text(error)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                     Button("Try again") {
                         loadAttempt += 1
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.supportSecondary)
                 }
             }
         }
@@ -168,11 +167,11 @@ struct GeneratedMeditationView: View {
     // MARK: - Player Controls
 
     private var playerControls: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             // Built-in speech reports reading progress without audio seeking.
             if player.usesBuiltInVoice {
                 ProgressView(value: player.progress)
-                    .tint(content.contentType.backgroundColor)
+                    .tint(SupportTheme.accent)
             } else {
                 Slider(
                     value: Binding(
@@ -181,7 +180,7 @@ struct GeneratedMeditationView: View {
                     ),
                     in: 0...max(player.duration, 1)
                 )
-                .tint(content.contentType.backgroundColor)
+                .tint(SupportTheme.accent)
                 .disabled(!player.canSeek)
             }
 
@@ -190,12 +189,12 @@ struct GeneratedMeditationView: View {
                 Text(player.usesBuiltInVoice ? "\(Int(player.progress * 100))% read" : player.formattedCurrentTime)
                 Spacer()
                 if player.sleepTimerMinutes != nil {
-                    HStack(spacing: 4) {
+                    HStack(spacing: SupportTheme.Spacing.xxs) {
                         Image(systemName: "timer")
                         Text(player.formattedSleepTimerRemaining)
                     }
                     .font(.caption)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(SupportTheme.accent)
                 }
                 Spacer()
                 if !player.usesBuiltInVoice {
@@ -203,15 +202,17 @@ struct GeneratedMeditationView: View {
                 }
             }
             .font(.caption)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(SupportTheme.textSecondary)
 
             // Playback controls
-            HStack(spacing: 40) {
+            HStack(spacing: SupportTheme.Spacing.xl) {
                 Button {
                     player.skipBackward()
                 } label: {
                     Image(systemName: "gobackward.15")
                         .font(.title)
+                    .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                    .accessibilityLabel("Back 15 seconds")
                 }
                 .disabled(!player.canSeek)
 
@@ -219,8 +220,9 @@ struct GeneratedMeditationView: View {
                     player.togglePlayback()
                 } label: {
                     Image(systemName: player.isPlaybackRequested ? "pause.circle.fill" : "play.circle.fill")
-                        .font(.system(size: 64))
-                        .foregroundStyle(content.contentType.backgroundColor)
+                        .font(.system(.largeTitle))
+                        .foregroundStyle(SupportTheme.accent)
+                        .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                 }
                 .disabled(!player.canPlay)
                 .accessibilityLabel(player.isPlaybackRequested ? "Pause" : "Play")
@@ -230,17 +232,19 @@ struct GeneratedMeditationView: View {
                 } label: {
                     Image(systemName: "goforward.15")
                         .font(.title)
+                    .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                    .accessibilityLabel("Forward 15 seconds")
                 }
                 .disabled(!player.canSeek)
             }
-            .foregroundStyle(.primary)
+            .foregroundStyle(SupportTheme.textPrimary)
         }
     }
 
     // MARK: - Toolbar
 
     private var toolbarView: some View {
-        HStack(spacing: 24) {
+        HStack(spacing: SupportTheme.Spacing.l) {
             // Recorded audio supports adjustable playback speed.
             if !player.usesBuiltInVoice {
                 Menu {
@@ -257,7 +261,7 @@ struct GeneratedMeditationView: View {
                         }
                     }
                 } label: {
-                    VStack(spacing: 2) {
+                    VStack(spacing: SupportTheme.Spacing.xxs) {
                         Image(systemName: "speedometer")
                         Text("\(player.playbackRate, specifier: "%.1f")x")
                             .font(.caption2)
@@ -269,7 +273,7 @@ struct GeneratedMeditationView: View {
             Button {
                 showBackgroundSounds = true
             } label: {
-                VStack(spacing: 2) {
+                VStack(spacing: SupportTheme.Spacing.xxs) {
                     Image(systemName: player.backgroundSound != nil ? "waveform.circle.fill" : "waveform.circle")
                     Text("Sounds")
                         .font(.caption2)
@@ -280,7 +284,7 @@ struct GeneratedMeditationView: View {
             Button {
                 showSleepTimer = true
             } label: {
-                VStack(spacing: 2) {
+                VStack(spacing: SupportTheme.Spacing.xxs) {
                     Image(systemName: player.sleepTimerMinutes != nil ? "timer.circle.fill" : "timer")
                     Text("Timer")
                         .font(.caption2)
@@ -289,11 +293,11 @@ struct GeneratedMeditationView: View {
 
             // Text toggle
             Button {
-                withAnimation {
+                withAnimation(.easeInOut(duration: 0.2)) {
                     showTextFollowAlong.toggle()
                 }
             } label: {
-                VStack(spacing: 2) {
+                VStack(spacing: SupportTheme.Spacing.xxs) {
                     Image(systemName: showTextFollowAlong ? "text.alignleft.fill" : "text.alignleft")
                     Text("Text")
                         .font(.caption2)
@@ -304,16 +308,16 @@ struct GeneratedMeditationView: View {
             Button {
                 toggleFavorite()
             } label: {
-                VStack(spacing: 2) {
+                VStack(spacing: SupportTheme.Spacing.xxs) {
                     Image(systemName: isFavorite ? "heart.fill" : "heart")
-                        .foregroundStyle(isFavorite ? .red : .primary)
+                        .foregroundStyle(isFavorite ? .red : SupportTheme.textPrimary)
                     Text("Save")
                         .font(.caption2)
                 }
             }
         }
         .font(.title3)
-        .foregroundStyle(.primary)
+        .foregroundStyle(SupportTheme.textPrimary)
     }
 
     // MARK: - Text Follow Along
@@ -323,12 +327,12 @@ struct GeneratedMeditationView: View {
             Text(content.textContent)
                 .font(.body)
                 .lineSpacing(8)
-                .padding()
+                .padding(SupportTheme.Spacing.m)
         }
         .frame(maxHeight: 200)
-        .background(Color(uiColor: .secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .transition(.move(edge: .bottom).combined(with: .opacity))
+        .background(SupportTheme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
+        .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
     }
 
     // MARK: - Actions
@@ -363,27 +367,29 @@ private struct ContentRatingSheetView: View {
     @State private var isSubmitting = false
 
     var body: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: SupportTheme.Spacing.l) {
             Text("How was this \(content.contentType.displayName.lowercased())?")
                 .font(.headline)
 
-            HStack(spacing: 8) {
+            HStack(spacing: SupportTheme.Spacing.xs) {
                 ForEach(1...5, id: \.self) { star in
                     Button {
                         rating = star
                     } label: {
                         Image(systemName: star <= rating ? "star.fill" : "star")
                             .font(.largeTitle)
-                            .foregroundStyle(star <= rating ? .yellow : .gray)
+                            .foregroundStyle(star <= rating ? .yellow : SupportTheme.textSecondary)
+                            .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                            .accessibilityLabel("\(star) stars")
                     }
                 }
             }
 
-            HStack(spacing: 16) {
+            HStack(spacing: SupportTheme.Spacing.m) {
                 Button("Skip") {
                     dismiss()
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.supportSecondary)
 
                 Button {
                     submitRating()
@@ -394,11 +400,11 @@ private struct ContentRatingSheetView: View {
                         Text("Submit")
                     }
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.supportPrimary)
                 .disabled(rating == 0 || isSubmitting)
             }
         }
-        .padding()
+        .padding(SupportTheme.Spacing.m)
     }
 
     private func submitRating() {
@@ -426,19 +432,19 @@ private extension GeneratedContentType {
     var gradientColors: [Color] {
         switch self {
         case .meditation, .mindfulness:
-            return [.purple.opacity(0.3), .blue.opacity(0.2)]
+            return [SupportTheme.accent.opacity(0.3), SupportTheme.accent.opacity(0.2)]
         case .sleepStory:
-            return [.indigo.opacity(0.4), .purple.opacity(0.2)]
+            return [SupportTheme.accent.opacity(0.4), SupportTheme.accent.opacity(0.2)]
         case .breathing:
-            return [.cyan.opacity(0.3), .blue.opacity(0.2)]
+            return [SupportTheme.accent.opacity(0.3), SupportTheme.accent.opacity(0.2)]
         case .affirmation:
-            return [.pink.opacity(0.3), .orange.opacity(0.2)]
+            return [SupportTheme.accent.opacity(0.3), SupportTheme.accent.opacity(0.2)]
         case .grounding:
-            return [.green.opacity(0.3), .teal.opacity(0.2)]
+            return [SupportTheme.accent.opacity(0.3), SupportTheme.accent.opacity(0.2)]
         case .cbt:
-            return [.orange.opacity(0.3), .yellow.opacity(0.2)]
+            return [SupportTheme.accent.opacity(0.3), SupportTheme.accent.opacity(0.2)]
         case .journaling:
-            return [.brown.opacity(0.3), .orange.opacity(0.2)]
+            return [SupportTheme.accent.opacity(0.3), SupportTheme.accent.opacity(0.2)]
         }
     }
 }

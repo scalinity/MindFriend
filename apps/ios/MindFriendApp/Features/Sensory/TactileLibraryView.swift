@@ -17,28 +17,28 @@ struct TactileLibraryView: View {
         GridItem(.flexible()),
         GridItem(.flexible())
     ]
-    
+
     private var isPremiumUser: Bool {
         appState.entitlements.tier == .premium
     }
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
                 // Header
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                     Text("Tactile Patterns")
                         .font(.largeTitle)
                         .fontWeight(.bold)
 
                     Text("Feel gentle vibrations to calm your nervous system")
                         .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(SupportTheme.textSecondary)
                 }
-                .padding(.horizontal)
+                .padding(.horizontal, SupportTheme.Spacing.m)
 
                 // Pattern grid
-                LazyVGrid(columns: columns, spacing: 16) {
+                LazyVGrid(columns: columns, spacing: SupportTheme.Spacing.m) {
                     ForEach(TactilePattern.library) { pattern in
                         TactilePatternCard(
                             name: pattern.name,
@@ -53,10 +53,11 @@ struct TactileLibraryView: View {
                         }
                     }
                 }
-                .padding(.horizontal)
+                .padding(.horizontal, SupportTheme.Spacing.m)
             }
-            .padding(.vertical)
+            .padding(.vertical, SupportTheme.Spacing.m)
         }
+        .supportScreen()
         .navigationTitle("Tactile")
         .fullScreenCover(item: $selectedPattern) { pattern in
             SessionView(
@@ -70,7 +71,7 @@ struct TactileLibraryView: View {
             )
         }
     }
-    
+
     private func handlePatternTap(_ pattern: TactilePattern) {
         if pattern.isPremium && !isPremiumUser {
             appState.showPaywall = true
@@ -81,10 +82,10 @@ struct TactileLibraryView: View {
 
     private func categoryColor(_ category: TactilePattern.PatternCategory) -> Color {
         switch category {
-        case .grounding: return .brown
-        case .calming: return .blue
-        case .energizing: return .orange
-        case .focus: return .purple
+        case .grounding: return SupportTheme.accent
+        case .calming: return SupportTheme.accent
+        case .energizing: return SupportTheme.accent
+        case .focus: return SupportTheme.accent
         }
     }
 }
@@ -103,7 +104,7 @@ struct TactilePatternCard: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                 // Icon and premium badge
                 HStack {
                     ZStack {
@@ -114,7 +115,7 @@ struct TactilePatternCard: View {
                         if isLocked {
                             Image(systemName: "lock.fill")
                                 .font(.title2)
-                                .foregroundColor(.gray)
+                                .foregroundColor(SupportTheme.textSecondary)
                         } else {
                             Image(systemName: icon)
                                 .font(.title2)
@@ -127,49 +128,45 @@ struct TactilePatternCard: View {
                     if isLocked {
                         Image(systemName: "lock.fill")
                             .font(.caption)
-                            .foregroundColor(.gray)
-                            .padding(4)
-                            .background(Color.gray.opacity(0.2))
+                            .foregroundColor(SupportTheme.textSecondary)
+                            .padding(SupportTheme.Spacing.xxs)
+                            .background(SupportTheme.textSecondary.opacity(0.2))
                             .clipShape(Circle())
                     }
                 }
 
                 // Pattern info
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     Text(name)
                         .font(.headline)
-                        .foregroundColor(isLocked ? .secondary : .primary)
+                        .foregroundColor(isLocked ? .secondary : SupportTheme.textPrimary)
 
                     Text(category)
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(SupportTheme.textSecondary)
 
                     Text(description)
                         .font(.caption2)
-                        .foregroundColor(.secondary)
-                        .lineLimit(2)
+                        .foregroundColor(SupportTheme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Spacer()
-                
+
                 if isLocked {
                     Text("Premium")
                         .font(.caption2)
                         .fontWeight(.medium)
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color.gray.opacity(0.6))
+                        .foregroundColor(SupportTheme.textPrimary)
+                        .padding(.horizontal, SupportTheme.Spacing.xs)
+                        .padding(.vertical, SupportTheme.Spacing.xxs)
+                        .background(SupportTheme.textSecondary.opacity(0.6))
                         .clipShape(Capsule())
                 }
             }
-            .padding()
+            .padding(SupportTheme.Spacing.m)
             .frame(height: 180)
-            .background(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(Color(.systemBackground))
-                    .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 2)
-            )
+            .background(SupportTheme.surface, in: RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
             .opacity(isLocked ? 0.8 : 1.0)
         }
         .buttonStyle(.plain)

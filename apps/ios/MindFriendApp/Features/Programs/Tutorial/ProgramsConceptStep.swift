@@ -9,6 +9,7 @@ import SwiftUI
 
 /// Step 1: Introduce the concept of multi-day programs
 struct ProgramsConceptStep: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let onNext: () -> Void
     let onSkip: () -> Void
 
@@ -17,70 +18,70 @@ struct ProgramsConceptStep: View {
     var body: some View {
         TutorialStepView(
             icon: "book.fill",
-            iconColor: .cyan,
+            iconColor: SupportTheme.accent,
             headline: "What Are Programs?",
             subheadline: "Programs are structured multi-day journeys designed to help you build lasting skills and habits.",
             primaryAction: onNext,
             skipAction: onSkip
         ) {
-            VStack(spacing: 8) {
+            VStack(spacing: SupportTheme.Spacing.xs) {
                 // Comparison: Quest vs Program
-                HStack(spacing: 12) {
+                HStack(spacing: SupportTheme.Spacing.s) {
                     // Quest card
-                    VStack(spacing: 8) {
+                    VStack(spacing: SupportTheme.Spacing.xs) {
                         Image(systemName: "star.fill")
                             .font(.title2)
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(SupportTheme.accent)
 
                         Text("Quest")
                             .font(.subheadline.weight(.medium))
 
                         Text("Single day challenge")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                             .multilineTextAlignment(.center)
                             .fixedSize(horizontal: false, vertical: true)
                     }
-                    .padding(12)
+                    .padding(SupportTheme.Spacing.s)
                     .frame(maxWidth: .infinity)
-                    .background(Color(.secondarySystemBackground))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .background(SupportTheme.surface)
+                    .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
                     .opacity(showElements ? 1 : 0)
-                    .offset(y: showElements ? 0 : 10)
+                    .offset(y: reduceMotion ? 0 : (showElements ? 0 : 10))
 
                     // Arrow
                     Image(systemName: "arrow.right")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                         .opacity(showElements ? 1 : 0)
 
                     // Program card
-                    VStack(spacing: 8) {
+                    VStack(spacing: SupportTheme.Spacing.xs) {
                         Image(systemName: "book.fill")
                             .font(.title2)
-                            .foregroundStyle(.cyan)
+                            .foregroundStyle(SupportTheme.accent)
 
                         Text("Program")
                             .font(.subheadline.weight(.medium))
 
                         Text("Multi-week journey")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                             .multilineTextAlignment(.center)
                             .fixedSize(horizontal: false, vertical: true)
                     }
-                    .padding(12)
+                    .padding(SupportTheme.Spacing.s)
                     .frame(maxWidth: .infinity)
-                    .background(Color.cyan.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .background(SupportTheme.surface)
+                    .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
                     .opacity(showElements ? 1 : 0.3)
-                    .offset(y: showElements ? 0 : 10)
+                    .offset(y: reduceMotion ? 0 : (showElements ? 0 : 10))
                 }
-                .padding(.horizontal, 20)
+                .padding(.horizontal, SupportTheme.Spacing.m)
 
                 // Program features
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                     ForEach(Array(features.enumerated()), id: \.element.text) { index, feature in
-                        HStack(spacing: 10) {
+                        HStack(spacing: SupportTheme.Spacing.xs) {
                             Image(systemName: feature.icon)
                                 .font(.caption)
                                 .foregroundStyle(feature.color)
@@ -88,20 +89,20 @@ struct ProgramsConceptStep: View {
 
                             Text(feature.text)
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         .opacity(showElements ? 1 : 0)
-                        .animation(
+                        .animation(reduceMotion ? .easeInOut(duration: 0.2) :
                             .easeOut(duration: 0.3).delay(0.5 + Double(index) * 0.1),
                             value: showElements
                         )
                     }
                 }
-                .padding(.horizontal, 24)
+                .padding(.horizontal, SupportTheme.Spacing.l)
             }
             .onAppear {
-                withAnimation(.easeOut(duration: 0.5).delay(0.3)) {
+                withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .easeOut(duration: 0.5).delay(0.3)) {
                     showElements = true
                 }
             }
@@ -110,10 +111,10 @@ struct ProgramsConceptStep: View {
 
     private var features: [(icon: String, color: Color, text: String)] {
         [
-            ("calendar", .blue, "7-30 day structured curriculum"),
-            ("brain.head.profile", .purple, "Science-backed methodologies"),
-            ("chart.line.uptrend.xyaxis", .green, "Progressive skill building"),
-            ("rosette", .orange, "Earn completion certificates")
+            ("calendar", SupportTheme.accent, "7-30 day structured curriculum"),
+            ("brain.head.profile", SupportTheme.accent, "Science-backed methodologies"),
+            ("chart.line.uptrend.xyaxis", SupportTheme.accent, "Progressive skill building"),
+            ("rosette", SupportTheme.accent, "Earn completion certificates")
         ]
     }
 }

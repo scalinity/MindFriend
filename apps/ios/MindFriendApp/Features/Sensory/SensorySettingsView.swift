@@ -40,6 +40,7 @@ struct SensorySettingsView: View {
                     sessionSection
                 }
             }
+            .supportScreen()
             .navigationTitle("Sensory Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -56,12 +57,20 @@ struct SensorySettingsView: View {
                     .disabled(isSaving)
                 }
             }
-            .alert("Error", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
-                Button("OK") {
-                    errorMessage = nil
+            .safeAreaInset(edge: .bottom) {
+                if errorMessage != nil {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
+                        Text(errorMessage ?? "")
+
+                        Button("OK") {
+                            errorMessage = nil
+                        }
+                    }
+                    .foregroundStyle(SupportTheme.textSecondary)
+                    .buttonStyle(.supportSecondary)
+                    .supportCard()
+                    .padding(SupportTheme.Spacing.m)
                 }
-            } message: {
-                Text(errorMessage ?? "")
             }
             .task {
                 await loadSettings()
@@ -88,17 +97,17 @@ struct SensorySettingsView: View {
 
     private var hapticSection: some View {
         Section {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                 HStack {
                     Text("Intensity")
                     Spacer()
                     Text("\(Int(hapticIntensity * 100))%")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                         .monospacedDigit()
                 }
 
                 Slider(value: $hapticIntensity, in: 0.0...1.0, step: 0.1)
-                    .tint(.accentColor)
+                    .tint(SupportTheme.accent)
             }
         } header: {
             Text("Haptic Intensity")
@@ -127,7 +136,7 @@ struct SensorySettingsView: View {
 
     private func loadSettings() async {
         isLoading = true
-        
+
         // Use default settings for MVP
         let defaults = SensorySettings.default
         settings = defaults

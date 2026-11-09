@@ -5,26 +5,26 @@ struct WellnessInsightsCard: View {
     @ObservedObject var insightsService: WellnessInsightsService
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
             // Header
-            HStack(spacing: 8) {
+            HStack(spacing: SupportTheme.Spacing.xs) {
                 Image(systemName: "chart.line.uptrend.xyaxis")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(Color(red: 0.2, green: 0.6, blue: 0.4))
+                    .font(.system(.subheadline).weight(.semibold))
+                    .foregroundColor(SupportTheme.accent)
 
                 Text("Wellness Insights")
-                    .font(.system(size: 16, weight: .semibold, design: .default))
-                    .foregroundColor(Color(red: 0.1, green: 0.3, blue: 0.5))
+                    .font(.system(.body, design: .default).weight(.semibold))
+                    .foregroundColor(SupportTheme.accent)
 
                 Spacer()
             }
 
             // Mood sparkline section
             if !insightsService.weeklyMoodTrend.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                     Text("Your Week")
-                        .font(.system(size: 13, weight: .medium, design: .default))
-                        .foregroundColor(.gray)
+                        .font(.system(.caption, design: .default).weight(.medium))
+                        .foregroundColor(SupportTheme.textSecondary)
 
                     MoodSparkline(dataPoints: insightsService.weeklyMoodTrend)
                         .frame(height: 60)
@@ -33,12 +33,12 @@ struct WellnessInsightsCard: View {
 
             // Helpful activities section
             if !insightsService.helpfulActivities.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                     Text("What's Helping")
-                        .font(.system(size: 13, weight: .medium, design: .default))
-                        .foregroundColor(.gray)
+                        .font(.system(.caption, design: .default).weight(.medium))
+                        .foregroundColor(SupportTheme.textSecondary)
 
-                    HStack(spacing: 12) {
+                    HStack(spacing: SupportTheme.Spacing.s) {
                         ForEach(insightsService.helpfulActivities) { activity in
                             HelpfulActivityChip(activity: activity)
                         }
@@ -51,7 +51,7 @@ struct WellnessInsightsCard: View {
                 HStack {
                     Spacer()
                     ProgressView()
-                        .padding(.vertical, 8)
+                        .padding(.vertical, SupportTheme.Spacing.xs)
                     Spacer()
                 }
             }
@@ -61,19 +61,15 @@ struct WellnessInsightsCard: View {
                insightsService.weeklyMoodTrend.allSatisfy({ !$0.hasMoodData }) &&
                insightsService.helpfulActivities.isEmpty {
                 Text("Complete mood check-ins and exercises to see your insights")
-                    .font(.system(size: 13, weight: .regular, design: .default))
-                    .foregroundColor(.gray)
+                    .font(.system(.caption, design: .default).weight(.regular))
+                    .foregroundColor(SupportTheme.textSecondary)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
+                    .padding(.vertical, SupportTheme.Spacing.xs)
             }
         }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.white)
-                .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
-        )
+        .padding(SupportTheme.Spacing.m)
+        .background(SupportTheme.surface, in: RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
         .task {
             await insightsService.loadAll()
         }
@@ -100,11 +96,11 @@ struct MoodSparkline: View {
                 VStack(spacing: 0) {
                     ForEach(0..<3, id: \.self) { _ in
                         Divider()
-                            .background(Color.gray.opacity(0.1))
+                            .background(SupportTheme.textSecondary.opacity(0.1))
                         Spacer()
                     }
                     Divider()
-                        .background(Color.gray.opacity(0.1))
+                        .background(SupportTheme.textSecondary.opacity(0.1))
                 }
 
                 // Line path
@@ -126,14 +122,7 @@ struct MoodSparkline: View {
                         }
                     }
                     .stroke(
-                        LinearGradient(
-                            colors: [
-                                Color(red: 0.2, green: 0.6, blue: 0.4),
-                                Color(red: 0.3, green: 0.7, blue: 0.5)
-                            ],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        ),
+                        SupportTheme.surface,
                         style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round)
                     )
 
@@ -145,7 +134,7 @@ struct MoodSparkline: View {
                             let y = height - (normalizedY * (height - 8)) - 4
 
                             Circle()
-                                .fill(Color(red: 0.2, green: 0.6, blue: 0.4))
+                                .fill(SupportTheme.accent)
                                 .frame(width: 6, height: 6)
                                 .position(x: x, y: y)
                         }
@@ -156,12 +145,12 @@ struct MoodSparkline: View {
                 HStack(spacing: 0) {
                     ForEach(dataPoints) { point in
                         Text(point.dayLabel)
-                            .font(.system(size: 10, weight: .medium, design: .default))
-                            .foregroundColor(.gray.opacity(0.6))
+                            .font(.system(.caption2, design: .default).weight(.medium))
+                            .foregroundColor(SupportTheme.textSecondary.opacity(0.6))
                             .frame(maxWidth: .infinity)
                     }
                 }
-                .padding(.top, 4)
+                .padding(.top, SupportTheme.Spacing.xxs)
             }
         }
     }
@@ -174,20 +163,20 @@ struct HelpfulActivityChip: View {
     let activity: HelpfulActivity
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: SupportTheme.Spacing.xxs) {
             Image(systemName: activity.icon)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundColor(activity.color)
+                .font(.system(.caption).weight(.semibold))
+                .foregroundColor(SupportTheme.accent)
 
             Text(activity.typeName)
-                .font(.system(size: 12, weight: .medium, design: .default))
-                .foregroundColor(Color(red: 0.1, green: 0.3, blue: 0.5))
+                .font(.system(.caption, design: .default).weight(.medium))
+                .foregroundColor(SupportTheme.accent)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
+        .padding(.horizontal, SupportTheme.Spacing.xs)
+        .padding(.vertical, SupportTheme.Spacing.xxs)
         .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(activity.color.opacity(0.1))
+            RoundedRectangle(cornerRadius: SupportTheme.cardRadius)
+                .fill(SupportTheme.accent.opacity(0.1))
         )
     }
 }
@@ -195,9 +184,9 @@ struct HelpfulActivityChip: View {
 #Preview {
     VStack {
         WellnessInsightsCard(insightsService: WellnessInsightsService(authService: SupabaseAuthService()))
-            .padding()
+            .padding(SupportTheme.Spacing.m)
 
         Spacer()
     }
-    .background(Color(red: 0.95, green: 0.97, blue: 1.0))
+    .background(SupportTheme.accent)
 }

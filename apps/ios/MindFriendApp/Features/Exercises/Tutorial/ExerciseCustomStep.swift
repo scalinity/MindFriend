@@ -9,6 +9,7 @@ import SwiftUI
 
 /// Step 3: Show custom exercise generation
 struct ExerciseCustomStep: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let onComplete: () -> Void
 
     @State private var showGeneration = false
@@ -17,94 +18,94 @@ struct ExerciseCustomStep: View {
     var body: some View {
         TutorialStepView(
             icon: "wand.and.stars",
-            iconColor: .orange,
+            iconColor: SupportTheme.accent,
             headline: "Custom Exercises",
             subheadline: "Need something specific? AI can generate personalized exercises just for you.",
             primaryLabel: "Start Exploring",
             primaryAction: onComplete
         ) {
-            VStack(spacing: 16) {
+            VStack(spacing: SupportTheme.Spacing.m) {
                 // Generation animation
-                VStack(spacing: 8) {
+                VStack(spacing: SupportTheme.Spacing.xs) {
                     if !showExercise {
                         // Generating state
-                        HStack(spacing: 12) {
+                        HStack(spacing: SupportTheme.Spacing.s) {
                             Image(systemName: "wand.and.stars")
                                 .font(.title2)
-                                .foregroundStyle(.orange)
-                                .symbolEffect(.pulse.wholeSymbol, isActive: showGeneration)
+                                .foregroundStyle(SupportTheme.accent)
+                                .symbolEffect(.pulse.wholeSymbol, isActive: !reduceMotion && (showGeneration))
 
                             VStack(alignment: .leading) {
                                 Text("Generating custom exercise...")
                                     .font(.subheadline.weight(.medium))
                                 Text("Based on: \"Help me calm down before sleep\"")
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(SupportTheme.textSecondary)
                                     .fixedSize(horizontal: false, vertical: true)
                             }
 
                             Spacer()
                         }
-                        .padding(12)
-                        .background(Color.orange.opacity(0.1))
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                        .transition(.opacity)
+                        .padding(SupportTheme.Spacing.s)
+                        .background(SupportTheme.surface)
+                        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
+                        .transition(reduceMotion ? .opacity : .opacity)
                     }
 
                     if showExercise {
                         // Generated exercise
-                        VStack(alignment: .leading, spacing: 12) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                             HStack {
                                 Image(systemName: "moon.stars.fill")
-                                    .foregroundStyle(.purple)
+                                    .foregroundStyle(SupportTheme.accent)
                                 Text("Evening Wind-Down")
                                     .font(.subheadline.weight(.semibold))
                                 Spacer()
                                 Text("AI Generated")
                                     .font(.caption2)
-                                    .foregroundStyle(.orange)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 4)
-                                    .background(Color.orange.opacity(0.1))
+                                    .foregroundStyle(SupportTheme.accent)
+                                    .padding(.horizontal, SupportTheme.Spacing.xs)
+                                    .padding(.vertical, SupportTheme.Spacing.xxs)
+                                    .background(SupportTheme.surface)
                                     .clipShape(Capsule())
                             }
 
                             Text("A gentle 5-minute breathing exercise designed to help you transition to restful sleep.")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                                 .fixedSize(horizontal: false, vertical: true)
 
-                            HStack(spacing: 12) {
+                            HStack(spacing: SupportTheme.Spacing.s) {
                                 Label("5 min", systemImage: "clock")
                                 Label("Calming", systemImage: "leaf")
                             }
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                         }
-                        .padding(12)
-                        .background(Color(.secondarySystemBackground))
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                        .transition(.scale.combined(with: .opacity))
+                        .padding(SupportTheme.Spacing.s)
+                        .background(SupportTheme.surface)
+                        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
+                        .transition(reduceMotion ? .opacity : .scale.combined(with: .opacity))
                     }
                 }
-                .padding(.horizontal, 20)
+                .padding(.horizontal, SupportTheme.Spacing.m)
 
                 // Premium note
-                HStack(spacing: 6) {
+                HStack(spacing: SupportTheme.Spacing.xxs) {
                     Image(systemName: "crown.fill")
                         .font(.caption)
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(SupportTheme.accent)
                     Text("Premium feature")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
                 .opacity(showExercise ? 1 : 0)
             }
             .onAppear {
-                withAnimation(.easeOut(duration: 0.3).delay(0.3)) {
+                withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .easeOut(duration: 0.3).delay(0.3)) {
                     showGeneration = true
                 }
-                withAnimation(.easeOut(duration: 0.4).delay(1.5)) {
+                withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .easeOut(duration: 0.4).delay(1.5)) {
                     showExercise = true
                 }
             }

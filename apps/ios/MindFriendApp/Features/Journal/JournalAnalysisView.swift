@@ -13,7 +13,7 @@ struct JournalAnalysisView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.l) {
                     // Header
                     headerSection
 
@@ -41,8 +41,9 @@ struct JournalAnalysisView: View {
                     // Disclaimer
                     disclaimerSection
                 }
-                .padding()
+                .padding(SupportTheme.Spacing.m)
             }
+            .supportScreen()
             .navigationTitle("AI Insights")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -68,11 +69,11 @@ struct JournalAnalysisView: View {
     // MARK: - Sections
 
     private var headerSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             HStack {
                 Image(systemName: "sparkles")
                     .font(.title)
-                    .foregroundStyle(.purple)
+                    .foregroundStyle(SupportTheme.accent)
                 Text("Your Insights")
                     .font(.title2)
                     .fontWeight(.bold)
@@ -80,58 +81,54 @@ struct JournalAnalysisView: View {
 
             Text("Here's what I noticed in your journal entry. Remember, these are gentle observations to help you reflect, not judgments.")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
     }
 
     private var emotionalThemesSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Label("Emotional Themes", systemImage: "heart.fill")
                 .font(.headline)
-                .foregroundStyle(.pink)
+                .foregroundStyle(SupportTheme.accent)
 
-            FlowLayout(spacing: 8) {
+            FlowLayout(spacing: SupportTheme.Spacing.xs) {
                 ForEach(analysis.emotionalThemes, id: \.self) { theme in
                     Text(theme.capitalized)
                         .font(.subheadline)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(Color.pink.opacity(0.15))
-                        .foregroundStyle(.pink)
+                        .padding(.horizontal, SupportTheme.Spacing.s)
+                        .padding(.vertical, SupportTheme.Spacing.xxs)
+                        .background(SupportTheme.surface)
+                        .foregroundStyle(SupportTheme.accent)
                         .clipShape(Capsule())
                 }
             }
         }
-        .padding()
-        .background(Color.pink.opacity(0.05))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .supportCard()
     }
 
     private var supportiveInsightSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Label("A Gentle Reflection", systemImage: "leaf.fill")
                 .font(.headline)
-                .foregroundStyle(.green)
+                .foregroundStyle(SupportTheme.accent)
 
             Text(analysis.supportiveSummary)
                 .font(.body)
                 .lineSpacing(4)
         }
-        .padding()
-        .background(Color.green.opacity(0.05))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .supportCard()
     }
 
     private var cognitiveDistortionsSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Label("Thinking Patterns", systemImage: "brain.head.profile")
                     .font(.headline)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(SupportTheme.accent)
 
                 Text("These are common patterns many people experience. Recognizing them is the first step to a more balanced perspective.")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
 
             ForEach(analysis.cognitiveDistortions) { distortion in
@@ -140,40 +137,36 @@ struct JournalAnalysisView: View {
                 }
             }
         }
-        .padding()
-        .background(Color.orange.opacity(0.05))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .supportCard()
     }
 
     private var suggestedReframesSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Label("Things to Consider", systemImage: "lightbulb.fill")
                 .font(.headline)
-                .foregroundStyle(.yellow)
+                .foregroundStyle(SupportTheme.accent)
 
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                 ForEach(analysis.suggestedReframes) { reframe in
-                    HStack(alignment: .top, spacing: 8) {
+                    HStack(alignment: .top, spacing: SupportTheme.Spacing.xs) {
                         Image(systemName: "circle.fill")
-                            .font(.system(size: 6))
-                            .foregroundStyle(.secondary)
-                            .padding(.top, 6)
+                            .font(.system(.caption2))
+                            .foregroundStyle(SupportTheme.textSecondary)
+                            .padding(.top, SupportTheme.Spacing.xxs)
                         Text(reframe.reframe)
                             .font(.subheadline)
                     }
                 }
             }
         }
-        .padding()
-        .background(Color.yellow.opacity(0.1))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .supportCard()
     }
 
     private var sentimentSection: some View {
         HStack {
             Text("Overall Tone:")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
             Text(analysis.overallSentiment.capitalized)
                 .font(.subheadline)
                 .fontWeight(.medium)
@@ -184,36 +177,35 @@ struct JournalAnalysisView: View {
     private var sentimentColor: Color {
         switch analysis.overallSentiment.lowercased() {
         case "positive", "hopeful", "grateful":
-            return .green
+            return SupportTheme.accent
         case "negative", "sad", "frustrated", "anxious":
-            return .orange
+            return SupportTheme.accent
         case "neutral", "reflective":
-            return .blue
+            return SupportTheme.accent
         default:
             return .secondary
         }
     }
 
     private var disclaimerSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             Text("About these insights")
                 .font(.caption)
                 .fontWeight(.semibold)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
 
             Text("This AI analysis is designed to support your self-reflection journey. It's not a substitute for professional mental health support. If you're struggling, please reach out to a counselor or therapist.")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
-        .padding()
-        .background(Color(.systemGray6))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .supportCard()
     }
 }
 
 // MARK: - Supporting Views
 
 struct DistortionCard: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let distortion: CognitiveDistortionInstance
     let onFeedback: () -> Void
 
@@ -225,11 +217,11 @@ struct DistortionCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             // Header
             HStack {
                 Image(systemName: distortionIcon)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(SupportTheme.accent)
                 Text(distortion.displayName)
                     .font(.subheadline)
                     .fontWeight(.semibold)
@@ -239,22 +231,22 @@ struct DistortionCard: View {
             // Description
             Text(distortion.explanation)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
 
             // What was detected
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text("What I noticed:")
                     .font(.caption)
                     .fontWeight(.medium)
                 Text("\"\(distortion.quote)\"")
                     .font(.caption)
                     .italic()
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
 
             // Reframe suggestion
             Button {
-                withAnimation {
+                withAnimation(.easeInOut(duration: 0.2)) {
                     showingReframe.toggle()
                 }
             } label: {
@@ -264,21 +256,21 @@ struct DistortionCard: View {
                     Image(systemName: showingReframe ? "chevron.up" : "chevron.down")
                         .font(.caption2)
                 }
-                .foregroundStyle(.orange)
+                .foregroundStyle(SupportTheme.accent)
             }
 
             if showingReframe {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     Text("A different way to look at it:")
                         .font(.caption)
                         .fontWeight(.medium)
                     Text(distortion.alternativePerspective)
                         .font(.caption)
-                        .padding(8)
-                        .background(Color.orange.opacity(0.1))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .padding(SupportTheme.Spacing.xs)
+                        .background(SupportTheme.surface)
+                        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
                 }
-                .transition(.opacity.combined(with: .move(edge: .top)))
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
             }
 
             // Feedback button
@@ -287,13 +279,11 @@ struct DistortionCard: View {
             } label: {
                 Text("Was this helpful?")
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .shadow(color: .black.opacity(0.05), radius: 2, y: 1)
+        .supportCard()
+        .shadow(color: SupportTheme.canvas.opacity(0.05), radius: 2, y: 1)
     }
 }
 
@@ -310,17 +300,17 @@ struct DistortionFeedbackSheet: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 24) {
+            VStack(spacing: SupportTheme.Spacing.l) {
                 Text("Was this insight helpful?")
                     .font(.title3)
                     .fontWeight(.semibold)
 
                 Text("Your feedback helps improve the AI's ability to provide supportive insights.")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .multilineTextAlignment(.center)
 
-                HStack(spacing: 32) {
+                HStack(spacing: SupportTheme.Spacing.xl) {
                     FeedbackButton(
                         emoji: "👍",
                         label: "Helpful",
@@ -359,10 +349,11 @@ struct DistortionFeedbackSheet: View {
                             .frame(maxWidth: .infinity)
                     }
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.supportPrimary)
                 .disabled(selectedAction == nil || isSubmitting)
             }
-            .padding()
+            .padding(SupportTheme.Spacing.m)
+            .supportScreen()
             .navigationTitle("Feedback")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -401,18 +392,18 @@ struct FeedbackButton: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 8) {
+            VStack(spacing: SupportTheme.Spacing.xs) {
                 Text(emoji)
-                    .font(.system(size: 40))
+                    .font(.system(.largeTitle))
                 Text(label)
                     .font(.caption)
             }
-            .padding()
-            .background(isSelected ? Color.accentColor.opacity(0.1) : Color(.systemGray6))
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .padding(SupportTheme.Spacing.m)
+            .background(isSelected ? SupportTheme.accent.opacity(0.1) : SupportTheme.separator)
+            .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
             .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(isSelected ? Color.accentColor : .clear, lineWidth: 2)
+                RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                    .stroke(isSelected ? SupportTheme.accent : .clear, lineWidth: 2)
             )
         }
         .buttonStyle(.plain)

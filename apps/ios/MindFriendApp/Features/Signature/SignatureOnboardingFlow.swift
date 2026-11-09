@@ -2,6 +2,7 @@ import SwiftUI
 
 /// Multi-step onboarding flow for setting up a user's stress signature
 struct SignatureOnboardingFlow: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var container: DependencyContainer
     @Environment(\.dismiss) private var dismiss
 
@@ -29,8 +30,8 @@ struct SignatureOnboardingFlow: View {
                 // Progress indicator
                 ProgressView(value: progress)
                     .progressViewStyle(.linear)
-                    .tint(.purple)
-                    .padding(.horizontal)
+                    .tint(SupportTheme.accent)
+                    .padding(.horizontal, SupportTheme.Spacing.m)
 
                 // Content
                 TabView(selection: $currentStep) {
@@ -62,11 +63,12 @@ struct SignatureOnboardingFlow: View {
                         .tag(OnboardingStep.summary)
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
-                .animation(.easeInOut, value: currentStep)
+                .animation(reduceMotion ? nil : .easeInOut, value: currentStep)
 
                 // Navigation buttons
                 navigationButtons
             }
+            .supportScreen()
             .navigationTitle("Your Warning Signs")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -76,13 +78,18 @@ struct SignatureOnboardingFlow: View {
                     }
                 }
             }
-            .alert("Error", isPresented: .init(
-                get: { error != nil },
-                set: { if !$0 { error = nil } }
-            )) {
-                Button("OK") { error = nil }
-            } message: {
-                Text(error?.localizedDescription ?? "Unknown error")
+            .safeAreaInset(edge: .bottom) {
+                if error != nil {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
+                        Text(error?.localizedDescription ?? "Unknown error")
+
+                        Button("OK") { error = nil }
+                    }
+                    .foregroundStyle(SupportTheme.textSecondary)
+                    .buttonStyle(.supportSecondary)
+                    .supportCard()
+                    .padding(SupportTheme.Spacing.m)
+                }
             }
         }
     }
@@ -97,11 +104,11 @@ struct SignatureOnboardingFlow: View {
 
     private var introductionView: some View {
         ScrollView {
-            VStack(spacing: 24) {
+            VStack(spacing: SupportTheme.Spacing.l) {
                 Image(systemName: "shield.checkered")
-                    .font(.system(size: 80))
-                    .foregroundStyle(.purple.gradient)
-                    .padding(.top, 40)
+                    .font(.system(.largeTitle))
+                    .foregroundStyle(SupportTheme.accent)
+                    .padding(.top, SupportTheme.Spacing.xl)
 
                 Text("Learn Your Warning Signs")
                     .font(.title)
@@ -110,10 +117,10 @@ struct SignatureOnboardingFlow: View {
                 Text("Everyone has unique patterns that appear before stress overwhelms them. By learning your personal warning signs, MindFriend can alert you 24-72 hours before a crisis and help you intervene early.")
                     .font(.body)
                     .multilineTextAlignment(.center)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal)
+                    .foregroundStyle(SupportTheme.textSecondary)
+                    .padding(.horizontal, SupportTheme.Spacing.m)
 
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
                     benefitRow(
                         icon: "eye.fill",
                         title: "Personalized Detection",
@@ -130,24 +137,22 @@ struct SignatureOnboardingFlow: View {
                         description: "Intervene before things spiral"
                     )
                 }
-                .padding()
-                .background(Color(.systemGray6))
-                .cornerRadius(12)
-                .padding(.horizontal)
+                .supportCard()
+                .padding(.horizontal, SupportTheme.Spacing.m)
 
                 Text("This takes about 3 minutes")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
-            .padding(.bottom, 100)
+            .padding(.bottom, SupportTheme.Spacing.xl)
         }
     }
 
     private func benefitRow(icon: String, title: String, description: String) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: SupportTheme.Spacing.s) {
             Image(systemName: icon)
                 .font(.title2)
-                .foregroundStyle(.purple)
+                .foregroundStyle(SupportTheme.accent)
                 .frame(width: 32)
 
             VStack(alignment: .leading) {
@@ -155,7 +160,7 @@ struct SignatureOnboardingFlow: View {
                     .fontWeight(.semibold)
                 Text(description)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
         }
     }
@@ -166,11 +171,11 @@ struct SignatureOnboardingFlow: View {
         let components = SignatureComponent.components(for: category)
 
         return ScrollView {
-            VStack(spacing: 24) {
-                VStack(spacing: 8) {
+            VStack(spacing: SupportTheme.Spacing.l) {
+                VStack(spacing: SupportTheme.Spacing.xs) {
                     Image(systemName: category.icon)
-                        .font(.system(size: 48))
-                        .foregroundStyle(.purple.gradient)
+                        .font(.system(.largeTitle))
+                        .foregroundStyle(SupportTheme.accent)
 
                     Text(category.displayName)
                         .font(.title2)
@@ -178,19 +183,19 @@ struct SignatureOnboardingFlow: View {
 
                     Text("Select any that feel familiar when you're struggling")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                         .multilineTextAlignment(.center)
                 }
-                .padding(.top, 20)
+                .padding(.top, SupportTheme.Spacing.m)
 
-                VStack(spacing: 12) {
+                VStack(spacing: SupportTheme.Spacing.s) {
                     ForEach(components) { component in
                         componentCard(component)
                     }
                 }
-                .padding(.horizontal)
+                .padding(.horizontal, SupportTheme.Spacing.m)
             }
-            .padding(.bottom, 100)
+            .padding(.bottom, SupportTheme.Spacing.xl)
         }
     }
 
@@ -198,7 +203,7 @@ struct SignatureOnboardingFlow: View {
         let isSelected = selectedComponents.contains(component.id)
 
         return Button {
-            withAnimation(.spring(response: 0.3)) {
+            withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .spring(response: 0.3)) {
                 if isSelected {
                     selectedComponents.remove(component.id)
                 } else {
@@ -207,25 +212,25 @@ struct SignatureOnboardingFlow: View {
             }
         } label: {
             HStack {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     Text(component.displayName)
                         .font(.headline)
-                        .foregroundStyle(isSelected ? .white : .primary)
+                        .foregroundStyle(isSelected ? SupportTheme.onAccent : SupportTheme.textPrimary)
 
                     Text(component.description)
                         .font(.caption)
-                        .foregroundStyle(isSelected ? .white.opacity(0.8) : .secondary)
+                        .foregroundStyle(isSelected ? SupportTheme.onAccent.opacity(0.8) : SupportTheme.textSecondary)
                 }
 
                 Spacer()
 
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                     .font(.title2)
-                    .foregroundStyle(isSelected ? .white : .secondary)
+                    .foregroundStyle(isSelected ? SupportTheme.onAccent : SupportTheme.textSecondary)
             }
-            .padding()
-            .background(isSelected ? Color.purple : Color(.systemGray6))
-            .cornerRadius(12)
+            .padding(SupportTheme.Spacing.m)
+            .background(isSelected ? SupportTheme.accent : SupportTheme.separator)
+            .cornerRadius(SupportTheme.controlRadius)
         }
         .buttonStyle(.plain)
     }
@@ -234,11 +239,11 @@ struct SignatureOnboardingFlow: View {
 
     private var sensitivityView: some View {
         ScrollView {
-            VStack(spacing: 24) {
-                VStack(spacing: 8) {
+            VStack(spacing: SupportTheme.Spacing.l) {
+                VStack(spacing: SupportTheme.Spacing.xs) {
                     Image(systemName: "dial.medium.fill")
-                        .font(.system(size: 48))
-                        .foregroundStyle(.purple.gradient)
+                        .font(.system(.largeTitle))
+                        .foregroundStyle(SupportTheme.accent)
 
                     Text("Detection Sensitivity")
                         .font(.title2)
@@ -246,39 +251,37 @@ struct SignatureOnboardingFlow: View {
 
                     Text("How sensitive should pattern detection be?")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
-                .padding(.top, 20)
+                .padding(.top, SupportTheme.Spacing.m)
 
-                VStack(spacing: 16) {
+                VStack(spacing: SupportTheme.Spacing.m) {
                     HStack {
                         Text("Fewer Alerts")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                         Spacer()
                         Text("More Alerts")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
 
                     Slider(value: $sensitivity, in: 0.3...0.8, step: 0.1)
-                        .tint(.purple)
+                        .tint(SupportTheme.accent)
 
                     Text(sensitivityDescription)
                         .font(.subheadline)
                         .multilineTextAlignment(.center)
-                        .foregroundStyle(.secondary)
-                        .padding()
-                        .background(Color(.systemGray6))
-                        .cornerRadius(8)
+                        .foregroundStyle(SupportTheme.textSecondary)
+                        .supportCard()
                 }
-                .padding(.horizontal)
+                .padding(.horizontal, SupportTheme.Spacing.m)
 
                 Text("You can adjust this anytime in Settings")
                     .font(.caption)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
-            .padding(.bottom, 100)
+            .padding(.bottom, SupportTheme.Spacing.xl)
         }
     }
 
@@ -301,11 +304,11 @@ struct SignatureOnboardingFlow: View {
 
     private var summaryView: some View {
         ScrollView {
-            VStack(spacing: 24) {
-                VStack(spacing: 8) {
+            VStack(spacing: SupportTheme.Spacing.l) {
+                VStack(spacing: SupportTheme.Spacing.xs) {
                     Image(systemName: "checkmark.seal.fill")
-                        .font(.system(size: 48))
-                        .foregroundStyle(.green.gradient)
+                        .font(.system(.largeTitle))
+                        .foregroundStyle(SupportTheme.accent)
 
                     Text("Your Warning Signs")
                         .font(.title2)
@@ -313,9 +316,9 @@ struct SignatureOnboardingFlow: View {
 
                     Text("\(selectedComponents.count) patterns selected")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
-                .padding(.top, 20)
+                .padding(.top, SupportTheme.Spacing.m)
 
                 if selectedComponents.isEmpty {
                     emptySelectionView
@@ -323,70 +326,66 @@ struct SignatureOnboardingFlow: View {
                     selectedComponentsList
                 }
             }
-            .padding(.bottom, 100)
+            .padding(.bottom, SupportTheme.Spacing.xl)
         }
     }
 
     private var emptySelectionView: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.largeTitle)
-                .foregroundStyle(.orange)
+                .foregroundStyle(SupportTheme.accent)
 
             Text("No warning signs selected")
                 .font(.headline)
 
             Text("Please go back and select at least 2 warning signs that feel familiar to you.")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .multilineTextAlignment(.center)
         }
-        .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(12)
-        .padding(.horizontal)
+        .supportCard()
+        .padding(.horizontal, SupportTheme.Spacing.m)
     }
 
     private var selectedComponentsList: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: SupportTheme.Spacing.s) {
             ForEach(SignatureComponentCategory.allCases, id: \.self) { category in
                 let categoryComponents = selectedComponents.compactMap { id in
                     SignatureComponent.library.first { $0.id == id && $0.category == category }
                 }
 
                 if !categoryComponents.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                         Label(category.displayName, systemImage: category.icon)
                             .font(.subheadline)
                             .fontWeight(.semibold)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
 
                         ForEach(categoryComponents) { component in
                             HStack {
                                 Image(systemName: "checkmark.circle.fill")
-                                    .foregroundStyle(.purple)
+                                    .foregroundStyle(SupportTheme.accent)
                                 Text(component.displayName)
                                     .font(.subheadline)
                                 Spacer()
                             }
                         }
                     }
-                    .padding()
-                    .background(Color(.systemGray6))
-                    .cornerRadius(8)
+                    .supportCard()
                 }
             }
         }
-        .padding(.horizontal)
+        .padding(.horizontal, SupportTheme.Spacing.m)
     }
 
     // MARK: - Navigation
 
     private var navigationButtons: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: SupportTheme.Spacing.m) {
             if currentStep != .introduction {
                 Button {
-                    withAnimation {
+                    withAnimation(.easeInOut(duration: 0.2)) {
                         currentStep = OnboardingStep(rawValue: currentStep.rawValue - 1) ?? .introduction
                     }
                 } label: {
@@ -395,10 +394,10 @@ struct SignatureOnboardingFlow: View {
                         Text("Back")
                     }
                     .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color(.systemGray5))
-                    .foregroundStyle(.primary)
-                    .cornerRadius(12)
+                    .padding(SupportTheme.Spacing.m)
+                    .background(SupportTheme.separator)
+                    .foregroundStyle(SupportTheme.textPrimary)
+                    .cornerRadius(SupportTheme.controlRadius)
                 }
             }
 
@@ -406,7 +405,7 @@ struct SignatureOnboardingFlow: View {
                 if currentStep == .summary {
                     createSignature()
                 } else {
-                    withAnimation {
+                    withAnimation(.easeInOut(duration: 0.2)) {
                         currentStep = OnboardingStep(rawValue: currentStep.rawValue + 1) ?? .summary
                     }
                 }
@@ -414,7 +413,7 @@ struct SignatureOnboardingFlow: View {
                 HStack {
                     if isCreating {
                         ProgressView()
-                            .tint(.white)
+                            .tint(SupportTheme.accent)
                     } else {
                         Text(currentStep == .summary ? "Create My Signature" : "Continue")
                         if currentStep != .summary {
@@ -423,15 +422,15 @@ struct SignatureOnboardingFlow: View {
                     }
                 }
                 .frame(maxWidth: .infinity)
-                .padding()
-                .background(canProceed ? Color.purple : Color.gray)
-                .foregroundStyle(.white)
-                .cornerRadius(12)
+                .padding(SupportTheme.Spacing.m)
+                .background(canProceed ? SupportTheme.accent : SupportTheme.textSecondary)
+                .foregroundStyle(SupportTheme.textPrimary)
+                .cornerRadius(SupportTheme.controlRadius)
             }
             .disabled(!canProceed || isCreating)
         }
-        .padding()
-        .background(.ultraThinMaterial)
+        .padding(SupportTheme.Spacing.m)
+        .background(SupportTheme.elevated)
     }
 
     private var canProceed: Bool {

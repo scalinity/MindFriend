@@ -13,7 +13,7 @@ struct PathwaySelectionView: View {
         VStack(spacing: 0) {
             // Category filter
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
+                HStack(spacing: SupportTheme.Spacing.s) {
                     ForEach([nil] + PathwayCategory.allCases, id: \.self) { category in
                         PathwayCategoryChip(
                             category: category,
@@ -22,7 +22,7 @@ struct PathwaySelectionView: View {
                         )
                     }
                 }
-                .padding()
+                .padding(SupportTheme.Spacing.m)
             }
 
             if isLoading {
@@ -36,7 +36,7 @@ struct PathwaySelectionView: View {
                 Spacer()
             } else {
                 ScrollView {
-                    LazyVStack(spacing: 16) {
+                    LazyVStack(spacing: SupportTheme.Spacing.m) {
                         ForEach(filteredPathways) { pathway in
                             PathwayCard(pathway: pathway, isPremiumUser: appState.entitlements.tier == .premium)
                                 .onTapGesture {
@@ -48,10 +48,11 @@ struct PathwaySelectionView: View {
                                 }
                         }
                     }
-                    .padding()
+                    .padding(SupportTheme.Spacing.m)
                 }
             }
         }
+        .supportScreen()
         .navigationTitle("Life Transitions")
         .sheet(item: $selectedPathway) { pathway in
             PathwayOnboardingFlow(pathway: pathway)
@@ -89,11 +90,11 @@ struct PathwayCategoryChip: View {
         Button(action: action) {
             Text(category?.displayName ?? "All")
                 .font(.subheadline.weight(.medium))
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(isSelected ? Color.blue : Color.gray.opacity(0.2))
-                .foregroundColor(isSelected ? .white : .primary)
-                .cornerRadius(20)
+                .padding(.horizontal, SupportTheme.Spacing.m)
+                .padding(.vertical, SupportTheme.Spacing.xs)
+                .background(isSelected ? SupportTheme.accent : SupportTheme.textSecondary.opacity(0.2))
+                .foregroundColor(isSelected ? SupportTheme.onAccent : SupportTheme.textPrimary)
+                .cornerRadius(SupportTheme.cardRadius)
         }
     }
 }
@@ -103,46 +104,44 @@ struct PathwayCard: View {
     var isPremiumUser: Bool = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             HStack {
                 Image(systemName: pathway.iconName)
                     .font(.title2)
-                    .foregroundColor(Color(hex: pathway.color))
+                    .foregroundStyle(SupportTheme.accent)
 
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     Text(pathway.name)
                         .font(.headline)
                     Text("\(pathway.durationWeeks) weeks")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(SupportTheme.textSecondary)
                 }
 
                 Spacer()
 
                 if pathway.isPremium && !isPremiumUser {
                     Image(systemName: "crown.fill")
-                        .foregroundColor(.yellow)
+                        .foregroundColor(SupportTheme.accent)
                 }
             }
 
             Text(pathway.description)
                 .font(.subheadline)
-                .foregroundColor(.secondary)
+                .foregroundColor(SupportTheme.textSecondary)
 
-            HStack(spacing: 4) {
+            HStack(spacing: SupportTheme.Spacing.xxs) {
                 ForEach(pathway.phases) { phase in
                     Text(phase.name)
                         .font(.caption2)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color.gray.opacity(0.2))
-                        .cornerRadius(8)
+                        .padding(.horizontal, SupportTheme.Spacing.xs)
+                        .padding(.vertical, SupportTheme.Spacing.xxs)
+                        .background(SupportTheme.textSecondary.opacity(0.2))
+                        .cornerRadius(SupportTheme.controlRadius)
                 }
             }
         }
-        .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(12)
+        .supportCard()
     }
 }
 

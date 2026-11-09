@@ -13,7 +13,7 @@ struct CopingKitStepView: View {
     @State private var isComplete = false
 
     var body: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: SupportTheme.Spacing.l) {
             // Step header
             stepHeader
 
@@ -32,7 +32,7 @@ struct CopingKitStepView: View {
                 completeState
             }
         }
-        .padding(20)
+        .padding(SupportTheme.Spacing.m)
         .onAppear {
             if let duration = step.durationSeconds {
                 remainingSeconds = duration
@@ -47,11 +47,11 @@ struct CopingKitStepView: View {
     // MARK: - Step Header
 
     private var stepHeader: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: SupportTheme.Spacing.xs) {
             Text("Step \(stepNumber) of \(totalSteps)")
                 .font(.caption)
                 .fontWeight(.medium)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
 
             Text(step.typeDescription)
                 .font(.title2)
@@ -63,20 +63,20 @@ struct CopingKitStepView: View {
 
     @ViewBuilder
     private var stepContent: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             // Step prompt
             Text(step.prompt)
                 .font(.body)
                 .multilineTextAlignment(.center)
-                .padding()
+                .padding(SupportTheme.Spacing.m)
 
             // Instructions (if any)
             if let instructions = step.instructions {
                 Text(instructions)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal)
+                    .padding(.horizontal, SupportTheme.Spacing.m)
             }
 
             // Breathing pattern visualization
@@ -90,32 +90,32 @@ struct CopingKitStepView: View {
     // MARK: - Timer View
 
     private var timerView: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             if let remaining = remainingSeconds {
                 Text(formatTime(remaining))
-                    .font(.system(size: 48, weight: .light, design: .rounded))
+                    .font(.system(.largeTitle, design: .rounded).weight(.light))
                     .monospacedDigit()
 
-                HStack(spacing: 24) {
+                HStack(spacing: SupportTheme.Spacing.l) {
                     Button {
                         startTimer()
                     } label: {
                         Label("Start", systemImage: "play.fill")
                             .fontWeight(.medium)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.pink)
+                    .buttonStyle(.supportPrimary)
+                    .tint(SupportTheme.accent)
 
                     Button {
                         remainingSeconds = step.durationSeconds
                     } label: {
                         Label("Reset", systemImage: "arrow.counterclockwise")
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.supportSecondary)
                 }
             }
         }
-        .padding()
+        .padding(SupportTheme.Spacing.m)
     }
 
     // MARK: - Complete Button
@@ -128,33 +128,30 @@ struct CopingKitStepView: View {
             Text("Done")
                 .fontWeight(.semibold)
                 .frame(maxWidth: .infinity)
-                .padding()
-                .background(Color.pink)
-                .foregroundStyle(.white)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
         }
-        .padding(.top, 20)
+        .buttonStyle(.supportPrimary)
+        .padding(.top, SupportTheme.Spacing.m)
     }
 
     // MARK: - Complete State
 
     private var completeState: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 48))
-                .foregroundStyle(.green)
+                .font(.system(.largeTitle))
+                .foregroundStyle(SupportTheme.accent)
 
             Text("Step Complete!")
                 .font(.headline)
 
             Text("Tap Continue to proceed")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
-        .padding()
+        .padding(SupportTheme.Spacing.m)
         .frame(maxWidth: .infinity)
-        .background(Color.green.opacity(0.1))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .background(SupportTheme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
     }
 
     // MARK: - Helpers
@@ -189,6 +186,7 @@ struct CopingKitStepView: View {
 // MARK: - Breathing Visualization
 
 struct BreathingVisualization: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let pattern: BreathingPattern
 
     @State private var phase: BreathingPhase = .inhale
@@ -206,24 +204,26 @@ struct BreathingVisualization: View {
         ZStack {
             // Outer circle
             Circle()
-                .stroke(Color.pink.opacity(0.2), lineWidth: 4)
+                .stroke(SupportTheme.accent.opacity(0.2), lineWidth: 4)
                 .frame(width: 180, height: 180)
 
             // Animated inner circle
             Circle()
-                .fill(Color.pink.opacity(0.6))
-                .frame(width: 100 * scale, height: 100 * scale)
+                .fill(SupportTheme.accent.opacity(0.6))
+                .frame(width: reduceMotion ? 100 : 100 * scale, height: reduceMotion ? 100 : 100 * scale)
 
             // Text overlay
             VStack {
                 Text(phaseText)
                     .font(.headline)
-                    .foregroundStyle(.white)
+                    .id(phaseText)
+                    .transition(.opacity)
+                    .foregroundStyle(SupportTheme.textPrimary)
 
                 if animationCompleted {
                     Text("Breathe naturally")
                         .font(.caption)
-                        .foregroundStyle(.white.opacity(0.8))
+                        .foregroundStyle(SupportTheme.textPrimary.opacity(0.8))
                 }
             }
         }
@@ -254,21 +254,21 @@ struct BreathingVisualization: View {
         let exhaleScale: CGFloat = 0.7
 
         // Create animation sequence
-        withAnimation(.easeInOut(duration: inhaleDuration)) {
+        withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .easeInOut(duration: inhaleDuration)) {
             phase = .inhale
             scale = inhaleScale
         }
 
-        withAnimation(.easeInOut(duration: holdInhaleDuration).delay(inhaleDuration)) {
+        withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .easeInOut(duration: holdInhaleDuration).delay(inhaleDuration)) {
             phase = .holdAfterInhale
         }
 
-        withAnimation(.easeInOut(duration: exhaleDuration).delay(inhaleDuration + holdInhaleDuration)) {
+        withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .easeInOut(duration: exhaleDuration).delay(inhaleDuration + holdInhaleDuration)) {
             phase = .exhale
             scale = exhaleScale
         }
 
-        withAnimation(.easeInOut(duration: holdExhaleDuration).delay(inhaleDuration + holdInhaleDuration + exhaleDuration)) {
+        withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .easeInOut(duration: holdExhaleDuration).delay(inhaleDuration + holdInhaleDuration + exhaleDuration)) {
             phase = .holdAfterExhale
         }
 

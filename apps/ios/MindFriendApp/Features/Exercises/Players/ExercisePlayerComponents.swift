@@ -12,19 +12,19 @@ enum LibraryBreathingPhase: String, CaseIterable, Equatable {
 
     var displayText: String {
         switch self {
-        case .inhale: return "INHALE"
-        case .holdIn: return "HOLD"
-        case .exhale: return "EXHALE"
-        case .holdOut: return "HOLD"
+        case .inhale: return "Inhale"
+        case .holdIn: return "Hold"
+        case .exhale: return "Exhale"
+        case .holdOut: return "Hold"
         }
     }
 
     var color: Color {
         switch self {
-        case .inhale: return .blue
-        case .holdIn: return .purple
-        case .exhale: return .green
-        case .holdOut: return .purple
+        case .inhale: return SupportTheme.accent
+        case .holdIn: return SupportTheme.accent
+        case .exhale: return SupportTheme.accent
+        case .holdOut: return SupportTheme.accent
         }
     }
 
@@ -42,6 +42,7 @@ enum LibraryBreathingPhase: String, CaseIterable, Equatable {
 
 /// Animated breathing circle component
 struct BreathingCircle: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let scale: CGFloat
     let phase: LibraryBreathingPhase
 
@@ -50,34 +51,24 @@ struct BreathingCircle: View {
             // Outer glow
             Circle()
                 .fill(
-                    RadialGradient(
-                        colors: [phase.color.opacity(0.3), .clear],
-                        center: .center,
-                        startRadius: 0,
-                        endRadius: 150
-                    )
+                    SupportTheme.surface
                 )
-                .scaleEffect(scale * 1.2)
+                .scaleEffect(reduceMotion ? 1 : (scale * 1.2))
 
             // Main circle
             Circle()
                 .fill(
-                    RadialGradient(
-                        colors: [phase.color.opacity(0.8), phase.color.opacity(0.4)],
-                        center: .center,
-                        startRadius: 0,
-                        endRadius: 100
-                    )
+                    SupportTheme.surface
                 )
-                .scaleEffect(scale)
+                .scaleEffect(reduceMotion ? 1 : (scale))
 
             // Inner glow
             Circle()
                 .fill(phase.color.opacity(0.6))
-                .scaleEffect(scale * 0.3)
+                .scaleEffect(reduceMotion ? 1 : (scale * 0.3))
                 .blur(radius: 10)
         }
-        .animation(.easeInOut(duration: 0.3), value: phase)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.3), value: phase)
     }
 }
 
@@ -85,17 +76,18 @@ struct BreathingCircle: View {
 
 /// Horizontal dots showing progress through steps
 struct ProgressDots: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let total: Int
     let current: Int
     let activeColor: Color
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: SupportTheme.Spacing.xs) {
             ForEach(0..<total, id: \.self) { index in
                 Circle()
-                    .fill(index <= current ? activeColor : Color.secondary.opacity(0.3))
+                    .fill(index <= current ? activeColor : SupportTheme.textSecondary.opacity(0.3))
                     .frame(width: 8, height: 8)
-                    .animation(.easeInOut(duration: 0.2), value: current)
+                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: current)
             }
         }
     }
@@ -105,6 +97,7 @@ struct ProgressDots: View {
 
 /// Horizontal progress bar for step-based exercises
 struct StepProgressBar: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let progress: Double
     let color: Color
 
@@ -112,20 +105,14 @@ struct StepProgressBar: View {
         GeometryReader { geometry in
             ZStack(alignment: .leading) {
                 // Background
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(Color(.systemGray5))
+                RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                    .fill(SupportTheme.separator)
 
                 // Progress fill
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(
-                        LinearGradient(
-                            colors: [color, color.opacity(0.7)],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
+                RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                    .fill(SupportTheme.accent)
                     .frame(width: max(0, geometry.size.width * progress))
-                    .animation(.spring(response: 0.4, dampingFraction: 0.8), value: progress)
+                    .animation(reduceMotion ? nil : .spring(response: 0.4, dampingFraction: 0.8), value: progress)
             }
         }
         .frame(height: 6)
@@ -136,15 +123,16 @@ struct StepProgressBar: View {
 
 /// Display for breathing cycle count
 struct CycleCounter: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let current: Int
     let total: Int
 
     var body: some View {
         Text("Cycle \(current) of \(total)")
             .font(.subheadline)
-            .foregroundStyle(.secondary)
-            .contentTransition(.numericText())
-            .animation(.easeInOut, value: current)
+            .foregroundStyle(SupportTheme.textSecondary)
+            .contentTransition(reduceMotion ? .opacity : .numericText())
+            .animation(reduceMotion ? nil : .easeInOut, value: current)
     }
 }
 
@@ -152,6 +140,7 @@ struct CycleCounter: View {
 
 /// Large animated phase label
 struct PhaseLabel: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let text: String
     let color: Color
 
@@ -160,7 +149,7 @@ struct PhaseLabel: View {
             .font(.title.weight(.semibold))
             .foregroundStyle(color)
             .contentTransition(.opacity)
-            .animation(.easeInOut(duration: 0.3), value: text)
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.3), value: text)
     }
 }
 
@@ -181,7 +170,7 @@ struct TimerDisplay: View {
         Text(formattedTime)
             .font(font)
             .monospacedDigit()
-            .foregroundStyle(style == .small ? .secondary : .primary)
+            .foregroundStyle(style == .small ? .secondary : SupportTheme.textPrimary)
             .contentTransition(.numericText())
     }
 
@@ -211,20 +200,20 @@ struct PlayerControls: View {
     let onComplete: () -> Void
 
     var body: some View {
-        HStack(spacing: 32) {
+        HStack(spacing: SupportTheme.Spacing.xl) {
             // Reset button
             Button(action: onReset) {
                 Image(systemName: "arrow.counterclockwise")
                     .font(.title)
-                    .foregroundStyle(canReset ? .primary : .secondary)
+                    .foregroundStyle(canReset ? .primary : SupportTheme.textSecondary)
             }
             .disabled(!canReset)
 
             // Play/Pause button
             Button(action: onPlayPause) {
                 Image(systemName: isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                    .font(.system(size: 80))
-                    .foregroundStyle(Color.accentColor)
+                    .font(.system(.largeTitle))
+                    .foregroundStyle(SupportTheme.accent)
             }
 
             // Complete button
@@ -240,33 +229,34 @@ struct PlayerControls: View {
 
 /// A single meditation/grounding segment
 struct SegmentView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let text: String
     let isActive: Bool
     let segmentType: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             if let type = segmentType {
                 Text(type.capitalized)
                     .font(.caption)
                     .fontWeight(.medium)
-                    .foregroundStyle(isActive ? Color.accentColor : .secondary)
+                    .foregroundStyle(isActive ? SupportTheme.accent : SupportTheme.textSecondary)
                     .textCase(.uppercase)
             }
 
             Text(text)
                 .font(isActive ? .title3 : .body)
                 .fontWeight(isActive ? .medium : .regular)
-                .foregroundStyle(isActive ? .primary : .secondary)
+                .foregroundStyle(isActive ? .primary : SupportTheme.textSecondary)
                 .multilineTextAlignment(.leading)
         }
-        .padding()
+        .padding(SupportTheme.Spacing.m)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(isActive ? Color.accentColor.opacity(0.1) : Color.clear)
+            RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                .fill(isActive ? SupportTheme.accent.opacity(0.1) : Color.clear)
         )
-        .animation(.easeInOut(duration: 0.3), value: isActive)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.3), value: isActive)
     }
 }
 
@@ -292,12 +282,12 @@ struct SenseIcon: View {
     var body: some View {
         ZStack {
             Circle()
-                .fill(isCompleted ? color : Color(.systemGray5))
+                .fill(isCompleted ? color : SupportTheme.separator)
                 .frame(width: 56, height: 56)
 
             Image(systemName: icon)
                 .font(.title2)
-                .foregroundStyle(isCompleted ? .white : .secondary)
+                .foregroundStyle(isCompleted ? SupportTheme.onAccent : SupportTheme.textSecondary)
 
             if isCompleted {
                 Circle()
@@ -317,31 +307,29 @@ struct JournalPromptCard: View {
     @Binding var response: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             if let category = category {
                 Text(category.capitalized)
                     .font(.caption)
                     .fontWeight(.semibold)
-                    .foregroundStyle(Color.accentColor)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Color.accentColor.opacity(0.1))
+                    .foregroundStyle(SupportTheme.accent)
+                    .padding(.horizontal, SupportTheme.Spacing.xs)
+                    .padding(.vertical, SupportTheme.Spacing.xxs)
+                    .background(SupportTheme.surface)
                     .clipShape(Capsule())
             }
 
             Text(prompt)
                 .font(.headline)
-                .foregroundStyle(.primary)
+                .foregroundStyle(SupportTheme.textPrimary)
 
             TextEditor(text: $response)
                 .frame(minHeight: 120)
-                .padding(8)
-                .background(Color(.systemGray6))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .padding(SupportTheme.Spacing.xs)
+                .background(SupportTheme.separator)
+                .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .supportCard()
     }
 }
 
@@ -354,7 +342,7 @@ struct MovementStepCard: View {
     let timeRemaining: Int?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             HStack {
                 Text(step.name)
                     .font(.headline)
@@ -364,38 +352,38 @@ struct MovementStepCard: View {
                 if step.isRestPeriod == true {
                     Label("Rest", systemImage: "pause.circle")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
             }
 
             Text(step.description)
                 .font(.body)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
 
             if isActive, let time = timeRemaining {
                 HStack {
                     ProgressView(value: Double(time), total: Double(step.durationSeconds))
-                        .tint(step.isRestPeriod == true ? .green : .accentColor)
+                        .tint(step.isRestPeriod == true ? .green : SupportTheme.accent)
 
                     Text("\(time)s")
                         .font(.caption)
                         .monospacedDigit()
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
             } else {
                 Text("\(step.durationSeconds)s")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
         }
-        .padding()
+        .padding(SupportTheme.Spacing.m)
         .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(isActive ? Color.accentColor.opacity(0.1) : Color(.secondarySystemBackground))
+            RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                .fill(isActive ? SupportTheme.accent.opacity(0.1) : SupportTheme.surface)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(isActive ? Color.accentColor : .clear, lineWidth: 2)
+            RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                .stroke(isActive ? SupportTheme.accent : .clear, lineWidth: 2)
         )
     }
 }
@@ -407,11 +395,7 @@ struct ImmersiveBackground: View {
     let colors: [Color]
 
     var body: some View {
-        LinearGradient(
-            colors: colors,
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
+        SupportTheme.canvas
         .ignoresSafeArea()
     }
 }
@@ -419,27 +403,27 @@ struct ImmersiveBackground: View {
 // MARK: - Preview
 
 #Preview("Breathing Circle") {
-    VStack(spacing: 40) {
+    VStack(spacing: SupportTheme.Spacing.xl) {
         BreathingCircle(scale: 0.5, phase: .inhale)
             .frame(width: 200, height: 200)
 
         BreathingCircle(scale: 1.0, phase: .exhale)
             .frame(width: 200, height: 200)
     }
-    .padding()
-    .background(Color.black)
+    .padding(SupportTheme.Spacing.m)
+    .background(SupportTheme.canvas)
 }
 
 #Preview("Progress Components") {
-    VStack(spacing: 24) {
-        ProgressDots(total: 5, current: 2, activeColor: .blue)
+    VStack(spacing: SupportTheme.Spacing.l) {
+        ProgressDots(total: 5, current: 2, activeColor: SupportTheme.accent)
 
-        StepProgressBar(progress: 0.6, color: .green)
-            .padding(.horizontal)
+        StepProgressBar(progress: 0.6, color: SupportTheme.accent)
+            .padding(.horizontal, SupportTheme.Spacing.m)
 
         CycleCounter(current: 3, total: 8)
 
         TimerDisplay(seconds: 125, style: .large)
     }
-    .padding()
+    .padding(SupportTheme.Spacing.m)
 }

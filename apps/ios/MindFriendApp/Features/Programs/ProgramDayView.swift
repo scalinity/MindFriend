@@ -17,6 +17,7 @@ struct ProgramDayView: View {
     @State private var moodBefore: Int?
     @State private var exerciseSessionId: String?
     @State private var isLoading = true
+    @State private var loadError: String?
     @State private var isCompleting = false
     @State private var showSkipConfirm = false
     @State private var showPauseMenu = false
@@ -32,18 +33,22 @@ struct ProgramDayView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.l) {
                 if isLoading {
                     ProgressView()
                         .frame(maxWidth: .infinity)
-                        .padding(.top, 40)
+                        .padding(.top, SupportTheme.Spacing.xl)
+                } else if let loadError {
+                    SupportUnavailableState(title: "Program day unavailable", message: loadError, actionTitle: "Try again") {
+                        Task { await loadDay() }
+                    }
                 } else if let day = currentDay {
                     // Day header
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                         HStack {
                             Text("Day \(day.dayNumber)")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
 
                             Spacer()
 
@@ -52,7 +57,7 @@ struct ProgramDayView: View {
                                     showSkipConfirm = true
                                 }
                                 .font(.caption)
-                                .foregroundStyle(.orange)
+                                .foregroundStyle(SupportTheme.accent)
                             }
                         }
 
@@ -63,7 +68,7 @@ struct ProgramDayView: View {
                         if let theme = day.theme {
                             Text(theme)
                                 .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                         }
                     }
 
@@ -71,7 +76,7 @@ struct ProgramDayView: View {
                     ProgressRow(
                         completedCount: completedContent.count,
                         totalCount: day.content.count,
-                        color: enrollment.program?.category.color ?? .blue
+                        color: SupportTheme.accent
                     )
 
                     // Content blocks
@@ -96,12 +101,12 @@ struct ProgramDayView: View {
                     } label: {
                         if isCompleting {
                             ProgressView()
-                                .tint(.white)
+                                .tint(SupportTheme.accent)
                         } else {
                             Text("Complete Day \(enrollment.currentDay)")
                         }
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.supportPrimary)
                     .controlSize(.large)
                     .frame(maxWidth: .infinity)
                     .disabled(!canComplete || isCompleting)
@@ -110,13 +115,14 @@ struct ProgramDayView: View {
                     if enrollment.canSkip {
                         Text("\(enrollment.skipsRemaining) skips remaining")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                             .frame(maxWidth: .infinity)
                     }
                 }
             }
-            .padding()
+            .padding(SupportTheme.Spacing.m)
         }
+        .supportScreen()
         .navigationTitle(enrollment.program?.title ?? "Program")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -135,6 +141,8 @@ struct ProgramDayView: View {
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
+                    .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                    .accessibilityLabel("More options")
                 }
             }
         }
@@ -145,7 +153,7 @@ struct ProgramDayView: View {
                 Task { await skipDay() }
             }
         } message: {
-            Text("You have \(enrollment.skipsRemaining) skips remaining. Skipping won't break your streak but you'll miss this day's content.")
+            Text("You have \(enrollment.skipsRemaining) skips remaining. You can return to this day's content later.")
         }
         .alert("Leave Program?", isPresented: $showPauseMenu) {
             Button("Cancel", role: .cancel) {}
@@ -175,6 +183,7 @@ struct ProgramDayView: View {
 
     private func loadDay() async {
         isLoading = true
+        loadError = nil
         defer { isLoading = false }
 
         do {
@@ -213,7 +222,7 @@ struct ProgramDayView: View {
                 "day_number": enrollment.currentDay
             ])
         } catch {
-            appState.showError(.apiError(error.localizedDescription))
+            loadError = error.localizedDescription
         }
     }
 
@@ -227,7 +236,7 @@ struct ProgramDayView: View {
             let contentDict = Dictionary(uniqueKeysWithValues:
                 completedContent.map { ($0, true) }
             )
-            
+
             try await container.supabaseDataService.saveProgramDayProgress(
                 enrollmentId: enrollment.id,
                 dayNumber: enrollment.currentDay,
@@ -321,20 +330,20 @@ struct ProgressRow: View {
     let color: Color
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: SupportTheme.Spacing.xs) {
             HStack {
                 Text("\(completedCount) of \(totalCount) completed")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                 Spacer()
             }
 
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(Color(.systemGray5))
+                    RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                        .fill(SupportTheme.separator)
 
-                    RoundedRectangle(cornerRadius: 4)
+                    RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
                         .fill(color)
                         .frame(width: totalCount > 0 ? geo.size.width * CGFloat(completedCount) / CGFloat(totalCount) : 0)
                 }
@@ -356,20 +365,20 @@ struct ProgramContentBlock: View {
     @Binding var moodBefore: Int?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             // Header
             HStack {
                 Image(systemName: content.type.icon)
-                    .foregroundStyle(isCompleted ? .green : .blue)
+                    .foregroundStyle(isCompleted ? .green : SupportTheme.accent)
                     .accessibilityHidden(true)
                 Text(content.type.displayName)
                     .font(.caption)
                     .textCase(.uppercase)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                 Spacer()
                 if isCompleted {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
+                        .foregroundStyle(SupportTheme.accent)
                         .accessibilityLabel("Completed")
                 }
             }
@@ -394,9 +403,7 @@ struct ProgramContentBlock: View {
                 CheckInContentView(content: content, isCompleted: isCompleted, selectedMood: $moodBefore, onComplete: onComplete)
             }
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .supportCard()
     }
 }
 
@@ -408,7 +415,7 @@ struct LearnContentView: View {
     let onComplete: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             if let title = content.title {
                 Text(title)
                     .font(.headline)
@@ -420,7 +427,7 @@ struct LearnContentView: View {
             }
             if !isCompleted {
                 Button("Mark as Read", action: onComplete)
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.supportSecondary)
                     .accessibilityHint("Double tap to mark this content as read")
             }
         }
@@ -438,9 +445,9 @@ struct PracticeContentView: View {
     @State private var isOpening = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             if let intro = content.intro {
-                Text(intro).font(.subheadline).foregroundStyle(.secondary)
+                Text(intro).font(.subheadline).foregroundStyle(SupportTheme.textSecondary)
             }
             if content.exerciseId != nil {
                 Button {
@@ -448,14 +455,14 @@ struct PracticeContentView: View {
                 } label: {
                     Label(isCompleted ? "Completed" : "Start Exercise", systemImage: "play.circle.fill")
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.supportPrimary)
                 .disabled(isCompleted || isOpening)
                 .accessibilityHint(isCompleted ? "Exercise completed" : "Double tap to start the exercise")
             } else if let duration = content.durationMinutes {
                 Button(action: onComplete) {
                     Label(isCompleted ? "Completed" : "Mark \(duration) min practice complete", systemImage: "checkmark.circle")
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.supportSecondary)
                 .disabled(isCompleted)
                 .accessibilityHint("Mark complete after finishing the practice")
             }
@@ -503,7 +510,7 @@ struct ReflectContentView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             if let prompt = content.prompt {
                 Text(prompt)
                     .font(.subheadline)
@@ -513,15 +520,15 @@ struct ReflectContentView: View {
             TextEditor(text: $text)
                 .frame(minHeight: 100)
                 .scrollContentBackground(.hidden)
-                .background(Color(.tertiarySystemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .background(SupportTheme.surface)
+                .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
                 .accessibilityLabel("Reflection text entry")
                 .accessibilityHint("Enter your reflection here")
 
             if let minWords = content.minWords {
                 Text("\(wordCount)/\(minWords) words")
                     .font(.caption)
-                    .foregroundStyle(wordCount >= minWords ? .green : .secondary)
+                    .foregroundStyle(wordCount >= minWords ? .green : SupportTheme.textSecondary)
                     .accessibilityLabel("\(wordCount) of \(minWords) words entered\(wordCount >= minWords ? ", minimum reached" : "")")
             }
 
@@ -529,7 +536,7 @@ struct ReflectContentView: View {
                 Button("Save Reflection") {
                     onComplete()
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.supportSecondary)
                 .disabled(content.minWords != nil && wordCount < (content.minWords ?? 0))
                 .accessibilityHint(content.minWords != nil && wordCount < (content.minWords ?? 0) ? "Enter at least \(content.minWords ?? 0) words to save" : "Double tap to save your reflection")
             }
@@ -544,7 +551,7 @@ struct ApplyContentView: View {
     let onComplete: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             if let challenge = content.challenge {
                 Text(challenge)
                     .font(.subheadline)
@@ -555,21 +562,21 @@ struct ApplyContentView: View {
                 TextEditor(text: $text)
                     .frame(minHeight: 80)
                     .scrollContentBackground(.hidden)
-                    .background(Color(.tertiarySystemBackground))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .background(SupportTheme.surface)
+                    .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
                     .accessibilityLabel("Report text entry")
                     .accessibilityHint("Share how the challenge went")
 
                 Text("Share how it went")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
 
             if !isCompleted {
                 Button("Mark Complete") {
                     onComplete()
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.supportSecondary)
                 .accessibilityHint("Double tap to mark this challenge as complete")
             }
         }
@@ -583,11 +590,11 @@ struct CheckInContentView: View {
     let onComplete: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("How are you feeling?")
                 .font(.subheadline)
 
-            HStack(spacing: 12) {
+            HStack(spacing: SupportTheme.Spacing.s) {
                 ForEach(1...5, id: \.self) { score in
                     Button {
                         selectedMood = score

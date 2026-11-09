@@ -13,7 +13,7 @@ struct TrajectoryVisualizationView: View {
     let isLive: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
             // Header
             HStack {
                 Text("Emotional Trajectory")
@@ -22,7 +22,7 @@ struct TrajectoryVisualizationView: View {
                 Spacer()
 
                 if isLive {
-                    HStack(spacing: 4) {
+                    HStack(spacing: SupportTheme.Spacing.xxs) {
                         Circle()
                             .fill(Color.red)
                             .frame(width: 8, height: 8)
@@ -33,7 +33,7 @@ struct TrajectoryVisualizationView: View {
                     }
                 }
             }
-            .padding(.horizontal)
+            .padding(.horizontal, SupportTheme.Spacing.m)
 
             if trajectory.isEmpty {
                 emptyStateView
@@ -42,27 +42,27 @@ struct TrajectoryVisualizationView: View {
                 legendView
             }
         }
-        .padding(.vertical)
-        .background(Color(.systemBackground))
-        .cornerRadius(16)
-        .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
+        .padding(.vertical, SupportTheme.Spacing.m)
+        .background(SupportTheme.canvas)
+        .cornerRadius(SupportTheme.cardRadius)
+        .shadow(color: SupportTheme.canvas.opacity(0.1), radius: 8, x: 0, y: 4)
     }
 
     // MARK: - Empty State
 
     private var emptyStateView: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: SupportTheme.Spacing.s) {
             Image(systemName: "chart.xyaxis.line")
-                .font(.system(size: 48))
-                .foregroundColor(.secondary)
+                .font(.system(.largeTitle))
+                .foregroundColor(SupportTheme.textSecondary)
 
             Text("No trajectory data yet")
                 .font(.subheadline)
-                .foregroundColor(.secondary)
+                .foregroundColor(SupportTheme.textSecondary)
 
             Text("Data will appear as you progress through the exercise")
                 .font(.caption)
-                .foregroundColor(.secondary)
+                .foregroundColor(SupportTheme.textSecondary)
                 .multilineTextAlignment(.center)
         }
         .frame(height: 200)
@@ -97,16 +97,16 @@ struct TrajectoryVisualizationView: View {
                     .symbol {
                         Image(systemName: "sparkles")
                             .font(.title3)
-                            .foregroundColor(.purple)
+                            .foregroundColor(SupportTheme.accent)
                     }
                     .annotation(position: .top) {
                         Text("Breakthrough!")
                             .font(.caption2)
                             .fontWeight(.semibold)
-                            .foregroundColor(.purple)
-                            .padding(4)
-                            .background(Color.purple.opacity(0.1))
-                            .cornerRadius(4)
+                            .foregroundColor(SupportTheme.accent)
+                            .padding(SupportTheme.Spacing.xxs)
+                            .background(SupportTheme.surface)
+                            .cornerRadius(SupportTheme.controlRadius)
                     }
                 }
             }
@@ -135,45 +135,37 @@ struct TrajectoryVisualizationView: View {
             }
         }
         .frame(height: 200)
-        .padding()
+        .padding(SupportTheme.Spacing.m)
     }
 
-    private var lineGradient: LinearGradient {
-        LinearGradient(
-            colors: [.blue, .purple],
-            startPoint: .leading,
-            endPoint: .trailing
-        )
+    private var lineGradient: Color {
+        SupportTheme.accent
     }
 
-    private var areaGradient: LinearGradient {
-        LinearGradient(
-            colors: [.blue.opacity(0.5), .purple.opacity(0.5)],
-            startPoint: .top,
-            endPoint: .bottom
-        )
+    private var areaGradient: Color {
+        SupportTheme.accent.opacity(0.15)
     }
 
     // MARK: - Legend
 
     private var legendView: some View {
-        HStack(spacing: 24) {
-            legendItem(color: .green, label: "Positive (+1.0)")
-            legendItem(color: .gray, label: "Neutral (0.0)")
+        HStack(spacing: SupportTheme.Spacing.l) {
+            legendItem(color: SupportTheme.accent, label: "Positive (+1.0)")
+            legendItem(color: SupportTheme.textSecondary, label: "Neutral (0.0)")
             legendItem(color: .red, label: "Negative (-1.0)")
         }
         .font(.caption)
-        .padding(.horizontal)
+        .padding(.horizontal, SupportTheme.Spacing.m)
     }
 
     private func legendItem(color: Color, label: String) -> some View {
-        HStack(spacing: 6) {
+        HStack(spacing: SupportTheme.Spacing.xxs) {
             Circle()
                 .fill(color)
                 .frame(width: 8, height: 8)
 
             Text(label)
-                .foregroundColor(.secondary)
+                .foregroundColor(SupportTheme.textSecondary)
         }
     }
 
@@ -247,5 +239,5 @@ struct TrajectoryVisualizationView: View {
             isLive: false
         )
     }
-    .padding()
+    .padding(SupportTheme.Spacing.m)
 }

@@ -17,13 +17,18 @@ struct TherapistDiscoveryView: View {
     var body: some View {
         SupportRootNavigation(embedded: supportEmbedded) {
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: SupportTheme.Spacing.l) {
                     // Search and Filters
                     filterSection
 
                     // Loading State
                     if viewModel.isLoading && viewModel.therapists.isEmpty {
                         loadingView
+                    } else if viewModel.showError {
+                        SupportUnavailableState(title: "Support directory unavailable", message: viewModel.errorMessage, actionTitle: "Try again") {
+                            viewModel.showError = false
+                            Task { await viewModel.loadTherapists() }
+                        }
                     } else if viewModel.therapists.isEmpty {
                         emptyStateView
                     } else {
@@ -31,9 +36,10 @@ struct TherapistDiscoveryView: View {
                         therapistListSection
                     }
                 }
-                .padding()
+                .padding(SupportTheme.Spacing.m)
             }
-            .navigationTitle("Find Support")
+            .supportScreen()
+            .navigationTitle(SupportDestination.therapists.title)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     NavigationLink {
@@ -41,6 +47,7 @@ struct TherapistDiscoveryView: View {
                     } label: {
                         Image(systemName: "person.badge.plus")
                             .accessibilityLabel("Become a therapist or coach")
+                        .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                     }
                 }
             }
@@ -51,25 +58,21 @@ struct TherapistDiscoveryView: View {
             .refreshable {
                 await viewModel.loadTherapists()
             }
-            .alert("Error", isPresented: $viewModel.showError) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(viewModel.errorMessage)
-            }
+
         }
     }
 
     // MARK: - Subviews
 
     private var filterSection: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             // Specialty Filter
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                 Text("What brings you here?")
                     .font(.headline)
 
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 12) {
+                    HStack(spacing: SupportTheme.Spacing.s) {
                         ForEach(TherapistSpecialty.allCases.prefix(8), id: \.self) { specialty in
                             specialtyChip(specialty)
                         }
@@ -78,7 +81,7 @@ struct TherapistDiscoveryView: View {
             }
 
             // Profile Type Filter
-            HStack(spacing: 12) {
+            HStack(spacing: SupportTheme.Spacing.s) {
                 profileTypeButton(nil, label: "All")
                 profileTypeButton(.therapist, label: "Therapists")
                 profileTypeButton(.coach, label: "Coaches")
@@ -87,7 +90,7 @@ struct TherapistDiscoveryView: View {
             // Sort Options
             HStack {
                 Text("Sort by:")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
 
                 Picker("Sort", selection: $viewModel.sortOption) {
                     ForEach(TherapistSearchFilters.SortOption.allCases, id: \.self) { option in
@@ -105,22 +108,22 @@ struct TherapistDiscoveryView: View {
         Button {
             viewModel.toggleSpecialty(specialty)
         } label: {
-            HStack(spacing: 6) {
+            HStack(spacing: SupportTheme.Spacing.xxs) {
                 Image(systemName: specialty.icon)
                     .font(.caption)
                 Text(specialty.displayName)
                     .font(.subheadline)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .padding(.horizontal, SupportTheme.Spacing.s)
+            .padding(.vertical, SupportTheme.Spacing.xs)
             .background(
                 viewModel.selectedSpecialty == specialty
-                    ? Color.accentColor
-                    : Color(.systemGray6)
+                    ? SupportTheme.accent
+                    : SupportTheme.separator
             )
             .foregroundStyle(
                 viewModel.selectedSpecialty == specialty
-                    ? .white
+                    ? SupportTheme.onAccent
                     : .primary
             )
             .clipShape(Capsule())
@@ -134,16 +137,16 @@ struct TherapistDiscoveryView: View {
         } label: {
             Text(label)
                 .font(.subheadline.weight(.medium))
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
+                .padding(.horizontal, SupportTheme.Spacing.m)
+                .padding(.vertical, SupportTheme.Spacing.xs)
                 .background(
                     viewModel.selectedProfileType == type
-                        ? Color.accentColor
-                        : Color(.systemGray6)
+                        ? SupportTheme.accent
+                        : SupportTheme.separator
                 )
                 .foregroundStyle(
                     viewModel.selectedProfileType == type
-                        ? .white
+                        ? SupportTheme.onAccent
                         : .primary
                 )
                 .clipShape(Capsule())
@@ -151,40 +154,40 @@ struct TherapistDiscoveryView: View {
     }
 
     private var loadingView: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             ProgressView()
             Text("Finding therapists...")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 60)
+        .padding(.vertical, SupportTheme.Spacing.xl)
     }
 
     private var emptyStateView: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             Image(systemName: "person.2.slash")
-                .font(.system(size: 48))
-                .foregroundStyle(.secondary)
+                .font(.system(.largeTitle))
+                .foregroundStyle(SupportTheme.textSecondary)
 
             Text("No therapists found")
                 .font(.headline)
 
             Text("Try adjusting your filters or check back later.")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .multilineTextAlignment(.center)
 
             Button("Clear Filters") {
                 viewModel.clearFilters()
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.supportSecondary)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 60)
+        .padding(.vertical, SupportTheme.Spacing.xl)
     }
 
     private var therapistListSection: some View {
-        LazyVStack(spacing: 16) {
+        LazyVStack(spacing: SupportTheme.Spacing.m) {
             ForEach(viewModel.therapists) { therapist in
                 NavigationLink {
                     TherapistProfileView(therapist: therapist)
@@ -208,7 +211,7 @@ struct TherapistDiscoveryView: View {
                     }
                 }
                 .frame(maxWidth: .infinity)
-                .padding()
+                .padding(SupportTheme.Spacing.m)
             }
         }
     }
@@ -220,8 +223,8 @@ struct TherapistCard: View {
     let therapist: TherapistProfile
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 16) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
+            HStack(spacing: SupportTheme.Spacing.m) {
                 // Photo
                 AsyncImage(url: URL(string: therapist.photoUrl ?? "")) { phase in
                     switch phase {
@@ -232,21 +235,21 @@ struct TherapistCard: View {
                     default:
                         Image(systemName: "person.circle.fill")
                             .resizable()
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                 }
                 .frame(width: 64, height: 64)
                 .clipShape(Circle())
 
                 // Info
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     HStack {
                         Text(therapist.displayName)
                             .font(.headline)
 
                         if therapist.verified {
                             Image(systemName: "checkmark.seal.fill")
-                                .foregroundStyle(.blue)
+                                .foregroundStyle(SupportTheme.accent)
                                 .font(.caption)
                                 .accessibilityLabel("Verified")
                         }
@@ -254,55 +257,53 @@ struct TherapistCard: View {
 
                     Text(therapist.displayCredentials)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
 
-                    HStack(spacing: 8) {
+                    HStack(spacing: SupportTheme.Spacing.xs) {
                         // Rating
-                        HStack(spacing: 4) {
+                        HStack(spacing: SupportTheme.Spacing.xxs) {
                             Image(systemName: "star.fill")
-                                .foregroundStyle(.yellow)
+                                .foregroundStyle(SupportTheme.accent)
                             Text(therapist.displayRating)
                             if therapist.ratingCount > 0 {
                                 Text("(\(therapist.ratingCount))")
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(SupportTheme.textSecondary)
                             }
                         }
                         .font(.caption)
 
                         Text("•")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
 
                         // Rate
                         Text(therapist.displayRate)
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                 }
 
                 Spacer()
 
                 Image(systemName: "chevron.right")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
 
             // Specialties
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
+                HStack(spacing: SupportTheme.Spacing.xs) {
                     ForEach(therapist.displaySpecialties.prefix(4), id: \.self) { specialty in
                         Text(specialty.displayName)
                             .font(.caption)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Color(.systemGray6))
+                            .padding(.horizontal, SupportTheme.Spacing.xs)
+                            .padding(.vertical, SupportTheme.Spacing.xxs)
+                            .background(SupportTheme.separator)
                             .clipShape(Capsule())
                     }
                 }
             }
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .shadow(color: .black.opacity(0.05), radius: 8, y: 2)
+        .supportCard()
+        .shadow(color: SupportTheme.canvas.opacity(0.05), radius: 8, y: 2)
     }
 }
 

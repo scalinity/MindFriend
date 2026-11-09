@@ -3,6 +3,7 @@ import SwiftUI
 // MARK: - Coping Kits View (Home Card)
 
 struct CopingKitsView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @StateObject private var viewModel: CopingKitsViewModel
     @State private var showingDetail = false
     @State private var selectedProgress: KitProgress?
@@ -12,12 +13,12 @@ struct CopingKitsView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             // Header
             HStack {
                 Label("Coping Kits", systemImage: "heart.circle.fill")
                     .font(.headline)
-                    .foregroundStyle(.pink)
+                    .foregroundStyle(SupportTheme.accent)
 
                 Spacer()
 
@@ -28,16 +29,25 @@ struct CopingKitsView: View {
                 } label: {
                     Image(systemName: "arrow.clockwise")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
+                        .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                 }
+                .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                .accessibilityLabel("Refresh coping kits")
                 .disabled(viewModel.isLoading)
             }
 
+            if viewModel.showError {
+                SupportUnavailableState(title: "Kits unavailable", message: viewModel.error?.localizedDescription ?? "Please try again.", actionTitle: "Try again") {
+                    viewModel.dismissError()
+                    Task { await viewModel.loadKits() }
+                }
+            }
             // Loading state
             if viewModel.isLoading {
                 ProgressView()
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 20)
+                    .padding(.vertical, SupportTheme.Spacing.m)
             } else {
                 // Active progress section
                 if !viewModel.activeProgress.isEmpty {
@@ -48,10 +58,8 @@ struct CopingKitsView: View {
                 quickKitsSection
             }
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .shadow(color: .black.opacity(0.05), radius: 8, y: 2)
+        .supportCard()
+        .shadow(color: SupportTheme.canvas.opacity(0.05), radius: 8, y: 2)
         .sheet(isPresented: $showingDetail) {
             if let kit = viewModel.selectedKit {
                 CopingKitDetailView(viewModel: viewModel, kit: kit)
@@ -71,13 +79,6 @@ struct CopingKitsView: View {
         .sheet(isPresented: $viewModel.showPremiumUpgrade) {
             PremiumUpgradeSheet()
         }
-        .alert("Error", isPresented: $viewModel.showError) {
-            Button("OK") {
-                viewModel.dismissError()
-            }
-        } message: {
-            Text(viewModel.error?.localizedDescription ?? "An error occurred")
-        }
         .task {
             await viewModel.loadKits()
         }
@@ -86,34 +87,34 @@ struct CopingKitsView: View {
     // MARK: - Active Progress Section
 
     private var activeProgressSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             Text("Continue where you left off")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
 
             ForEach(viewModel.activeProgress) { progress in
                 Button {
                     selectedProgress = progress
                 } label: {
                     HStack {
-                        VStack(alignment: .leading, spacing: 4) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                             Text(progress.kitTitle)
                                 .font(.subheadline)
                                 .fontWeight(.medium)
 
                             Text("\(progress.stepsRemaining) step\(progress.stepsRemaining == 1 ? "" : "s") remaining")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                         }
 
                         Spacer()
 
                         Image(systemName: "play.fill")
-                            .foregroundStyle(.pink)
+                            .foregroundStyle(SupportTheme.accent)
                     }
-                    .padding(12)
-                    .background(Color.pink.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .padding(SupportTheme.Spacing.s)
+                    .background(SupportTheme.surface)
+                    .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
                 }
                 .buttonStyle(.plain)
             }
@@ -123,11 +124,7 @@ struct CopingKitsView: View {
     // MARK: - Quick Kits Section
 
     private var quickKitsSection: some View {
-        LazyVGrid(columns: [
-            GridItem(.flexible()),
-            GridItem(.flexible()),
-            GridItem(.flexible())
-        ], spacing: 12) {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), alignment: .top), count: dynamicTypeSize.isAccessibilitySize ? 1 : 3), spacing: SupportTheme.Spacing.s) {
             ForEach(viewModel.availableKits.prefix(6)) { kit in
                 CopingKitCard(kit: kit, onTap: {
                     viewModel.selectKit(kit)
@@ -146,7 +143,7 @@ struct CopingKitCard: View {
 
     var body: some View {
         Button(action: onTap) {
-            VStack(spacing: 8) {
+            VStack(spacing: SupportTheme.Spacing.xs) {
                 // Icon
                 ZStack {
                     Circle()
@@ -163,52 +160,52 @@ struct CopingKitCard: View {
                     .font(.caption)
                     .fontWeight(.medium)
                     .multilineTextAlignment(.center)
-                    .lineLimit(2)
-                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .foregroundStyle(SupportTheme.textPrimary)
 
                 // Duration
-                HStack(spacing: 4) {
+                HStack(spacing: SupportTheme.Spacing.xxs) {
                     Image(systemName: "clock")
                         .font(.caption2)
                     Text(kit.formattedDuration)
                         .font(.caption2)
                 }
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
 
                 // Premium badge
                 if kit.isPremium {
                     Image(systemName: "lock.fill")
                         .font(.caption2)
-                        .foregroundStyle(.yellow)
+                        .foregroundStyle(SupportTheme.accent)
                 }
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 12)
-            .padding(.horizontal, 8)
-            .background(Color(.secondarySystemBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .padding(.vertical, SupportTheme.Spacing.s)
+            .padding(.horizontal, SupportTheme.Spacing.xs)
+            .background(SupportTheme.surface)
+            .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
         }
         .buttonStyle(.plain)
     }
 
     private var iconBackgroundColor: Color {
         switch kit.contextTag {
-        case .anxiety: return .orange.opacity(0.15)
-        case .stress: return .yellow.opacity(0.15)
-        case .sadness: return .blue.opacity(0.15)
-        case .sleep: return .indigo.opacity(0.15)
-        case .focus: return .green.opacity(0.15)
+        case .anxiety: return SupportTheme.accent.opacity(0.15)
+        case .stress: return SupportTheme.accent.opacity(0.15)
+        case .sadness: return SupportTheme.accent.opacity(0.15)
+        case .sleep: return SupportTheme.accent.opacity(0.15)
+        case .focus: return SupportTheme.accent.opacity(0.15)
         case .crisis: return .red.opacity(0.15)
         }
     }
 
     private var iconColor: Color {
         switch kit.contextTag {
-        case .anxiety: return .orange
-        case .stress: return .yellow
-        case .sadness: return .blue
-        case .sleep: return .indigo
-        case .focus: return .green
+        case .anxiety: return SupportTheme.accent
+        case .stress: return SupportTheme.accent
+        case .sadness: return SupportTheme.accent
+        case .sleep: return SupportTheme.accent
+        case .focus: return SupportTheme.accent
         case .crisis: return .red
         }
     }
@@ -221,12 +218,12 @@ struct PremiumUpgradeSheet: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 24) {
+            VStack(spacing: SupportTheme.Spacing.l) {
                 Spacer()
 
                 Image(systemName: "lock.fill")
-                    .font(.system(size: 60))
-                    .foregroundStyle(.yellow)
+                    .font(.system(.largeTitle))
+                    .foregroundStyle(SupportTheme.accent)
 
                 Text("Premium Kit")
                     .font(.title)
@@ -234,13 +231,13 @@ struct PremiumUpgradeSheet: View {
 
                 Text("Upgrade to Premium to access this coping kit and many more.")
                     .font(.body)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
+                    .padding(.horizontal, SupportTheme.Spacing.xl)
 
                 Spacer()
 
-                VStack(spacing: 12) {
+                VStack(spacing: SupportTheme.Spacing.s) {
                     Button {
                         // TODO: Trigger upgrade flow
                         dismiss()
@@ -248,22 +245,19 @@ struct PremiumUpgradeSheet: View {
                         Text("Upgrade to Premium")
                             .fontWeight(.semibold)
                             .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.pink)
-                            .foregroundStyle(.white)
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
                     }
+                    .buttonStyle(.supportPrimary)
 
                     Button {
                         dismiss()
                     } label: {
                         Text("Maybe Later")
                             .fontWeight(.medium)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                 }
-                .padding(.horizontal, 24)
-                .padding(.bottom, 32)
+                .padding(.horizontal, SupportTheme.Spacing.l)
+                .padding(.bottom, SupportTheme.Spacing.xl)
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -272,7 +266,9 @@ struct PremiumUpgradeSheet: View {
                         dismiss()
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
+                            .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                            .accessibilityLabel("Close")
                     }
                 }
             }
@@ -286,8 +282,8 @@ struct PremiumUpgradeSheet: View {
 #Preview {
     ScrollView {
         CopingKitsView(viewModel: CopingKitsViewModel.preview())
-            .padding()
+            .padding(SupportTheme.Spacing.m)
     }
-    .background(Color(.systemGroupedBackground))
+    .background(SupportTheme.surface)
 }
 #endif
