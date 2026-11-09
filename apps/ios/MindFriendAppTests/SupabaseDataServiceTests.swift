@@ -287,6 +287,16 @@ extension SupabaseDataServiceTests {
         XCTAssertEqual(response.message.createdAt.timeIntervalSince1970, 1710000001)
     }
 
+    func testChatWireResponseRetainsMemoryDisclosureAndUnknownLegacyState() throws {
+        let base = "\"message\":{\"id\":\"reply\",\"role\":\"assistant\",\"content\":\"Fixture\",\"createdAt\":1710000001,\"blocked\":false}"
+        let disclosed = try ChatFunctionResponse.decode(Data(("{" + base + ",\"memoryUsed\":true,\"memoryIdsUsed\":[\"owned-memory\"]}").utf8))
+        XCTAssertEqual(disclosed.memoryUsed, true)
+        XCTAssertEqual(disclosed.memoryIdsUsed, ["owned-memory"])
+        let legacy = try ChatFunctionResponse.decode(Data(("{" + base + "}").utf8))
+        XCTAssertNil(legacy.memoryUsed)
+        XCTAssertNil(legacy.memoryIdsUsed)
+    }
+
     func testChatWireResponseAcceptsInstalledBackendWithoutUserMessage() throws {
         let fixture = Data("""
         {"message":{"id":"legacy-assistant","role":"assistant","content":"Fixture","createdAt":1710000001,"blocked":false}}
@@ -766,4 +776,54 @@ private final class ChatTransportFixture: @unchecked Sendable {
     private let lock=NSLock();private var value=Value(status:200,mime:"application/json",chunks:[],failure:nil,keepOpen:false)
     func prepare(status:Int,mime:String,chunks:[Data],failure:URLError?,keepOpen:Bool) {lock.lock();defer{lock.unlock()};value=Value(status:status,mime:mime,chunks:chunks,failure:failure,keepOpen:keepOpen)}
     func snapshot()->Value {lock.lock();defer{lock.unlock()};return value}
+}
+
+extension SupabaseDataServiceTests {
+    @MainActor
+    func testOnboardingWireContractCarriesExpectedOwnerAndReceipt() throws {
+        let owner = UUID()
+        let parameters = SupabaseDataService.OnboardingParameters(
+            p_expected_user: owner, p_birth_year: 2000, p_confirms_thirteen: true,
+            p_accepts_terms: true, p_consent_version: OnboardingConsent.version)
+        let data = try JSONEncoder().encode(parameters)
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual((object["p_expected_user"] as? String)?.lowercased(), owner.uuidString.lowercased())
+        XCTAssertEqual(object["p_birth_year"] as? Int, 2000)
+        let receiptData = try JSONSerialization.data(withJSONObject: [
+            "user_id": owner.uuidString, "consent_version": OnboardingConsent.version,
+        ])
+        let receipt = try JSONDecoder().decode(SupabaseDataService.OnboardingReceipt.self, from: receiptData)
+        XCTAssertEqual(receipt.user_id, owner)
+        XCTAssertEqual(receipt.consent_version, OnboardingConsent.version)
+    }
+
+}
+
+extension SupabaseDataServiceTests {
+    @MainActor
+    func testAccountDeletionCapturesOwnerTokenAndRequiresConfirmedHTTPReceipt() async throws {
+        let owner = UUID()
+        let request = try SupabaseAuthService.accountDeletionRequest(owner: owner, token: "synthetic-owner-a",
+            projectURL: URL(string: "https://chat-fixture.invalid")!, apiKey: "synthetic-public")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer synthetic-owner-a")
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: try XCTUnwrap(request.httpBody)) as? [String: String])
+        XCTAssertEqual(body["expected_owner"], owner.uuidString.lowercased())
+        XCTAssertEqual(request.url?.path, "/functions/v1/delete-account")
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [ChatTransportURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+        for (status, object) in [(200, [:]), (200, ["success": false]), (403, ["success": true]), (200, ["success": true, "error": "not deleted"])] as [(Int, [String: Any])] {
+            ChatTransportURLProtocol.fixture.prepare(status: status, mime: "application/json",
+                chunks: [try JSONSerialization.data(withJSONObject: object)], failure: nil, keepOpen: false)
+            do {
+                _ = try await SupabaseAuthService.accountDeletionResponse(for: request, session: session)
+                XCTFail("Unconfirmed deletion must fail")
+            } catch {}
+        }
+        ChatTransportURLProtocol.fixture.prepare(status: 200, mime: "application/json",
+            chunks: [Data("{\"success\":true}".utf8)], failure: nil, keepOpen: false)
+        let receipt = try await SupabaseAuthService.accountDeletionResponse(for: request, session: session)
+        XCTAssertEqual(receipt.success, true)
+    }
 }

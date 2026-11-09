@@ -855,16 +855,12 @@ struct HomeView: View {
 
                 // Update user profile (keep previous value if profile fetch failed)
                 if let profileResult {
-                    appState.currentUser = profileResult
-                    appState.currentStreak = profileResult.stats?.currentStreakDays ?? 0
-
-                    // Convert UserEntitlements to Entitlements
-                    if let userEntitlements = profileResult.entitlements {
-                        let tier: Tier = userEntitlements.subscriptionTier == "premium" ? .premium : .free
-                        appState.entitlements = Entitlements(tier: tier, dailyAiQuota: tier == .premium ? 9999 : 20, dailyAiUsed: 0)
-                    } else {
-                        appState.entitlements = .free
+                    if appState.currentUser?.id == profileResult.id {
+                        appState.refreshProfileEntitlements(profileResult)
+                        appState.currentUser = profileResult
+                        appState.currentStreak = profileResult.stats?.currentStreakDays ?? 0
                     }
+
                 }
 
                 // Set level info

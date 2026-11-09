@@ -165,6 +165,17 @@ struct DownloadTask: Identifiable, Codable {
 
 // MARK: - Offline Sync Items
 
+enum OfflineLocalDay {
+    static func string(for date: Date, timeZone: TimeZone = .current) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = timeZone
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: date)
+    }
+}
+
 /// Mood entry created while offline, pending sync
 struct OfflineMoodEntry: Identifiable, Codable {
     let id: UUID
@@ -174,6 +185,8 @@ struct OfflineMoodEntry: Identifiable, Codable {
     let notes: String?
     let factors: [String]?
     let createdAt: Date
+    /// Captured at recording time; absent on older queued items, whose original local day is unknown.
+    let localDate: String?
     var synced: Bool
     var syncAttempts: Int
     var lastSyncError: String?
@@ -186,6 +199,7 @@ struct OfflineMoodEntry: Identifiable, Codable {
         notes: String? = nil,
         factors: [String]? = nil,
         createdAt: Date = Date(),
+        localDate: String? = nil,
         synced: Bool = false,
         syncAttempts: Int = 0,
         lastSyncError: String? = nil
@@ -197,6 +211,7 @@ struct OfflineMoodEntry: Identifiable, Codable {
         self.notes = notes
         self.factors = factors
         self.createdAt = createdAt
+        self.localDate = localDate ?? OfflineLocalDay.string(for: createdAt)
         self.synced = synced
         self.syncAttempts = syncAttempts
         self.lastSyncError = lastSyncError

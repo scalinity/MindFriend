@@ -144,6 +144,8 @@ struct ChatResponse: Codable {
     let quotaLimit: Int?
     let conversationTitle: String?
     let coachData: CoachData?
+    var memoryUsed: Bool? = nil
+    var memoryIdsUsed: [String]? = nil
 }
 
 struct ChatFunctionResponse: Codable {
@@ -154,6 +156,8 @@ struct ChatFunctionResponse: Codable {
     let quotaLimit: Int?
     let conversationTitle: String?
     let coachData: CoachData?
+    var memoryUsed: Bool? = nil
+    var memoryIdsUsed: [String]? = nil
 
     static func decode(_ data: Data) throws -> ChatFunctionResponse {
         let decoder = JSONDecoder()
@@ -211,32 +215,6 @@ final class SupabaseDataService: ObservableObject {
 
     // MARK: - Moods
 
-    func createMood(_ mood: MoodEntry) async throws {
-        let dbMood = DBMood(
-            id: nil,
-            userId: try userId,
-            localDate: mood.localDate,
-            moodScore: mood.moodScore,
-            anxietyScore: mood.anxietyScore,
-            energyScore: mood.energyScore,
-            note: mood.note,
-            encryptedNote: nil,
-            noteEncryptionKeyId: nil,
-            createdAt: nil
-        )
-
-        try await supabase
-            .from(Tables.moods)
-            .upsert(dbMood, onConflict: "user_id,local_date")
-            .execute()
-
-        DebtSourceChanges.saved(date: mood.localDate)
-        Analytics.shared.track(.moodLogged, properties: [
-            "mood_score": mood.moodScore,
-            "has_note": mood.note != nil
-        ])
-    }
-
     func getMoods(from startDate: String, to endDate: String, limit: Int = 100, offset: Int = 0) async throws -> [MoodEntry] {
         let moods: [DBMood] = try await supabase
             .from(Tables.moods)
@@ -269,9 +247,7 @@ final class SupabaseDataService: ObservableObject {
     /// Fetches today's mood entry if one exists
     /// Used by HomeView to determine whether to show mood check-in prompt
     func getTodayMood() async throws -> MoodEntry? {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        let today = formatter.string(from: Date())
+        let today = OfflineLocalDay.string(for: Date())
 
         let moods = try await getMoods(from: today, to: today, limit: 1)
         return moods.first
@@ -447,33 +423,6 @@ final class SupabaseDataService: ObservableObject {
         guard try userId == ownerId else { throw CancellationError() }
         guard let quest = quests.first, quest.userId == ownerId else { return nil }
         return quest.toQuest()
-    }
-
-    func completeQuest(id: String, reflectionNote: String?, rating: Int?) async throws {
-        guard let questId = UUID(uuidString: id) else { return }
-
-        let updates: [String: AnyEncodable] = [
-            "status": AnyEncodable("completed"),
-            "reflection_note": AnyEncodable(reflectionNote),
-            "rating": AnyEncodable(rating),
-            "completed_at": AnyEncodable(ISO8601DateFormatter().string(from: Date()))
-        ]
-
-        try await supabase
-            .from(Tables.quests)
-            .update(updates)
-            .eq("id", value: questId)
-            .eq("user_id", value: try userId)
-            .execute()
-
-        DebtSourceChanges.saved()
-        // Note: Stats/streak updates are handled by database trigger (trg_quest_completed_stats)
-
-        Analytics.shared.track(.questCompleted, properties: [
-            "quest_id": id,
-            "has_reflection": reflectionNote != nil,
-            "rating": rating ?? 0
-        ])
     }
 
     func skipQuest(id: String) async throws {
@@ -1162,7 +1111,9 @@ final class SupabaseDataService: ObservableObject {
             quotaUsed: chatResponse.quotaUsed,
             quotaLimit: chatResponse.quotaLimit,
             conversationTitle: chatResponse.conversationTitle,
-            coachData: chatResponse.coachData
+            coachData: chatResponse.coachData,
+            memoryUsed: chatResponse.memoryUsed,
+            memoryIdsUsed: chatResponse.memoryIdsUsed
         )
     }
 
@@ -3295,44 +3246,27 @@ final class SupabaseDataService: ObservableObject {
         ])
     }
 
-    /// Mark onboarding as complete for the current user
-    func markOnboardingComplete() async throws {
-        let currentUserId = try userId
-        let now = ISO8601DateFormatter().string(from: Date())
-        Log.data.debug("[Data] Marking onboarding complete for user: \(currentUserId)")
-
-        try await supabase
-            .from(Tables.profiles)
-            .update(["onboarding_completed_at": now])
-            .eq("id", value: currentUserId)
-            .execute()
-
-        Log.data.debug("[Data] Onboarding marked complete at: \(now)")
-        Analytics.shared.track(.onboardingCompleted)
+    /// Acknowledges age/consent and completion together; missing server support fails closed.
+    struct OnboardingParameters: Encodable {
+        let p_expected_user: UUID
+        let p_birth_year: Int
+        let p_confirms_thirteen: Bool
+        let p_accepts_terms: Bool
+        let p_consent_version: String
+    }
+    struct OnboardingReceipt: Decodable {
+        let user_id: UUID
+        let consent_version: String
     }
 
-    /// Complete onboarding in a single atomic operation
-    func completeOnboarding(focus: WellnessFocus) async throws {
-        let currentUserId = try userId
-        let now = ISO8601DateFormatter().string(from: Date())
-        Log.data.debug("[Data] Completing onboarding with focus '\(focus.rawValue)' for user: \(currentUserId)")
-
-        // Single atomic update
-        try await supabase
-            .from(Tables.profiles)
-            .update([
-                "wellness_focus": focus.rawValue,
-                "onboarding_completed_at": now
-            ])
-            .eq("id", value: currentUserId)
-            .execute()
-
-        Log.data.debug("[Data] Onboarding completed successfully")
-        Analytics.shared.track(.onboardingStepCompleted, properties: [
-            "step": "quiz",
-            "wellness_focus": focus.rawValue
-        ])
-        Analytics.shared.track(.onboardingCompleted)
+    func completeOnboarding(expectedOwner: UUID, birthYear: Int, confirmsThirteen: Bool, acceptsTerms: Bool) async throws {
+        guard try userId == expectedOwner else { throw DataError.notAuthenticated }
+        let receipt: OnboardingReceipt = try await supabase.rpc("complete_support_onboarding", params: OnboardingParameters(
+            p_expected_user: expectedOwner, p_birth_year: birthYear, p_confirms_thirteen: confirmsThirteen,
+            p_accepts_terms: acceptsTerms, p_consent_version: OnboardingConsent.version
+        )).execute().value
+        guard try userId == expectedOwner, receipt.user_id == expectedOwner,
+              receipt.consent_version == OnboardingConsent.version else { throw DataError.notAuthenticated }
     }
 
     // MARK: - XP & Progression

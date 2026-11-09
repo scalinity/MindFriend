@@ -12,8 +12,11 @@ struct CirclesListView: View {
     @AppStorage("circles_tutorial_completed") private var circlesTutorialCompleted = false
     @State private var showCirclesTutorial = false
 
+    /// Set by the stable shell so pushed work adds no second NavigationStack; standalone callers keep their own.
+    @Environment(\.supportRootEmbedded) private var supportEmbedded
+
     var body: some View {
-        NavigationStack {
+        SupportRootNavigation(embedded: supportEmbedded) {
             Group {
                 if isLoading {
                     ProgressView()
