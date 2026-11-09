@@ -9,6 +9,8 @@ struct SupportActivityView: View {
     @EnvironmentObject private var container: DependencyContainer
     @State private var discussion: SupportActivityDiscussionSnapshot?
     @AccessibilityFocusState private var headingFocused: Bool
+    @FocusState private var fieldFocused: Bool
+    @State private var askedForFirstPart = false
     @State private var answer = ""
     @State private var note = ""
     @State private var includeAnswers = false
@@ -54,7 +56,8 @@ struct SupportActivityView: View {
                     .scrollDismissesKeyboard(.interactively)
                     .background(SupportTheme.canvas)
                     .safeAreaInset(edge: .bottom) {
-                        if !activity.status.isTerminal && activity.kind != .chooseStep { progression(activity) }
+                        // While typing, Next and Skip move into the keyboard toolbar.
+                        if !fieldFocused && !activity.status.isTerminal && activity.kind != .chooseStep { progression(activity) }
                     }
                     .navigationTitle(activity.templateKey.title)
                     .navigationBarTitleDisplayMode(.inline)
@@ -64,6 +67,14 @@ struct SupportActivityView: View {
                                 if activity.status.isTerminal { leave() } else { showPause = true }
                             }
                             .disabled(isSaving)
+                        }
+                        ToolbarItemGroup(placement: .keyboard) {
+                            if !activity.status.isTerminal && activity.kind != .chooseStep {
+                                Button("Skip") { advance(skipped: true) }.disabled(isSaving)
+                                Button(isLastPrompt(activity) ? "Finish" : "Next") { advance(skipped: false) }.disabled(isSaving)
+                            }
+                            Spacer()
+                            Button("Done") { fieldFocused = false }
                         }
                     }
                 } else {
@@ -118,7 +129,7 @@ struct SupportActivityView: View {
             Text("Step \(promptIndex + 1) of \(activity.templateKey.prompts.count)")
                 .font(.subheadline).foregroundStyle(SupportTheme.textSecondary)
         }
-        Text(prompt?.text ?? "Choose a small step")
+        Text(askedForFirstPart && activity.kind == .chooseStep ? Self.firstPartPrompt : prompt?.text ?? "Choose a small step")
             .font(.title2.weight(.semibold)).accessibilityAddTraits(.isHeader)
             .accessibilityFocused($headingFocused)
         if activity.kind == .grounding {
@@ -132,27 +143,45 @@ struct SupportActivityView: View {
             Button("Ask for help") { showDiscussion() }.frame(minHeight: 44).disabled(isSaving)
         }
         TextField(activity.kind == .chooseStep ? "Your next step" : "Optional response", text: $answer, axis: .vertical)
-            .lineLimit(3...10).textFieldStyle(.roundedBorder)
+            .lineLimit(3...10).supportField()
+            .focused($fieldFocused)
             .disabled(isSaving)
             .accessibilityLabel(activity.kind == .chooseStep ? "Your next step" : "Optional response")
         if activity.kind == .chooseStep {
             Text("\(answer.unicodeScalars.count) of 400 characters").font(.caption)
-            Button("Make it smaller") { error = "What is the first part you could do? Edit your step above." }
-                .frame(minHeight: 44)
-            VStack(spacing: 12) {
-                Button("I did it") { choose(.didIt) }.buttonStyle(.borderedProminent).foregroundStyle(SupportTheme.onAccent)
-                Button("Save for later") { choose(.saveForLater) }.buttonStyle(.bordered)
-                Button("Not now") { choose(.notNow) }
+            if !askedForFirstPart {
+                Button("Make it smaller") { askForFirstPart() }.frame(minHeight: 44)
             }
-            .disabled(isSaving)
-            .frame(maxWidth: .infinity)
-            .buttonStyle(.bordered)
+            // The choices return when typing ends, so they never crowd the keyboard.
+            if !fieldFocused {
+                VStack(spacing: 12) {
+                    Button("I did it") { choose(.didIt) }.buttonStyle(.borderedProminent).foregroundStyle(SupportTheme.onAccent)
+                    Button("Save for later") { choose(.saveForLater) }.buttonStyle(.bordered)
+                    Button("Not now") { choose(.notNow) }
+                }
+                .disabled(isSaving)
+                .frame(maxWidth: .infinity)
+                .buttonStyle(.bordered)
+            }
         }
+    }
+
+    /// Deterministic follow-up (spec 5.4): the same step, asked about its first part.
+    static let firstPartPrompt = "What is the first part you could do?"
+
+    private func askForFirstPart() {
+        askedForFirstPart = true
+        fieldFocused = true
+        AccessibilityNotification.Announcement(Self.firstPartPrompt).post()
+    }
+
+    private func isLastPrompt(_ activity: SupportActivity) -> Bool {
+        promptIndex == activity.templateKey.prompts.count - 1
     }
 
     private func progression(_ activity: SupportActivity) -> some View {
         VStack(spacing: 8) {
-            Button(promptIndex == activity.templateKey.prompts.count - 1 ? "Finish" : "Next") { advance(skipped: false) }
+            Button(isLastPrompt(activity) ? "Finish" : "Next") { advance(skipped: false) }
                 .buttonStyle(.borderedProminent).foregroundStyle(SupportTheme.onAccent).frame(minHeight: 48)
             Button("Skip this prompt") { advance(skipped: true) }.frame(minHeight: 44)
         }
@@ -172,7 +201,8 @@ struct SupportActivityView: View {
             Button(returnTitle) { leave() }.buttonStyle(.borderedProminent).foregroundStyle(SupportTheme.onAccent).frame(minHeight: 48)
         } else {
             Text("How was that for you?").font(.title2).accessibilityAddTraits(.isHeader)
-            TextField("Optional note", text: $note, axis: .vertical).lineLimit(2...6).textFieldStyle(.roundedBorder).disabled(isSaving)
+            TextField("Optional note", text: $note, axis: .vertical).lineLimit(2...6).supportField()
+                .focused($fieldFocused).disabled(isSaving)
             Toggle("Include my written answers in the conversation", isOn: $includeAnswers).disabled(isSaving)
             Text(includeAnswers ? "Only the written preview below may be included in later AI context for this session." : "This written preview stays out of automatic session context. Answers you sent in Chat remain in that conversation.")
                 .font(.subheadline).foregroundStyle(SupportTheme.textSecondary)

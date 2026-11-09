@@ -560,6 +560,9 @@ final class SupportSessionFlowUITests: XCTestCase {
         XCTAssertTrue(step.waitForExistence(timeout: 5))
         step.tap(); step.typeText("Synthetic small step")
         XCTAssertEqual(step.value as? String, "Synthetic small step", app.debugDescription)
+        // The step choices return once typing ends, so they never sit under the keyboard.
+        XCTAssertFalse(app.buttons["Save for later"].exists)
+        tap("Done", in: app)
         tap("Save for later", in: app)
         XCTAssertTrue(app.staticTexts["A next step is saved"].waitForExistence(timeout: 5))
         tap("View session", in: app)

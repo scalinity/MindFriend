@@ -274,6 +274,8 @@ Preserve MindFriend's established blue family, but use a restrained canvas, read
 | Primary text | `#182234` | `#EDF2FC` | Titles, body, primary information |
 | Secondary text | `#526176` | `#AFBDD1` | Supporting text; never essential low-contrast placeholder-only labels |
 | Accent/action | `#3557B7` | `#9BB5FF` | Primary button background, selected controls, links; dark action text uses `#0E1522` |
+| Field | `#FFFFFF` | `#131C2C` | Text entry fill, distinct from canvas and surface |
+| Border | `#76839A` | `#64779A` | 1pt boundary of fields and controls; at least 3:1 against canvas, surface and field |
 | Divider | System separator | System separator | Native adaptive separators |
 | Success/caution/destructive | Semantic system colors | Semantic system colors | Always paired with text/icon; never infer wellbeing from traffic-light color |
 
