@@ -25,8 +25,11 @@ struct JournalListView: View {
         }
     }
 
+    /// Set by the stable shell so pushed work adds no second NavigationStack; standalone callers keep their own.
+    @Environment(\.supportRootEmbedded) private var supportEmbedded
+
     var body: some View {
-        NavigationStack {
+        SupportRootNavigation(embedded: supportEmbedded) {
             ZStack {
                 if isLoading {
                     ProgressView("Loading journal...")

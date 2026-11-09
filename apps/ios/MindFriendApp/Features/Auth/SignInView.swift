@@ -126,7 +126,10 @@ struct SignInView: View {
                 }
                 .padding(.horizontal, 24)
 
-                Text("By signing in, you agree to our Terms of Service and Privacy Policy")
+                VStack(spacing: 8) {
+                    Link("Terms of Service", destination: AppURLs.termsOfUse)
+                    Link("Privacy Policy", destination: AppURLs.privacyPolicy)
+                }
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)

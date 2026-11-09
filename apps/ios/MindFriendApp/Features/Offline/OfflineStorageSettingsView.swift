@@ -30,8 +30,9 @@ struct OfflineStorageSettingsView: View {
                         isSelected: selectedLimit == option,
                         onSelect: {
                             selectedLimit = option
+                            guard let binding = OfflineScope.shared.binding else { return }
                             Task {
-                                await offlineService.updateStorageLimit(option)
+                                try? await offlineService.updateStorageLimit(option, binding: binding)
                             }
                         }
                     )
@@ -46,19 +47,21 @@ struct OfflineStorageSettingsView: View {
             Section {
                 Toggle("WiFi Only Downloads", isOn: $wifiOnlyEnabled)
                     .onChange(of: wifiOnlyEnabled) { _, newValue in
+                        guard let binding = OfflineScope.shared.binding else { return }
                         Task {
                             var settings = offlineService.getDownloadSettings()
                             settings.wifiOnlyDownloads = newValue
-                            await offlineService.updateDownloadSettings(settings)
+                            try? await offlineService.updateDownloadSettings(settings, binding: binding)
                         }
                     }
 
                 Toggle("Auto-Delete Old Content", isOn: $autoDeleteEnabled)
                     .onChange(of: autoDeleteEnabled) { _, newValue in
+                        guard let binding = OfflineScope.shared.binding else { return }
                         Task {
                             var settings = offlineService.getDownloadSettings()
                             settings.autoDeleteUnused = newValue
-                            await offlineService.updateDownloadSettings(settings)
+                            try? await offlineService.updateDownloadSettings(settings, binding: binding)
                         }
                     }
             } header: {
@@ -90,8 +93,9 @@ struct OfflineStorageSettingsView: View {
             // Cache management section
             Section {
                 Button {
+                    guard let binding = OfflineScope.shared.binding else { return }
                     Task {
-                        await offlineService.invalidateAllCaches()
+                        await offlineService.invalidateAllCaches(binding: binding)
                     }
                 } label: {
                     HStack {
@@ -139,8 +143,9 @@ struct OfflineStorageSettingsView: View {
             titleVisibility: .visible
         ) {
             Button("Clear All", role: .destructive) {
+                guard let binding = OfflineScope.shared.binding else { return }
                 Task {
-                    await clearAllData()
+                    await clearAllData(binding: binding)
                 }
             }
             Button("Cancel", role: .cancel) {}
@@ -181,12 +186,12 @@ struct OfflineStorageSettingsView: View {
         await OfflineCacheService.shared.getCacheSize()
     }
 
-    private func clearAllData() async {
+    private func clearAllData(binding: OfflineOwnerBinding) async {
         isClearing = true
         defer { isClearing = false }
 
-        try? await offlineService.deleteAllDownloads()
-        await offlineService.invalidateAllCaches()
+        try? await offlineService.deleteAllDownloads(binding: binding)
+        await offlineService.invalidateAllCaches(binding: binding)
         await loadStorageBreakdown()
     }
 }

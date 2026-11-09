@@ -2,6 +2,7 @@ import SwiftUI
 import AVFoundation
 
 struct VoiceJournalRecorderView: View {
+    @Environment(\.supportRootEmbedded) private var supportRootEmbedded
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var container: DependencyContainer
     @Environment(\.dismiss) private var dismiss
@@ -14,7 +15,7 @@ struct VoiceJournalRecorderView: View {
     @State private var error: String?
 
     var body: some View {
-        NavigationStack {
+        SupportRootNavigation(embedded: supportRootEmbedded) {
             VStack(spacing: 32) {
                 Spacer()
 
@@ -23,7 +24,7 @@ struct VoiceJournalRecorderView: View {
                     VStack(spacing: 8) {
                         Text("Voice Journal")
                             .font(.title2.bold())
-                        Text("Speak your thoughts freely. Your recording will be analyzed for emotional insights.")
+                        Text("Speak your thoughts freely. You can explore an AI interpretation of the transcript; it can be wrong.")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.center)
@@ -504,9 +505,13 @@ struct VoiceJournalAnalysisView: View {
 
         // Emotions
         VStack(alignment: .leading, spacing: 12) {
-            Label("Emotions Detected", systemImage: "heart")
+            Label("Possible emotions in the wording", systemImage: "heart")
+                .accessibilityHint("AI interpretation of the transcript, not an emotion measurement")
                 .font(.headline)
 
+            Text("AI interpretation of transcript language. It can be wrong and does not measure your voice or how you feel.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 100))], spacing: 8) {
                 ForEach(Array(analysis.emotions.asDictionary.sorted(by: { $0.value > $1.value })), id: \.key) { emotion, value in
                     AnalysisEmotionBadge(emotion: emotion, value: value)
@@ -632,9 +637,6 @@ private struct AnalysisEmotionBadge: View {
             Text(emotionEmoji)
             Text(emotion.capitalized)
                 .font(.caption)
-            Text("\(Int(value * 100))%")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)

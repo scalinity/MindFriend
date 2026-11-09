@@ -52,8 +52,11 @@ struct MoodCheckInView: View {
         self.existingMood = existingMood
     }
 
+    /// Set by the stable shell so pushed work adds no second NavigationStack; standalone callers keep their own.
+    @Environment(\.supportRootEmbedded) private var supportEmbedded
+
     var body: some View {
-        NavigationStack {
+        SupportRootNavigation(embedded: supportEmbedded) {
             ScrollView {
                 VStack(spacing: 32) {
                     // Mood slider with emoji
@@ -209,12 +212,17 @@ struct MoodCheckInView: View {
 
     private func saveMood() {
         guard !isSaving else { return }
-        Log.ui.debug("[MoodCheckIn] Saving mood, score: \(Int(moodScore)), isUpdate: \(existingMood != nil)")
+        guard let userID = appState.currentUser?.id else { return }
+        let owner = OfflineOwnerProof(userId: userID, epoch: appState.accountEpoch)
+        let ownerProof: @Sendable () async -> OfflineOwnerProof? = { @MainActor in
+            guard appState.currentUser?.id == userID, container.supabaseAuthService.userId == userID else { return nil }
+            return OfflineOwnerProof(userId: userID, epoch: appState.accountEpoch)
+        }
+        Log.ui.debug("[MoodCheckIn] Saving check-in")
         isSaving = true
 
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        let localDate = formatter.string(from: Date())
+        let recordedAt = Date()
+        let localDate = existingMood?.localDate ?? OfflineLocalDay.string(for: recordedAt)
 
         let mood = MoodEntry(
             id: existingMood?.id ?? UUID().uuidString,
@@ -224,22 +232,29 @@ struct MoodCheckInView: View {
             energyScore: includesAdvancedDetails ? Int(energyScore) : nil,
             note: !note.isEmpty ? note : nil,
             source: .manual,
-            createdAt: Date()
+            createdAt: existingMood?.createdAt ?? recordedAt
         )
 
         Task {
             do {
-                try await container.supabaseDataService.createMood(mood)
+                let reward = try await AtomicCompletionRPC.saveMood(client: container.supabaseClient,
+                    owner: owner, ownerProof: ownerProof, localDate: localDate, moodScore: mood.moodScore,
+                    anxietyScore: mood.anxietyScore, energyScore: mood.energyScore, note: mood.note)
+                guard let savedMoodID = reward.moodID else { throw OfflineMutationError.malformedReceipt }
+                if reward.outcome == "kept_existing" {
+                    isSaving = false
+                    appState.showError(.apiError("A newer check-in was kept. Your entry is still here. Review it and save again if you want to replace that version."))
+                    return
+                }
 
                 // Award XP for mood check-in (only for new entries, not edits)
-                var xpResult: XPAward?
-                if existingMood == nil {
-                    xpResult = try await container.supabaseDataService.awardXP(activity: .moodCheckin)
+                if reward.xpAwarded > 0 {
 
                     // Trigger XP gain toast IMMEDIATELY for instant gratification
                     await MainActor.run {
+                        guard appState.currentUser?.id == owner.userId, appState.accountEpoch == owner.epoch else { return }
                         container.achievementService.triggerXPGainAnimation(
-                            amount: xpResult?.amount ?? 10,
+                            amount: reward.xpAwarded,
                             activity: .moodCheckin
                         )
                     }
@@ -249,8 +264,10 @@ struct MoodCheckInView: View {
                     let achievementService = container.achievementService
                     let activationService = container.activationService
                     Task.detached(priority: .utility) {
+                        guard await ownerProof() == owner else { return }
                         do {
                             _ = try await achievementService.checkBadgeProgress()
+                            guard await ownerProof() == owner else { return }
                             try await activationService.recordMoodLog()
                         } catch {
                             Log.data.warning("[MoodCheckIn] Background badge/activation check failed: \(error.localizedDescription)")
@@ -259,20 +276,28 @@ struct MoodCheckInView: View {
                 }
 
                 await MainActor.run {
-                    appState.todayMood = mood
+                    guard appState.currentUser?.id == owner.userId, appState.accountEpoch == owner.epoch else { return }
+                    if reward.outcome != "kept_existing", localDate == OfflineLocalDay.string(for: Date()) {
+                        appState.todayMood = MoodEntry(id: savedMoodID.uuidString, localDate: mood.localDate,
+                            moodScore: mood.moodScore, anxietyScore: mood.anxietyScore, energyScore: mood.energyScore,
+                            note: mood.note, source: .manual, createdAt: mood.createdAt)
+                    }
+                    DebtSourceChanges.saved(date: localDate)
 
                     // Show level-up celebration if leveled up
-                    if let result = xpResult, result.leveledUp {
-                        appState.showLevelUpCelebration(level: result.newLevel, title: result.newTitle)
+                    if reward.levelUp, let level = reward.newLevel, let title = reward.newTitle {
+                        appState.showLevelUpCelebration(level: level, title: title)
                     }
 
                     Log.ui.info("[MoodCheckIn] Saved successfully")
                     dismiss()
                 }
             } catch {
+                guard await ownerProof() == owner else { isSaving = false; return }
                 // Log detailed error for debugging, show generic message to user
-                Log.data.error("[MoodCheckIn] Failed to save mood: \(error)")
+                Log.data.warning("[MoodCheckIn] Check-in save failed")
                 await MainActor.run {
+                    guard appState.currentUser?.id == owner.userId, appState.accountEpoch == owner.epoch else { return }
                     appState.showError(.apiError("Unable to save mood. Please try again."))
                 }
             }

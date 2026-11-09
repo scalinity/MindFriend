@@ -5,7 +5,6 @@ struct VoiceSettingsView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var showUpgradeSheet = false
-    @AppStorage("voiceEmotionAnalysisEnabled") private var emotionAnalysisEnabled = true
 
     var body: some View {
         NavigationStack {
@@ -23,36 +22,13 @@ struct VoiceSettingsView: View {
                     }
                 }
 
-                Section {
-                    Toggle(isOn: $emotionAnalysisEnabled) {
-                        Label {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Emotion Analysis")
-                                Text("Detect emotions from your voice using on-device AI")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        } icon: {
-                            Image(systemName: "waveform.badge.mic")
-                                .foregroundStyle(.purple)
-                        }
-                    }
-                    .onChange(of: emotionAnalysisEnabled) { _, newValue in
-                        voiceService.setEmotionAnalysisEnabled(newValue)
-                    }
-                } header: {
-                    Text("Emotion Detection")
-                } footer: {
-                    Text("Emotion analysis runs entirely on your device using CoreML. No voice data is sent to any server for emotion detection.")
-                }
-
                 Section("Usage This Month") {
                     HStack {
                         Label("Minutes Used", systemImage: "clock")
                         Spacer()
                         if voiceService.isPremium {
-                            Text("Unlimited")
-                                .foregroundStyle(.green)
+                            Text("Premium access")
+                                .foregroundStyle(.secondary)
                         } else {
                             let used = 3.0 - voiceService.minutesRemaining
                             Text("\(String(format: "%.1f", max(0, used))) / 3 min")
@@ -67,7 +43,7 @@ struct VoiceSettingsView: View {
                             HStack {
                                 Image(systemName: "star.fill")
                                     .foregroundStyle(.yellow)
-                                Text("Upgrade for Unlimited Voice")
+                                Text("Explore Premium voice")
                                 Spacer()
                                 Image(systemName: "chevron.right")
                                     .font(.caption)
@@ -107,10 +83,6 @@ struct VoiceSettingsView: View {
             }
             .sheet(isPresented: $showUpgradeSheet) {
                 SubscriptionView()
-            }
-            .onAppear {
-                // Sync voiceService with persisted setting on appear
-                voiceService.setEmotionAnalysisEnabled(emotionAnalysisEnabled)
             }
         }
     }
@@ -203,31 +175,31 @@ struct VoicePrivacyInfoView: View {
                     PrivacyInfoCard(
                         icon: "server.rack",
                         title: "Secure Processing",
-                        description: "Voice is processed through encrypted connections. Audio data is not stored after your conversation ends."
+                        description: "Live audio goes through MindFriend’s relay to the configured AI provider over encrypted connections. Review the privacy policy for processor and retention details."
                     )
 
                     PrivacyInfoCard(
                         icon: "text.bubble",
                         title: "Transcription Privacy",
-                        description: "Transcripts are shown to you in real-time but are not permanently stored unless you save them."
+                        description: "Live captions are marked while partial. Completed turns are saved to your conversation after confirmation; a failed save remains visible for retry."
                     )
 
                     PrivacyInfoCard(
                         icon: "trash",
-                        title: "No Voice Storage",
-                        description: "We don't store voice recordings, voice prints, or any raw audio data. Your voice remains private."
+                        title: "Live Audio",
+                        description: "MindFriend does not create a saved recording of this call. Your conversation keeps the confirmed text transcript."
                     )
 
                     PrivacyInfoCard(
                         icon: "shield.checkered",
-                        title: "Safety Monitoring",
-                        description: "Voice conversations include safety monitoring for crisis keywords to ensure your wellbeing, just like text chats."
+                        title: "Support Options",
+                        description: "You can stop voice or switch to text. Voice is not an emergency service; crisis resources remain available from the app."
                     )
 
                     PrivacyInfoCard(
                         icon: "lock.fill",
-                        title: "End-to-End Security",
-                        description: "All communication uses TLS encryption. Your API keys and tokens are never exposed to the client."
+                        title: "Encrypted Connections",
+                        description: "The relay keeps provider API keys on the server. Your app uses its signed-in account to connect."
                     )
                 }
             }

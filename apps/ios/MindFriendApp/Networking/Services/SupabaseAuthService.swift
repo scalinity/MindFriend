@@ -6,6 +6,8 @@ import OSLog
 import SwiftUI
 import Combine
 
+private let defaultAuthSupabaseClient: SupabaseClient = supabase
+
 /// Only a locally requested recovery with the same PKCE verifier can open reset mode.
 struct PasswordRecoveryIntent: Codable {
     let email: String
@@ -80,12 +82,18 @@ final class SupabaseAuthService: ObservableObject {
 
     // MARK: - Dependencies
     private let secureStorage: SecureStorage
+    private let supabase: SupabaseClient
+    private let accountDeletionSession: URLSession
+    private let credentialRemovalDefaults: UserDefaults
+    private let sdkSessionStorageKey: String
+    private let deletedCredentialOwnersKey = "com.mindfriend.deletedCredentialOwners"
     // ✅ ARCHITECTURE FIX: Remove PathwayCacheService dependency (breaks circular reference)
     // Use closure injection instead
     private var onLogoutHandler: (() -> Void)?
+    private var onAccountDeleted: ((UUID) async throws -> Void)?
     private var onAccountChangeHandler: ((UUID?) -> Void)?
     private var beforeSignOutHandler: ((UUID) async -> Void)?
-    private let authStorage = AuthClient.Configuration.defaultLocalStorage
+    private let authStorage: any AuthLocalStorage
     private let recoveryIntentKey = "com.mindfriend.passwordRecoveryIntent"
     private var logoutCleanupTask: Task<Void, Never>?
     private var signOutTask: Task<Void, Error>?
@@ -114,9 +122,19 @@ final class SupabaseAuthService: ObservableObject {
     }
 
     init(
-        secureStorage: SecureStorage = SecureStorage()
+        secureStorage: SecureStorage = SecureStorage(),
+        client: SupabaseClient? = nil,
+        authStorage: any AuthLocalStorage = AuthClient.Configuration.defaultLocalStorage,
+        accountDeletionSession: URLSession = SupabaseConfig.networkSession,
+        credentialRemovalDefaults: UserDefaults = .standard,
+        sdkSessionStorageKey: String? = nil
     ) {
         self.secureStorage = secureStorage
+        self.supabase = client ?? defaultAuthSupabaseClient
+        self.authStorage = authStorage
+        self.accountDeletionSession = accountDeletionSession
+        self.credentialRemovalDefaults = credentialRemovalDefaults
+        self.sdkSessionStorageKey = sdkSessionStorageKey ?? "sb-\(SupabaseConfig.projectURL.host!.split(separator: ".")[0])-auth-token"
         // Listen for auth state changes
         Task {
             await setupAuthStateListener()
@@ -126,6 +144,10 @@ final class SupabaseAuthService: ObservableObject {
     // ✅ ARCHITECTURE FIX: Set logout handler (called by DependencyContainer)
     func setLogoutHandler(_ handler: @escaping () -> Void) {
         self.onLogoutHandler = handler
+    }
+
+    func setAccountDeletedHandler(_ handler: @escaping (UUID) async throws -> Void) {
+        onAccountDeleted = handler
     }
 
     func setAccountChangeHandler(_ handler: @escaping (UUID?) -> Void) {
@@ -209,6 +231,7 @@ final class SupabaseAuthService: ObservableObject {
     func restoreSession() async -> Bool {
         await waitForLogout()
         do {
+            if let stored = supabase.auth.currentSession { try rejectDeletedCredential(owner: stored.user.id) }
             let currentSession = try await supabase.auth.session
             try applyValidatedSession(currentSession)
 
@@ -265,6 +288,7 @@ final class SupabaseAuthService: ObservableObject {
     }
 
     private func applyValidatedSession(_ candidate: Session) throws {
+        try rejectDeletedCredential(owner: candidate.user.id)
         // A delayed event for another account must not clear a newer session.
         guard let stored = supabase.auth.currentSession else {
             if currentUser != nil { onAccountChangeHandler?(nil) }
@@ -394,13 +418,8 @@ final class SupabaseAuthService: ObservableObject {
             // Fetch and return full profile
             let profile = try await fetchProfile()
 
-            // Set user context for crash reporting
-            CrashReporter.shared.setUser(
-                id: session.user.id.uuidString,
-                email: session.user.email,
-                username: profile.handle
-            )
-            Analytics.shared.identify(userId: session.user.id.uuidString)
+            // Identify only once onboarding (consent / 13+ boundary) is complete.
+            identifyIfOnboarded(session: session, profile: profile)
 
             return profile
 
@@ -408,6 +427,28 @@ final class SupabaseAuthService: ObservableObject {
             Analytics.shared.trackSignIn(provider: "apple", success: false, error: error)
             throw error
         }
+    }
+
+    // MARK: - Identity reporting
+
+    /// Crash/analytics identity is attached only after onboarding completed, so
+    /// nothing identifies a person who has not yet accepted the consent / 13+
+    /// boundary. Content-free sign-in events are tracked independently.
+    private func identifyIfOnboarded(session: Session, profile: UserProfile) {
+        guard !profile.needsOnboarding else { return }
+        CrashReporter.shared.setUser(
+            id: session.user.id.uuidString,
+            email: session.user.email,
+            username: profile.handle
+        )
+        Analytics.shared.identify(userId: session.user.id.uuidString)
+    }
+
+    /// Call once the onboarding completion receipt is confirmed. No-op unless
+    /// the profile belongs to the currently authenticated account.
+    func identifyCurrentUserAfterOnboarding(profile: UserProfile) {
+        guard let session, session.user.id == profile.id, !profile.needsOnboarding else { return }
+        identifyIfOnboarded(session: session, profile: profile)
     }
 
     // MARK: - Google Sign-In
@@ -431,13 +472,7 @@ final class SupabaseAuthService: ObservableObject {
             // Fetch and return full profile
             let profile = try await fetchProfile()
 
-            // Set user context
-            CrashReporter.shared.setUser(
-                id: session.user.id.uuidString,
-                email: session.user.email,
-                username: profile.handle
-            )
-            Analytics.shared.identify(userId: session.user.id.uuidString)
+            identifyIfOnboarded(session: session, profile: profile)
 
             return profile
 
@@ -472,12 +507,7 @@ final class SupabaseAuthService: ObservableObject {
 
             let profile = try await fetchProfile()
 
-            CrashReporter.shared.setUser(
-                id: session.user.id.uuidString,
-                email: session.user.email,
-                username: profile.handle
-            )
-            Analytics.shared.identify(userId: session.user.id.uuidString)
+            identifyIfOnboarded(session: session, profile: profile)
             Analytics.shared.trackSignIn(provider: "email", success: true, error: nil)
 
             return profile
@@ -518,12 +548,7 @@ final class SupabaseAuthService: ObservableObject {
 
             let profile = try await fetchProfile()
 
-            CrashReporter.shared.setUser(
-                id: session.user.id.uuidString,
-                email: session.user.email,
-                username: profile.handle
-            )
-            Analytics.shared.identify(userId: session.user.id.uuidString)
+            identifyIfOnboarded(session: session, profile: profile)
             Analytics.shared.trackSignIn(provider: "email", success: true, error: nil)
 
             return profile
@@ -551,21 +576,21 @@ final class SupabaseAuthService: ObservableObject {
 
     // MARK: - Sign Out
 
-    func signOut() async throws {
+    func signOut(unregisterPush: Bool = true) async throws {
         if let signOutTask { return try await signOutTask.value }
-        let task = Task { try await performSignOut() }
+        let task = Task { try await performSignOut(unregisterPush: unregisterPush) }
         signOutTask = task
         defer { signOutTask = nil }
         try await task.value
     }
 
-    private func performSignOut() async throws {
+    private func performSignOut(unregisterPush: Bool) async throws {
         isLoading = true
         defer { isLoading = false }
         signOutWarning = nil
         let departingOwner = currentUser?.id ?? session?.user.id
         let userIdForCleanup = departingOwner?.uuidString
-        if let departingOwner { await beforeSignOutHandler?(departingOwner) }
+        if unregisterPush, let departingOwner { await beforeSignOutHandler?(departingOwner) }
         // Consume exactly the event produced by this explicit operation. Cleanup below
         // is awaited even if remote revocation fails after the SDK removes its session.
         if supabase.auth.currentSession != nil { handledSignOutEvents += 1 }
@@ -599,8 +624,7 @@ final class SupabaseAuthService: ObservableObject {
     private func removeLocalSDKSession() throws {
         // The SDK logs storage-delete failures rather than throwing them. Remove and
         // verify its configured default keys before presenting a successful logout.
-        let project = SupabaseConfig.projectURL.host!.split(separator: ".")[0]
-        try authStorage.remove(key: "sb-\(project)-auth-token")
+        try authStorage.remove(key: sdkSessionStorageKey)
         try authStorage.remove(key: "supabase.session")
         try authStorage.remove(key: pkceVerifierKey)
         guard supabase.auth.currentSession == nil else {
@@ -621,6 +645,10 @@ final class SupabaseAuthService: ObservableObject {
         Analytics.shared.reset()
         // Clear process caches synchronously, before another account can sign in.
         onLogoutHandler?()
+        // End the offline lifecycle synchronously, before another account can
+        // sign in: cancels in-flight sync and drops handlers/in-memory data.
+        // Unsynced work stays on disk under its owner.
+        OfflineScope.shared.unbind()
         try? authStorage.remove(key: recoveryIntentKey)
         // The legacy key also protects persisted pathway journals. Logout may evict
         // plaintext/key caches, but must not destroy the only key for retained data.
@@ -636,20 +664,36 @@ final class SupabaseAuthService: ObservableObject {
     // TD-HIGH-005: Enabled offline data cleanup on logout
     /// Clear all offline data when user logs out
     private func clearOfflineDataOnLogout(userId: String?) async {
-        // Clear download manager state (cancel downloads, clear tasks)
-        await DownloadManager.shared.clearOnLogout()
-        
-        // Clear sync queue manager state (pending sync items)
-        await SyncQueueManager.shared.clearOnLogout()
-        
-        // Clear offline cache (user-specific cached data)
-        await OfflineCacheService.shared.clearOnLogout()
-        
-        // Clear offline storage manager and delete user files
-        if let userId = userId {
-            try? await OfflineStorageManager.shared.deleteUserData(userId: userId)
+        await OfflineScope.shared.awaitTeardown()
+        // Download, sync-queue and cache lifecycles were already unbound
+        // synchronously in clearLocalAuthState (OfflineScope.unbind); nothing
+        // here may clear shared state, because another account may already be
+        // signing in. Only this owner's files are touched, and each removal
+        // refuses while that owner is bound again.
+        guard let userId = userId else { return }
+
+        // Regenerable cache: remove.
+        do {
+            try await OfflineCacheService.shared.purgeUserCache(userId: userId)
+        } catch {
+            Log.auth.warning("Offline cache cleanup after logout skipped: \(error.localizedDescription)")
         }
-        await OfflineStorageManager.shared.clearCurrentUser()
+
+        // Downloads/metadata: remove, but keep unsynced queued work and any
+        // quarantined recovery copies instead of silently destroying them.
+        do {
+            let outcome = try await OfflineStorageManager.shared.purgeUserData(userId: userId)
+            switch outcome {
+            case .preservedUnsynced(let count):
+                Log.auth.info("Kept \(count) unsynced offline item(s) on logout")
+            case .preservedUnreadableQueue, .preservedRecoveryCopies:
+                Log.auth.info("Kept offline recovery data on logout")
+            case .removedAll, .nothingToRemove:
+                break
+            }
+        } catch {
+            Log.auth.warning("Offline cleanup after logout skipped: \(error.localizedDescription)")
+        }
     }
 
     // MARK: - Auth State Caching
@@ -891,52 +935,160 @@ final class SupabaseAuthService: ObservableObject {
 
     // MARK: - Account Management
 
-    func deleteAccount() async throws {
-        guard let departingOwner = userId else {
+    /// Delete the signed-in account.
+    ///
+    /// - Parameter expectedOwner: the account the caller believes it is
+    ///   deleting. Defaults to the current account at call time; pass it from a
+    ///   screen that captured the owner earlier. If the signed-in account is not
+    ///   that owner, nothing is sent. The request is pinned to that owner's access
+    ///   token and carries `expected_owner` so the server can reject a mismatch.
+    ///
+    /// Local state is cleared only when the server reports `success == true`,
+    /// and only for the deleted owner: if another account signed in while the
+    /// request was in flight, that account is left untouched.
+    func deleteAccount(expectedOwner: UUID? = nil) async throws {
+        guard let currentId = userId else {
             throw AuthError.userNotFound
         }
-
-        // Call delete-account Edge Function
-        // This deletes all user data and the auth user
-        struct DeleteResponse: Decodable {
-            let success: Bool?
-            let message: String?
-            let error: String?
+        let owner = expectedOwner ?? currentId
+        guard owner == currentId else {
+            throw AuthError.unknown("The signed-in account changed. Please try again.")
         }
+        let pinnedToken = try Self.validatedSession(supabase.auth.currentSession, expectedUserId: owner).accessToken
 
         do {
-            let response: DeleteResponse = try await supabase.functions.invoke(
-                "delete-account",
-                options: .init()
-            )
-
-            if let error = response.error {
-                throw AuthError.unknown(error)
-            }
-            guard response.success == true else {
-                throw AuthError.unknown("The server did not confirm account deletion.")
-            }
-
-            // Server deletion is confirmed. Remove only keys and drafts owned by this
-            // account; the shared legacy journal key may still protect another account.
-            let ownerKey = departingOwner.uuidString.lowercased()
-            var retainedKeyError: Error?
-            for key in ["pathway.\(ownerKey)", "voice-transcript.\(ownerKey)"] {
-                do { try SecureStorage(keyIdentifier: key).deleteEncryptionKey() }
-                catch { retainedKeyError = error }
-            }
-            UserDefaults.standard.removeObject(forKey: "voice-transcript.\(ownerKey)")
-            try await signOut()
-            signOutWarning = nil
-            if retainedKeyError != nil {
-                throw AuthError.unknown("Your account was deleted and signed out, but a local encryption key could not be removed.")
-            }
-
-            Log.auth.info("Account deleted successfully")
+            // The SDK replaces Authorization with its current token. Use a captured request so a
+            // different account signing in cannot retarget this destructive operation.
+            let request = try Self.accountDeletionRequest(owner: owner, token: pinnedToken,
+                projectURL: SupabaseConfig.projectURL, apiKey: SupabaseConfig.anonKey)
+            _ = try await Self.accountDeletionResponse(for: request, session: accountDeletionSession)
         } catch {
             Log.auth.error("Delete account error: \(error.localizedDescription)")
             throw AuthError.unknown("Failed to delete account: \(error.localizedDescription)")
         }
+
+        // Keep a failed SDK storage removal from restoring the deleted account on relaunch.
+        var blockedOwners = credentialRemovalDefaults.stringArray(forKey: deletedCredentialOwnersKey) ?? []
+        if !blockedOwners.contains(owner.uuidString.lowercased()) {
+            blockedOwners.append(owner.uuidString.lowercased())
+            credentialRemovalDefaults.set(blockedOwners, forKey: deletedCredentialOwnersKey)
+        }
+
+        // Confirmed deletion removes only this owner's encryption keys, even if another
+        // account signed in while the request was in flight. Retain the shared legacy key.
+        let ownerKey = owner.uuidString.lowercased()
+        var retainedKeyError: Error?
+        for key in ["pathway.\(ownerKey)", "voice-transcript.\(ownerKey)"] {
+            do { try SecureStorage(keyIdentifier: key).deleteEncryptionKey() }
+            catch { retainedKeyError = error }
+        }
+        UserDefaults.standard.removeObject(forKey: "voice-transcript.\(ownerKey)")
+        let cleanupFinished = await Self.finishDeletedAccountCleanup(
+            endLocalSession: {
+                let sdkOwner = supabase.auth.currentSession?.user.id
+                if userId == owner && (sdkOwner == nil || sdkOwner == owner) {
+                    // The server already removed the account and its push registration.
+                    var signOutError: Error?
+                    do {
+                        try await signOut(unregisterPush: false)
+                        removeDeletedCredentialMark(owner: owner)
+                        signOutWarning = nil
+                    } catch { signOutError = error }
+                    // A deleted account must end locally even when its stored credential cannot
+                    // be removed. Ordinary logout keeps its existing stricter success boundary.
+                    let remainingSDKOwner = supabase.auth.currentSession?.user.id
+                    if userId == owner && (remainingSDKOwner == nil || remainingSDKOwner == owner) {
+                        clearLocalAuthState(userId: owner.uuidString)
+                        await logoutCleanupTask?.value
+                    }
+                    await OfflineScope.shared.awaitTeardown()
+                    if let signOutError { throw signOutError }
+                } else {
+                    // A different account remains signed in; only erase the deleted owner's files.
+                    let previous = logoutCleanupTask
+                    logoutCleanupTask = Task { @MainActor in
+                        await previous?.value
+                        await clearOfflineDataOnLogout(userId: owner.uuidString)
+                    }
+                    await logoutCleanupTask?.value
+                }
+                await OfflineScope.shared.awaitTeardown()
+            },
+            eraseJournal: { try await onAccountDeleted?(owner) },
+            eraseCache: { try await OfflineCacheService.shared.purgeUserCache(userId: owner.uuidString) },
+            eraseQueuedData: { try await OfflineStorageManager.shared.deleteUserData(userId: owner.uuidString) }
+        )
+        if !cleanupFinished || retainedKeyError != nil {
+            // The profile screen may already be dismissed by the completed local teardown.
+            // The shell observes this warning independently of the departing account.
+            let warning = "The account was deleted, but some of its local data could not be removed. Local cleanup is incomplete."
+            signOutWarning = warning
+            throw AuthError.unknown(warning)
+        }
+        Log.auth.info("Account deleted successfully")
+    }
+
+    private func removeDeletedCredentialMark(owner: UUID) {
+        let owners = credentialRemovalDefaults.stringArray(forKey: deletedCredentialOwnersKey) ?? []
+        credentialRemovalDefaults.set(owners.filter { $0 != owner.uuidString.lowercased() }, forKey: deletedCredentialOwnersKey)
+    }
+
+    private func rejectDeletedCredential(owner: UUID) throws {
+        let owners = credentialRemovalDefaults.stringArray(forKey: deletedCredentialOwnersKey) ?? []
+        guard owners.contains(owner.uuidString.lowercased()) else { return }
+        // A delayed callback must never remove a different account's saved credential.
+        if supabase.auth.currentSession?.user.id == owner {
+            do {
+                try removeLocalSDKSession()
+                removeDeletedCredentialMark(owner: owner)
+            } catch { /* Retain the marker and refuse the deleted owner until removal verifies. */ }
+        }
+        if userId == owner { clearLocalAuthState(userId: owner.uuidString) }
+        throw AuthError.sessionUnavailable
+    }
+
+    /// A confirmed server deletion cannot be undone by a failed local sign-out or erase.
+    /// Attempt each owner-scoped erase even when an earlier operation failed.
+    static func finishDeletedAccountCleanup(
+        endLocalSession: () async throws -> Void,
+        eraseJournal: () async throws -> Void,
+        eraseCache: () async throws -> Void,
+        eraseQueuedData: () async throws -> Void
+    ) async -> Bool {
+        var finished = true
+        do { try await endLocalSession() } catch { finished = false }
+        do { try await eraseJournal() } catch { finished = false }
+        do { try await eraseCache() } catch { finished = false }
+        do { try await eraseQueuedData() } catch { finished = false }
+        return finished
+    }
+
+    struct AccountDeletionReceipt: Decodable {
+        let success: Bool?
+        let message: String?
+        let error: String?
+    }
+
+    static func accountDeletionRequest(owner: UUID, token: String, projectURL: URL, apiKey: String) throws -> URLRequest {
+        var request = URLRequest(url: projectURL.appendingPathComponent("functions/v1/delete-account"))
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue(apiKey, forHTTPHeaderField: "apikey")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(["expected_owner": owner.uuidString.lowercased()])
+        return request
+    }
+
+    static func accountDeletionResponse(for request: URLRequest, session: URLSession = .shared) async throws -> AccountDeletionReceipt {
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw AuthError.unknown("The account deletion was not confirmed. Sign in and try again.")
+        }
+        let receipt = try JSONDecoder().decode(AccountDeletionReceipt.self, from: data)
+        guard receipt.success == true, receipt.error == nil else {
+            throw AuthError.unknown("The server did not confirm the account deletion.")
+        }
+        return receipt
     }
 }
 

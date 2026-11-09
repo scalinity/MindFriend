@@ -11,6 +11,9 @@ import Supabase
 ///   SUPABASE_ANON_KEY = your-anon-key
 enum SupabaseConfig {
     static let projectURL: URL = {
+        #if DEBUG
+        if SupportSessionUIFixture.isEnabled { return URL(string: "https://support-session-fixture.invalid")! }
+        #endif
         guard let urlString = Bundle.main.object(forInfoDictionaryKey: "SUPABASE_URL") as? String,
               !urlString.isEmpty,
               !urlString.contains("$("),  // Not substituted
@@ -23,6 +26,9 @@ enum SupabaseConfig {
     }()
 
     static let anonKey: String = {
+        #if DEBUG
+        if SupportSessionUIFixture.isEnabled { return "synthetic-fixture-key" }
+        #endif
         guard let key = Bundle.main.object(forInfoDictionaryKey: "SUPABASE_ANON_KEY") as? String,
               !key.isEmpty,
               !key.contains("$(") else {  // Not substituted
@@ -32,6 +38,13 @@ enum SupabaseConfig {
         }
         return key
     }()
+
+    static var networkSession: URLSession {
+        #if DEBUG
+        if SupportSessionUIFixture.isEnabled { return SupportSessionUIFixture.networkSession }
+        #endif
+        return .shared
+    }
 
     // OAuth redirect URL for Sign in with Apple/Google
     static let redirectURL = URL(string: "mindfriend://auth/callback")!
@@ -86,7 +99,8 @@ let supabase: SupabaseClient = {
                 redirectToURL: SupabaseConfig.redirectURL,
                 flowType: .pkce,
                 emitLocalSessionAsInitialSession: true
-            )
+            ),
+            global: .init(session: SupabaseConfig.networkSession)
         )
     )
 }()
@@ -343,7 +357,11 @@ extension DBProfileRow {
             entitlements: UserEntitlements(
                 subscriptionTier: hasSponsoredAccess ? "premium" : subscriptionTier,
                 premiumExpiresAt: nil,
-                features: [:]
+                features: [:],
+                dailyAiQuota: hasSponsoredAccess ? -1 : dailyAiQuota,
+                dailyAiUsed: dailyAiUsed,
+                quotaPeriodStartedAt: quotaResetAt,
+                verifiedAt: Date()
             ),
             badges: []
         )
@@ -1039,12 +1057,18 @@ struct DBMessage: Codable {
     let role: String
     let content: String
     let createdAt: Date?
+    var contentOrigin: String? = nil
+    var voiceCallID: UUID? = nil
+    var voiceEventOrder: Int64? = nil
 
     enum CodingKeys: String, CodingKey {
         case id
         case conversationId = "conversation_id"
         case role, content
         case createdAt = "created_at"
+        case contentOrigin = "content_origin"
+        case voiceCallID = "voice_call_id"
+        case voiceEventOrder = "voice_event_order"
     }
 }
 

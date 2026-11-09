@@ -1,5 +1,10 @@
 -- Synthetic rollback fixture; run after refresh_current_premium_access.
 BEGIN;
+
+-- Required by the real account bootstrap and XP routines; all fixture rows roll back.
+INSERT INTO public.supported_languages(code,name,native_name,is_active) VALUES ('en','English','English',true) ON CONFLICT DO NOTHING;
+INSERT INTO public.level_thresholds(level,xp_required,title) VALUES (1,0,'Synthetic beginner') ON CONFLICT DO NOTHING;
+INSERT INTO public.skill_thresholds(level,xp_required,title) VALUES (1,0,'Synthetic beginner') ON CONFLICT DO NOTHING;
 SET LOCAL statement_timeout = '20s';
 SELECT set_config('request.jwt.claims', '{"role":"service_role"}', true);
 SELECT set_config('request.jwt.claim.role', 'service_role', true);

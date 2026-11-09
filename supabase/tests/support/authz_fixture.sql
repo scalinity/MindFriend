@@ -8,6 +8,11 @@ DO $$ BEGIN
   END IF;
 END $$;
 
+-- Required by the real account bootstrap and XP routines; all fixture rows roll back.
+INSERT INTO public.supported_languages(code,name,native_name,is_active) VALUES ('en','English','English',true) ON CONFLICT DO NOTHING;
+INSERT INTO public.level_thresholds(level,xp_required,title) VALUES (1,0,'Synthetic beginner') ON CONFLICT DO NOTHING;
+INSERT INTO public.skill_thresholds(level,xp_required,title) VALUES (1,0,'Synthetic beginner') ON CONFLICT DO NOTHING;
+
 CREATE FUNCTION pg_temp.authz_assert(ok boolean, label text) RETURNS void
 LANGUAGE plpgsql AS $$ BEGIN
   IF ok IS DISTINCT FROM true THEN RAISE EXCEPTION 'FAIL: %', label; END IF;

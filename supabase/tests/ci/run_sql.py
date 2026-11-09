@@ -13,6 +13,7 @@ SUITES = (
     "provider_accounting.sql",
     "notification_categories.sql",
     "core_completion_repairs.sql",
+    "companion_canonical_integration.sql",
     "content_report_authorization.sql",
     "recipient_entitlement.sql",
     "sponsored_entitlement.sql",

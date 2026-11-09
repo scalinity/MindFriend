@@ -24,6 +24,34 @@ import { sanitizeForPrompt } from "../_shared/sanitize.ts";
 import { generateChatText, trimChatContext } from "../_shared/openai-chat.ts";
 import { openAIBudgetReservation } from "../_shared/openai-budget.ts";
 import {
+  type AdminLike,
+  buildLegacyTurnContext,
+  buildLegacyWireTemplate,
+  capabilityGate,
+  capabilityProbeBody,
+  confirmLegacyTurn,
+  confirmSafetyTurn,
+  dbCode,
+  errorCategory,
+  FAILURES,
+  isCapabilityProbe,
+  legacyEligibleHistory,
+  legacySafetyOriginMode,
+  pendingSafetyReplyBody,
+  legacyExtractionAllowed,
+  logFailure,
+  parseSupportChatFields,
+  readSupportCapabilities,
+  readTerminalClaim,
+  renderSupportWire,
+  resolveLegacyEligibility,
+  revalidatePreparedContext,
+  runSupportTurn,
+  safetyFallbackSupport,
+  saveSafetyReplyDirect,
+  type SupportChatFields,
+} from "../_shared/support-chat.ts";
+import {
   MonthlyAIBudgetExhaustedError,
   MonthlyAIBudgetUnavailableError,
 } from "../_shared/monthly-ai-budget.ts";
@@ -119,6 +147,28 @@ interface ChatExecution {
   receipt?: { userId: string; requestId: string };
   userMessageId?: string;
   messageSaved?: boolean | null;
+  /** New privacy-capable contract (schema_version 1). */
+  support?: boolean;
+  /** support_confirm_chat_turn already stored the terminal response; never overwrite it. */
+  receiptFinal?: boolean;
+  /** Commit state unknown: store nothing so a late commit is not contradicted. */
+  leavePending?: boolean;
+  /** Only ever fill a still-pending claim (new contract, and installed-schema legacy turns). */
+  guarded?: boolean;
+}
+
+function toneInstructionFor(aiTone: string): string {
+  switch (aiTone) {
+    case "gentle":
+      return "\n\n## Tone preference:\nUse an extra gentle, soft, and comforting tone. Be especially delicate with feedback and focus on nurturing support.";
+    case "direct":
+      return "\n\n## Tone preference:\nBe clear and straightforward. The user prefers honest, practical advice without excessive softening.";
+    case "motivational":
+      return "\n\n## Tone preference:\nBe encouraging and energizing. Use motivational language and help the user see their potential.";
+    case "supportive":
+    default:
+      return "\n\n## Tone preference:\nUse a warm, balanced, supportive tone that validates feelings while offering practical guidance.";
+  }
 }
 
 function failedChatResponse(data: Record<string, unknown>, execution: ChatExecution): Record<string, unknown> {
@@ -214,10 +264,7 @@ async function handleChat(req: Request, execution: ChatExecution, onDelta?: (tex
       user = authResult.data?.user;
       userAuthError = authResult.error;
     } catch (error) {
-      console.error(
-        "Auth error:",
-        error instanceof Error ? error.message : String(error),
-      );
+      logFailure("auth_error", { category: errorCategory(error) });
       return new Response(JSON.stringify({ error: "Authentication failed" }), {
         status: 401,
         headers: baseCorsHeaders,
@@ -228,12 +275,7 @@ async function handleChat(req: Request, execution: ChatExecution, onDelta?: (tex
 
     if (userAuthError || !user) {
       // SEC-CRIT-006: Log details server-side only, don't expose to client
-      console.error(
-        "Auth validation failed:",
-        userAuthError?.message || "No user returned",
-        "Code:",
-        userAuthError?.code,
-      );
+      logFailure("auth_invalid", { code: dbCode(userAuthError), user: user ? true : false });
       return new Response(
         JSON.stringify({
           error: "Invalid token",
@@ -297,6 +339,20 @@ async function handleChat(req: Request, execution: ChatExecution, onDelta?: (tex
       });
     }
 
+    // Capability handshake for the privacy-capable contract. A deployed chat function that
+    // predates it rejects this body (400, no provider work), so a new client fails closed.
+    if (isCapabilityProbe(requestBody)) {
+      if ((requestBody as unknown as Record<string, unknown>).schema_version !== 1) {
+        return new Response(JSON.stringify(FAILURES.schema().body), { status: 400, headers: responseHeaders });
+      }
+      const read = await readSupportCapabilities(supabaseAdmin as unknown as AdminLike);
+      if (read.kind === "unavailable") {
+        const unavailable = FAILURES.unavailable("unavailable");
+        return new Response(JSON.stringify(unavailable.body), { status: unavailable.status, headers: responseHeaders });
+      }
+      return new Response(JSON.stringify(capabilityProbeBody(read)), { headers: responseHeaders });
+    }
+
     let { conversationId, requestId } = requestBody;
     const { content, retryFailed = false } = requestBody;
     if (typeof retryFailed !== "boolean" || (retryFailed && !requestId)) {
@@ -353,6 +409,29 @@ async function handleChat(req: Request, execution: ChatExecution, onDelta?: (tex
       );
     }
 
+    // New privacy-capable contract: every new field is validated and the signed-in owner is
+    // compared BEFORE anything is claimed. The deployed database contract is proven right
+    // after the crisis check (crisis help uses no personal context and must never depend on
+    // it) and before any context is read or provider is contacted. Failing any of these never
+    // falls back to the old personal-context path.
+    const supportMode = parseSupportChatFields(requestBody);
+    let support: SupportChatFields | null = null;
+    if (supportMode.mode === "invalid") {
+      return new Response(JSON.stringify(supportMode.failure.body), { status: supportMode.failure.status, headers: responseHeaders });
+    }
+    if (supportMode.mode === "support") {
+      support = supportMode.fields;
+      execution.support = true;
+      if (!requestId) {
+        const missing = FAILURES.invalid("requestId is required for the privacy-capable chat contract.");
+        return new Response(JSON.stringify(missing.body), { status: missing.status, headers: responseHeaders });
+      }
+      if (support.expectedOwner !== user.id.toLowerCase()) {
+        const mismatch = FAILURES.owner();
+        return new Response(JSON.stringify(mismatch.body), { status: mismatch.status, headers: responseHeaders });
+      }
+    }
+
     // Verify conversation ownership - SECURITY CRITICAL
     console.log("Verifying conversation ownership");
     const { data: conversation, error: convError } = await supabaseAdmin
@@ -363,7 +442,7 @@ async function handleChat(req: Request, execution: ChatExecution, onDelta?: (tex
     console.log(
       "[5] Conversation lookup:",
       conversation ? "found" : "not found",
-      convError?.message || "",
+      convError ? dbCode(convError) : "",
     );
 
     if (convError || !conversation) {
@@ -383,11 +462,14 @@ async function handleChat(req: Request, execution: ChatExecution, onDelta?: (tex
     }
 
     let userMessage: { id: string; created_at: string | null } | null = null;
+    // The same hash identifies a client claim and (for a client that sent no request id) the
+    // server-side claim used by the installed-schema atomic save.
+    const hash = Array.from(new Uint8Array(await crypto.subtle.digest(
+      "SHA-256", new TextEncoder().encode(trimmedContent),
+    ))).map((b) => b.toString(16).padStart(2, "0")).join("");
+    const contentHash = hash;
     // Claim before quota/provider work. A lost response never authorizes replay.
     if (requestId) {
-      const hash = Array.from(new Uint8Array(await crypto.subtle.digest(
-        "SHA-256", new TextEncoder().encode(trimmedContent),
-      ))).map((b) => b.toString(16).padStart(2, "0")).join("");
       const { error: claimError } = await supabaseAdmin.from("chat_requests").insert({
         user_id: user.id, request_id: requestId, conversation_id: conversationId, content_hash: hash,
       });
@@ -405,7 +487,9 @@ async function handleChat(req: Request, execution: ChatExecution, onDelta?: (tex
           const previous = receipt.response;
           if (!(retryFailed && receipt.response_status >= 400 && receipt.response_status <= 599 &&
             previous.retryable === true && previous.requestId === requestId)) {
-            return new Response(JSON.stringify(previous), { status: receipt.response_status, headers: responseHeaders });
+            // A confirmed support turn is rendered from its stored response (ids included),
+            // so a replay is identical to the first answer. Other rows are returned as stored.
+            return new Response(JSON.stringify(renderSupportWire(previous)), { status: receipt.response_status, headers: responseHeaders });
           }
           // Only one explicit retry may promote a tagged failed receipt to pending.
           let retryClaim = supabaseAdmin.from("chat_requests")
@@ -457,7 +541,7 @@ async function handleChat(req: Request, execution: ChatExecution, onDelta?: (tex
 
     if (profileError || !profile) {
       // Generic error - don't leak internal details
-      console.error("Profile fetch failed:", profileError?.code);
+      logFailure("profile_fetch_failed", { code: dbCode(profileError) });
       return new Response(
         JSON.stringify({ error: "Unable to process request" }),
         { status: 500, headers: responseHeaders },
@@ -478,10 +562,8 @@ async function handleChat(req: Request, execution: ChatExecution, onDelta?: (tex
     }
 
     // PRIVACY FIX #005: Schema uses TEXT ('standard' | 'enhanced'), not boolean
-    const privacyMode = (userSettings?.privacy_mode || "standard") as
-      | "standard"
-      | "enhanced";
-    const privacyModeEnabled = privacyMode === "enhanced";
+    // Unknown/missing settings cannot opt someone into saved personal context.
+    const privacyModeEnabled = userSettings.privacy_mode !== "standard";
 
     // PRIVACY FIX #005: Normalize schema values (friendly|professional) to code values (supportive|direct)
     const aiToneRaw = (userSettings?.ai_tone || "friendly") as string;
@@ -502,6 +584,81 @@ async function handleChat(req: Request, execution: ChatExecution, onDelta?: (tex
         headers: responseHeaders,
       });
     }
+
+    let quotaUsed = 0;
+    let quotaLimit = 0;
+    // Atomic user-quota debit, then the user message save. Both contracts call this only
+    // after spending is approved and immediately before the single provider request.
+    const admitQuotaAndSaveUser = async () => {
+      // Atomically check and increment quota (prevents race conditions)
+      console.log("[6] Checking AI quota, isPremium:", isPremium);
+      const { data: quotaResult, error: quotaError } = await supabaseAdmin.rpc(
+        "check_and_increment_ai_quota",
+        {
+          p_user_id: user.id,
+          p_is_premium: isPremium,
+        },
+      );
+      console.log(
+        "[6] Quota result:",
+        quotaError ? dbCode(quotaError) : JSON.stringify({
+          allowed: Array.isArray(quotaResult) ? quotaResult?.[0]?.allowed : quotaResult?.allowed,
+        }),
+      );
+
+      if (quotaError) {
+        logFailure("quota_check_failed", { code: dbCode(quotaError) });
+        throw new Response(
+          JSON.stringify({ error: "Unable to process request" }),
+          { status: 500, headers: responseHeaders },
+        );
+      }
+
+      // Handle both TABLE (array) and JSON (object) return types
+      const quotaData = Array.isArray(quotaResult)
+        ? quotaResult?.[0]
+        : quotaResult;
+      if (!quotaData || typeof quotaData.allowed !== "boolean" ||
+        !Number.isInteger(quotaData.quota_used) || quotaData.quota_used < 0 ||
+        !Number.isInteger(quotaData.quota_limit) ||
+        (quotaData.quota_limit < 0 && !(isPremium && quotaData.quota_limit === -1))) {
+        throw new Error("QUOTA_ADMISSION_UNCONFIRMED");
+      }
+      if (!quotaData.allowed) {
+        throw new Response(
+          JSON.stringify({
+            error: "AI_QUOTA_EXCEEDED",
+            message:
+              "You've reached your daily AI chat allowance.",
+            quotaUsed: quotaData.quota_used,
+            quotaLimit: quotaData.quota_limit,
+            code: "chat_quota_exhausted",
+            retryable: true,
+          }),
+          { status: 429, headers: responseHeaders },
+        );
+      }
+
+      quotaUsed = quotaData.quota_used;
+      quotaLimit = quotaData.quota_limit;
+      req.signal.throwIfAborted();
+      // Save only after both spending and atomic user-quota admission succeed.
+      if (!userMessage) {
+        execution.messageSaved = null;
+        const { data: saved, error: saveError } = await supabaseAdmin.from("messages")
+          .insert({
+            ...(requestId ? { id: requestId } : {}),
+            conversation_id: conversationId,
+            role: "user",
+            content: trimmedContent,
+            ...(support ? { support_session_id: support.supportSessionId } : {}),
+          }).select().single();
+        if (saveError || !saved) throw new Error("USER_MESSAGE_NOT_SAVED");
+        userMessage = saved;
+        execution.userMessageId = saved.id;
+      }
+    };
+
 
     // Crisis detection - SAFETY CRITICAL
     // SEC-CRIT-007: Use multi-language crisis detection with English fallback
@@ -582,7 +739,7 @@ async function handleChat(req: Request, execution: ChatExecution, onDelta?: (tex
         }
       } catch (alertError) {
         // Log error but don't block crisis response
-        console.error("Failed to send therapist crisis alerts:", alertError);
+        logFailure("therapist_alert_failed", { category: errorCategory(alertError), code: dbCode(alertError) });
       }
 
       let crisisUserMessage = userMessage;
@@ -596,6 +753,7 @@ async function handleChat(req: Request, execution: ChatExecution, onDelta?: (tex
             conversation_id: conversationId,
             role: "user",
             content: trimmedContent,
+            ...(support ? { support_session_id: support.supportSessionId } : {}),
           }).select().single();
         if (saveError || !saved) throw new Error("USER_MESSAGE_NOT_SAVED");
         crisisUserMessage = saved;
@@ -603,17 +761,66 @@ async function handleChat(req: Request, execution: ChatExecution, onDelta?: (tex
       if (!crisisUserMessage) throw new Error("USER_MESSAGE_NOT_SAVED");
       execution.userMessageId = crisisUserMessage.id;
 
-      // Save crisis response
-      const { data: crisisMessage, error: crisisMessageError } = await supabaseAdmin
-        .from("messages")
-        .insert({
-          conversation_id: conversationId,
-          role: "assistant",
+      if (support) {
+        // Existing safety response, recorded truthfully: origin safety_response, no model,
+        // no ordinary card. The same atomic confirmation stores message + receipt + terminal
+        // request response; when it cannot complete, the direct save below still delivers help.
+        const safety = await confirmSafetyTurn({
+          admin: supabaseAdmin as unknown as AdminLike,
+          userId: user.id,
+          conversationId,
+          requestId: requestId!,
+          trimmedContent,
+          contentHash,
+          fields: support,
+          accountPrivate: privacyModeEnabled,
+          safetyText: CRISIS_RESPONSE,
+          userMessage: crisisUserMessage,
+          quota: null,
+        });
+        if (safety.kind !== "fallback") {
+          // served: the database holds this turn. pending: commit state unknown, so local help
+          // only and the claim stays pending (never a second durable message).
+          execution.receiptFinal = safety.outcome.final === true;
+          execution.leavePending = safety.outcome.leavePending === true;
+          return new Response(JSON.stringify(safety.outcome.body), { status: safety.outcome.status, headers: responseHeaders });
+        }
+      }
+
+      // Save crisis response. The origin is recorded ATOMICALLY in the one insert whenever the
+      // support schema is installed or merely unknown (a later UPDATE cannot enforce
+      // provenance). A rejection that proves the column is absent allows exactly one untagged
+      // insert; any unknown outcome keeps the request pending with the same claim and writes
+      // nothing more. The help text is returned immediately either way.
+      const saved = await saveSafetyReplyDirect({
+        admin: supabaseAdmin as unknown as AdminLike,
+        conversationId,
+        content: CRISIS_RESPONSE,
+        mode: support
+          ? "tagged"
+          : await legacySafetyOriginMode(supabaseAdmin as unknown as AdminLike),
+        supportSessionId: support ? support.supportSessionId : undefined,
+      });
+      if (saved.kind === "pending") {
+        execution.leavePending = true;
+        const body = await pendingSafetyReplyBody({
           content: CRISIS_RESPONSE,
-        })
-        .select()
-        .single();
-      if (crisisMessageError || !crisisMessage) throw new Error("ASSISTANT_MESSAGE_NOT_SAVED");
+          trimmedContent,
+          userMessage: crisisUserMessage,
+          requestId: requestId ?? null,
+          now,
+          support: support
+            ? {
+              requestId: requestId!,
+              conversationId,
+              supportSessionId: support.supportSessionId,
+              scope: support.scope === "personalized" && !privacyModeEnabled ? "personalized" : "conversation_only",
+            }
+            : undefined,
+        });
+        return new Response(JSON.stringify(body), { headers: responseHeaders });
+      }
+      const crisisMessage = saved.message;
 
       // Update conversation timestamp
       await supabaseAdmin
@@ -643,6 +850,7 @@ async function handleChat(req: Request, execution: ChatExecution, onDelta?: (tex
             content: CRISIS_RESPONSE,
             createdAt: toUnixTs(crisisMessage?.created_at),
             blocked: true,
+            ...(support ? { contentOrigin: "safety_response", isInterfaceGuidance: false } : {}),
           },
           // Legacy field for backward compatibility
           message: {
@@ -651,28 +859,99 @@ async function handleChat(req: Request, execution: ChatExecution, onDelta?: (tex
             content: CRISIS_RESPONSE,
             createdAt: toUnixTs(crisisMessage?.created_at),
             blocked: true,
+            ...(support ? { contentOrigin: "safety_response", isInterfaceGuidance: false } : {}),
           },
           isCrisisResponse: true,
+          ...(support
+            ? {
+              support: safetyFallbackSupport({
+                requestId: requestId!,
+                conversationId,
+                supportSessionId: support.supportSessionId,
+                scope: support.scope === "personalized" && !privacyModeEnabled ? "personalized" : "conversation_only",
+              }),
+            }
+            : {}),
         }),
         { headers: responseHeaders },
       );
     }
 
-    // Get conversation history for context
-    const { data: history } = await supabaseAdmin
-      .from("messages")
-      .select("id, role, content")
-      .eq("conversation_id", conversationId)
-      .order("created_at", { ascending: false })
-      .limit(20); // Fetch the newest context, then put it in chronological order.
-    // A retry appends the current user input below, so omit its saved copy here.
-    const messages = (history as (Message & { id: string })[] | null)
-      ?.filter((message) => message.id !== userMessage?.id);
-    messages?.reverse();
+    if (support) {
+      // Privacy-capable contract: server-owned context only. No legacy memory, absence,
+      // re-engagement, title or extraction work runs for this request, and any failure here
+      // fails closed instead of using the old personal-context path.
+      const gate = capabilityGate(
+        await readSupportCapabilities(supabaseAdmin as unknown as AdminLike),
+        support.supportSessionId !== null,
+      );
+      if (gate) {
+        return new Response(JSON.stringify(gate.body), { status: gate.status, headers: responseHeaders });
+      }
+      const outcome = await runSupportTurn({
+        admin: supabaseAdmin as unknown as AdminLike,
+        userId: user.id,
+        conversationId,
+        requestId: requestId!,
+        trimmedContent,
+        contentHash,
+        fields: support,
+        accountPrivate: privacyModeEnabled,
+        baseSystemPrompt: SYSTEM_PROMPT + toneInstructionFor(aiTone),
+        apiKey: OPENAI_API_KEY,
+        signal: req.signal,
+        onDelta,
+        reserveBudget: openAIBudgetReservation(supabaseAdmin, user.id, "chat.response", req.signal),
+        beforeProvider: admitQuotaAndSaveUser,
+        getUserMessage: () => userMessage,
+        getQuota: () => ({ used: quotaUsed, limit: quotaLimit }),
+        markProviderFailure: (error) => {
+          knownProviderFailure = error instanceof Error &&
+            (/^AI_HTTP_\d{3}$/.test(error.message) || ["AI_EMPTY_RESPONSE", "AI_TERMINAL_FAILED", "AI_STREAM_FAILED"].includes(error.message));
+        },
+      });
+      execution.receiptFinal = outcome.final === true;
+      execution.leavePending = outcome.leavePending === true;
+      return new Response(JSON.stringify(outcome.body), { status: outcome.status, headers: responseHeaders });
+    }
 
-    // Fetch relevant memories for context injection ONLY if privacy mode is OFF
+    // Legacy-shaped request. When the support schema is installed, personal context and
+    // history are no longer read directly: eligibility (Stop using, Forget, suppression,
+    // expiry, life-context review, review state, derived turns) comes from the same
+    // server-owned loader and policy as the new contract. Not installed: old baseline,
+    // unchanged. Installed but unreadable: fail closed (nothing read, sent or debited).
+    const legacy = await resolveLegacyEligibility({
+      admin: supabaseAdmin as unknown as AdminLike,
+      userId: user.id,
+      conversationId,
+      personal: !privacyModeEnabled,
+    });
+    if (legacy.kind === "unavailable") {
+      return new Response(JSON.stringify(legacy.failure.body), { status: legacy.failure.status, headers: responseHeaders });
+    }
+    const eligible = legacy.kind === "eligible" ? legacy : null;
+
+    // Get conversation history for context
+    let messages: (Message & { id: string })[] | null | undefined = null;
+    if (!eligible) {
+      const { data: history } = await supabaseAdmin
+        .from("messages")
+        .select("id, role, content")
+        .eq("conversation_id", conversationId)
+        .order("created_at", { ascending: false })
+        .limit(20); // Fetch the newest context, then put it in chronological order.
+      // A retry appends the current user input below, so omit its saved copy here.
+      messages = (history as (Message & { id: string })[] | null)
+        ?.filter((message) => message.id !== userMessage?.id);
+      messages?.reverse();
+    }
+
+    // Fetch relevant memories for context injection ONLY if privacy mode is OFF.
+    // Generated fragments are never read once the support schema is installed: pending,
+    // legacy_review and suppressed ones are not eligible, and approved ones are the curated
+    // records below.
     let memoryContext = "";
-    if (!privacyModeEnabled) {
+    if (!privacyModeEnabled && !eligible) {
       const { data: memories } = await supabaseAdmin
         .from("memory_fragments")
         .select("fragment_type, key, value, confidence, scheduled_time")
@@ -769,7 +1048,59 @@ async function handleChat(req: Request, execution: ChatExecution, onDelta?: (tex
     let companionMemoryContext = "";
     let memoryIdsUsed: string[] = [];
 
-    if (!privacyModeEnabled) {
+    const formatCompanionContext = (
+      companionMemories: { id: string; category: string; content: string }[] | null | undefined,
+      intent: string | null | undefined,
+    ) => {
+      // Build companion memory context if any exist
+      if ((companionMemories && companionMemories.length > 0) || intent) {
+        companionMemoryContext =
+          "\n\n## User-defined companion context (Memory Vault):\n";
+
+        // Add daily intent if set
+        if (intent) {
+          // Sanitize intent to prevent prompt injection
+          const sanitizedIntent = sanitizeForPrompt(intent);
+          companionMemoryContext += `**Today's focus:** "${sanitizedIntent}"\n\n`;
+        }
+
+        // Group memories by category
+        if (companionMemories && companionMemories.length > 0) {
+          const categoryLabels: Record<string, string> = {
+            boundaries: "Boundaries to respect",
+            preferences: "Preferences",
+            triggers: "Topics that may be sensitive",
+            avoid_topics: "Topics to avoid",
+            positive_reinforcement:
+              "Things that help (positive reinforcement)",
+            life_context: "Life context",
+          };
+
+          const grouped: Record<string, string[]> = {};
+          for (const mem of companionMemories) {
+            if (!grouped[mem.category]) grouped[mem.category] = [];
+            // Sanitize each memory content to prevent prompt injection
+            const sanitizedContent = sanitizeForPrompt(mem.content);
+            grouped[mem.category].push(sanitizedContent);
+            memoryIdsUsed.push(mem.id);
+          }
+
+          for (const [category, items] of Object.entries(grouped)) {
+            const label = categoryLabels[category] || category;
+            companionMemoryContext += `- ${label}: ${items.join("; ")}\n`;
+          }
+
+          companionMemoryContext +=
+            "\nHonor these user-defined preferences and boundaries in all interactions.";
+        }
+      }
+    };
+
+    if (!privacyModeEnabled && eligible) {
+      // Server-owned eligibility only (disabled, forgotten, suppressed, expired and
+      // review-due records are already excluded; nothing is read directly here).
+      formatCompanionContext(eligible.memories, eligible.dailyIntent?.intent);
+    } else if (!privacyModeEnabled) {
       try {
         // Fetch active companion memories and current daily intent
         const { data: companionMemories } = await supabaseAdmin
@@ -789,114 +1120,50 @@ async function handleChat(req: Request, execution: ChatExecution, onDelta?: (tex
           .limit(1)
           .maybeSingle();
 
-        // Build companion memory context if any exist
-        if (
-          (companionMemories && companionMemories.length > 0) ||
-          dailyIntent?.intent
-        ) {
-          companionMemoryContext =
-            "\n\n## User-defined companion context (Memory Vault):\n";
-
-          // Add daily intent if set
-          if (dailyIntent?.intent) {
-            // Sanitize intent to prevent prompt injection
-            const sanitizedIntent = sanitizeForPrompt(dailyIntent.intent);
-            companionMemoryContext += `**Today's focus:** "${sanitizedIntent}"\n\n`;
-          }
-
-          // Group memories by category
-          if (companionMemories && companionMemories.length > 0) {
-            const categoryLabels: Record<string, string> = {
-              boundaries: "Boundaries to respect",
-              preferences: "Preferences",
-              triggers: "Topics that may be sensitive",
-              avoid_topics: "Topics to avoid",
-              positive_reinforcement:
-                "Things that help (positive reinforcement)",
-              life_context: "Life context",
-            };
-
-            const grouped: Record<string, string[]> = {};
-            for (const mem of companionMemories) {
-              if (!grouped[mem.category]) grouped[mem.category] = [];
-              // Sanitize each memory content to prevent prompt injection
-              const sanitizedContent = sanitizeForPrompt(mem.content);
-              grouped[mem.category].push(sanitizedContent);
-              memoryIdsUsed.push(mem.id);
-            }
-
-            for (const [category, items] of Object.entries(grouped)) {
-              const label = categoryLabels[category] || category;
-              companionMemoryContext += `- ${label}: ${items.join("; ")}\n`;
-            }
-
-            companionMemoryContext +=
-              "\nHonor these user-defined preferences and boundaries in all interactions.";
-          }
-        }
+        formatCompanionContext(companionMemories, dailyIntent?.intent);
       } catch (memoryError) {
         // Non-critical: continue chat without companion memory if fetch fails
-        console.error(
-          "Companion memory fetch failed (non-critical):",
-          memoryError,
-        );
+        logFailure("companion_memory_fetch_failed", { category: errorCategory(memoryError), code: dbCode(memoryError) });
       }
     }
 
     // Fetch re-engagement context (for returning users after absence)
     let reengagementContext = "";
-    const { data: profileExtended } = await supabaseAdmin
-      .from("profiles")
-      .select("last_absence_days")
-      .eq("id", user.id)
-      .single();
+    if (!privacyModeEnabled) {
+      const { data: profileExtended } = await supabaseAdmin
+        .from("profiles")
+        .select("last_absence_days")
+        .eq("id", user.id)
+        .single();
 
-    if (
-      profileExtended?.last_absence_days &&
-      profileExtended.last_absence_days >= 3
-    ) {
-      const days = profileExtended.last_absence_days;
-      reengagementContext = "\n\n## Important context - Returning user:\n";
-      reengagementContext += `The user is returning after ${days} days away. `;
+      if (
+        profileExtended?.last_absence_days &&
+        profileExtended.last_absence_days >= 3
+      ) {
+        const days = profileExtended.last_absence_days;
+        reengagementContext = "\n\n## Important context - Returning user:\n";
+        reengagementContext += `The user is returning after ${days} days away. `;
 
-      if (days >= 30) {
+        if (days >= 30) {
+          reengagementContext +=
+            "This is a significant return after a long hiatus. Be very welcoming and supportive. Help them ease back in without any pressure. ";
+        } else if (days >= 14) {
+          reengagementContext +=
+            "They've been away for a while. Be especially warm and supportive. Don't ask why they were away - focus on being glad they're back. ";
+        } else if (days >= 7) {
+          reengagementContext +=
+            "They've been away for about a week. Acknowledge their return positively and gently check in on how they're doing. ";
+        } else {
+          reengagementContext +=
+            "They took a brief break. Welcome them back warmly but don't make a big deal of it. ";
+        }
         reengagementContext +=
-          "This is a significant return after a long hiatus. Be very welcoming and supportive. Help them ease back in without any pressure. ";
-      } else if (days >= 14) {
-        reengagementContext +=
-          "They've been away for a while. Be especially warm and supportive. Don't ask why they were away - focus on being glad they're back. ";
-      } else if (days >= 7) {
-        reengagementContext +=
-          "They've been away for about a week. Acknowledge their return positively and gently check in on how they're doing. ";
-      } else {
-        reengagementContext +=
-          "They took a brief break. Welcome them back warmly but don't make a big deal of it. ";
+          "Do not mention specific day counts. Focus on the present moment and supporting their wellness journey.";
       }
-      reengagementContext +=
-        "Do not mention specific day counts. Focus on the present moment and supporting their wellness journey.";
     }
 
     // Build AI tone instruction based on user preference
-    let toneInstruction = "";
-    switch (aiTone) {
-      case "gentle":
-        toneInstruction =
-          "\n\n## Tone preference:\nUse an extra gentle, soft, and comforting tone. Be especially delicate with feedback and focus on nurturing support.";
-        break;
-      case "direct":
-        toneInstruction =
-          "\n\n## Tone preference:\nBe clear and straightforward. The user prefers honest, practical advice without excessive softening.";
-        break;
-      case "motivational":
-        toneInstruction =
-          "\n\n## Tone preference:\nBe encouraging and energizing. Use motivational language and help the user see their potential.";
-        break;
-      case "supportive":
-      default:
-        toneInstruction =
-          "\n\n## Tone preference:\nUse a warm, balanced, supportive tone that validates feelings while offering practical guidance.";
-        break;
-    }
+    const toneInstruction = toneInstructionFor(aiTone);
 
     const enhancedSystemPrompt =
       SYSTEM_PROMPT +
@@ -909,93 +1176,70 @@ async function handleChat(req: Request, execution: ChatExecution, onDelta?: (tex
     // This removes role impersonation attempts and prompt manipulation patterns
     const sanitizedContent = sanitizeForPrompt(trimmedContent);
 
+    // History selected by the shared policy (already sanitized) when the schema is installed.
+    // `legacyCtx` records exactly what is sent, so it can be revalidated before dispatch and
+    // before the atomic final save.
+    let legacyCtx: ReturnType<typeof buildLegacyTurnContext> | null = null;
+    if (eligible) {
+      const chosen = await legacyEligibleHistory({
+        records: eligible.records,
+        userId: user.id,
+        conversationId,
+        requestId: requestId ?? null,
+        currentMessageId: userMessage?.id ?? null,
+        trimmedContent,
+        systemPrompt: enhancedSystemPrompt,
+      });
+      if (!chosen.ok) {
+        return new Response(JSON.stringify(chosen.failure.body), { status: chosen.failure.status, headers: responseHeaders });
+      }
+      messages = chosen.history;
+      legacyCtx = buildLegacyTurnContext({
+        eligible,
+        personal: !privacyModeEnabled,
+        history: chosen.history,
+        historySources: chosen.sources,
+        historyExclusions: chosen.exclusions,
+      });
+      execution.guarded = true;
+    }
+
     // Build message history for AI
     const messageHistory: Message[] = trimChatContext([
       { role: "system", content: enhancedSystemPrompt },
       ...(messages || []).map((m) => ({
         role: m.role as "user" | "assistant",
-        // Sanitize historical messages too for defense in depth
-        content: m.role === "user" ? sanitizeForPrompt(m.content) : m.content,
+        // Sanitize historical messages too for defense in depth (the shared policy already
+        // sanitized the ones it selected; escaping twice would corrupt them).
+        content: m.role === "user" && !eligible ? sanitizeForPrompt(m.content) : m.content,
       })),
       { role: "user", content: sanitizedContent },
     ]);
 
     req.signal.throwIfAborted();
-    let quotaUsed = 0;
-    let quotaLimit = 0;
     const assistantContent = await generateChatText(messageHistory, {
       apiKey: OPENAI_API_KEY,
       reserveBudget: openAIBudgetReservation(supabaseAdmin, user.id, "chat.response", req.signal),
       maxOutputTokens: 500,
       onDelta,
       signal: req.signal,
-      beforeProvider: async () => {
-        // Atomically check and increment quota (prevents race conditions)
-        console.log("[6] Checking AI quota, isPremium:", isPremium);
-        const { data: quotaResult, error: quotaError } = await supabaseAdmin.rpc(
-          "check_and_increment_ai_quota",
-          {
-            p_user_id: user.id,
-            p_is_premium: isPremium,
-          },
-        );
-        console.log(
-          "[6] Quota result:",
-          JSON.stringify(quotaResult),
-          quotaError?.message || "",
-        );
-
-        if (quotaError) {
-          console.error("Quota check failed:", quotaError.code);
-          throw new Response(
-            JSON.stringify({ error: "Unable to process request" }),
-            { status: 500, headers: responseHeaders },
-          );
+      beforeProvider: legacyCtx
+        ? async () => {
+          // Latest privacy revision and sources immediately before the quota debit and the
+          // provider, so a correction accepted since the snapshot never reaches the model.
+          const fresh = await revalidatePreparedContext({
+            admin: supabaseAdmin as unknown as AdminLike,
+            userId: user.id,
+            conversationId,
+            supportSessionId: null,
+            prepared: legacyCtx!.prepared,
+          });
+          if (!fresh.ok) {
+            throw new Response(JSON.stringify(fresh.failure.body), { status: fresh.failure.status, headers: responseHeaders });
+          }
+          await admitQuotaAndSaveUser();
         }
-
-        // Handle both TABLE (array) and JSON (object) return types
-        const quotaData = Array.isArray(quotaResult)
-          ? quotaResult?.[0]
-          : quotaResult;
-        if (!quotaData || typeof quotaData.allowed !== "boolean" ||
-          !Number.isInteger(quotaData.quota_used) || quotaData.quota_used < 0 ||
-          !Number.isInteger(quotaData.quota_limit) ||
-          (quotaData.quota_limit < 0 && !(isPremium && quotaData.quota_limit === -1))) {
-          throw new Error("QUOTA_ADMISSION_UNCONFIRMED");
-        }
-        if (!quotaData.allowed) {
-          throw new Response(
-            JSON.stringify({
-              error: "AI_QUOTA_EXCEEDED",
-              message:
-                "You've reached your daily AI chat allowance.",
-              quotaUsed: quotaData.quota_used,
-              quotaLimit: quotaData.quota_limit,
-              code: "chat_quota_exhausted",
-              retryable: true,
-            }),
-            { status: 429, headers: responseHeaders },
-          );
-        }
-
-        quotaUsed = quotaData.quota_used;
-        quotaLimit = quotaData.quota_limit;
-        req.signal.throwIfAborted();
-        // Save only after both spending and atomic user-quota admission succeed.
-        if (!userMessage) {
-          execution.messageSaved = null;
-          const { data: saved, error: saveError } = await supabaseAdmin.from("messages")
-            .insert({
-              ...(requestId ? { id: requestId } : {}),
-              conversation_id: conversationId,
-              role: "user",
-              content: trimmedContent,
-            }).select().single();
-          if (saveError || !saved) throw new Error("USER_MESSAGE_NOT_SAVED");
-          userMessage = saved;
-          execution.userMessageId = saved.id;
-        }
-      },
+        : admitQuotaAndSaveUser,
     }).catch((error: unknown) => {
       knownProviderFailure = error instanceof Error &&
         (/^AI_HTTP_\d{3}$/.test(error.message) || ["AI_EMPTY_RESPONSE", "AI_TERMINAL_FAILED", "AI_STREAM_FAILED"].includes(error.message));
@@ -1003,172 +1247,218 @@ async function handleChat(req: Request, execution: ChatExecution, onDelta?: (tex
     });
     req.signal.throwIfAborted();
 
-    // Save assistant message
-    const { data: assistantMessage, error: assistantSaveError } = await supabaseAdmin
-      .from("messages")
-      .insert({
-        conversation_id: conversationId,
-        role: "assistant",
-        content: assistantContent,
-      })
-      .select()
-      .single();
-
-    if (assistantSaveError || !assistantMessage) throw new Error("ASSISTANT_MESSAGE_NOT_SAVED");
-
-    // Update conversation timestamp
-    await supabaseAdmin
-      .from("conversations")
-      .update({ updated_at: now.toISOString() })
-      .eq("id", conversationId);
-
     // Cognitive Bias Coach detection (after AI response, before title generation)
     let coachData: any = null;
     let conversationTitle: string | null = null; // TODO: Implement title generation
 
-    try {
-      // Fetch coach settings for this user (with 5-minute cache)
-      const coachSettings = await getCachedCoachSettings(
-        supabaseAdmin,
-        user.id,
-      );
-
-      // Fetch user's language preference
-      const { data: userProfile } = await supabaseAdmin
-        .from("profiles")
-        .select("preferred_language")
-        .eq("id", user.id)
-        .single();
-
-      const userLanguage = userProfile?.preferred_language || "en";
-
-      // Check if coach is enabled
-      const isCoachEnabled = coachSettings?.is_enabled !== false; // Default to enabled
-
-      if (isCoachEnabled) {
-        // Check silent hours - convert current time to user's timezone
-        const userTimezone = coachSettings?.timezone || "UTC";
-        const now = new Date();
-
-        // Use Intl API to get time in user's timezone
-        const formatter = new Intl.DateTimeFormat("en-US", {
-          timeZone: userTimezone,
-          hour: "numeric",
-          minute: "numeric",
-          hour12: false,
-        });
-
-        const parts = formatter.formatToParts(now);
-        const currentHour = parseInt(
-          parts.find((p) => p.type === "hour")?.value || "0",
+    const runCoach = async () => {
+      try {
+        // Fetch coach settings for this user (with 5-minute cache)
+        const coachSettings = await getCachedCoachSettings(
+          supabaseAdmin,
+          user.id,
         );
-        const currentMinute = parseInt(
-          parts.find((p) => p.type === "minute")?.value || "0",
-        );
-        const currentTimeMinutes = currentHour * 60 + currentMinute;
 
-        let inSilentHours = false;
-        if (
-          coachSettings?.silent_hours_start &&
-          coachSettings?.silent_hours_end
-        ) {
-          const parseTime = (timeStr: string) => {
-            const [h, m] = timeStr.split(":").map(Number);
-            return h * 60 + m;
-          };
-          const startMinutes = parseTime(coachSettings.silent_hours_start);
-          const endMinutes = parseTime(coachSettings.silent_hours_end);
+        // Fetch user's language preference
+        const { data: userProfile } = await supabaseAdmin
+          .from("profiles")
+          .select("preferred_language")
+          .eq("id", user.id)
+          .single();
 
-          // Handle midnight wrap (e.g., 22:00 to 02:00)
-          if (startMinutes > endMinutes) {
-            inSilentHours =
-              currentTimeMinutes >= startMinutes ||
-              currentTimeMinutes < endMinutes;
-          } else {
-            inSilentHours =
-              currentTimeMinutes >= startMinutes &&
-              currentTimeMinutes < endMinutes;
+        const userLanguage = userProfile?.preferred_language || "en";
+
+        // Check if coach is enabled
+        const isCoachEnabled = coachSettings?.is_enabled !== false; // Default to enabled
+
+        if (isCoachEnabled) {
+          // Check silent hours - convert current time to user's timezone
+          const userTimezone = coachSettings?.timezone || "UTC";
+          const now = new Date();
+
+          // Use Intl API to get time in user's timezone
+          const formatter = new Intl.DateTimeFormat("en-US", {
+            timeZone: userTimezone,
+            hour: "numeric",
+            minute: "numeric",
+            hour12: false,
+          });
+
+          const parts = formatter.formatToParts(now);
+          const currentHour = parseInt(
+            parts.find((p) => p.type === "hour")?.value || "0",
+          );
+          const currentMinute = parseInt(
+            parts.find((p) => p.type === "minute")?.value || "0",
+          );
+          const currentTimeMinutes = currentHour * 60 + currentMinute;
+
+          let inSilentHours = false;
+          if (
+            coachSettings?.silent_hours_start &&
+            coachSettings?.silent_hours_end
+          ) {
+            const parseTime = (timeStr: string) => {
+              const [h, m] = timeStr.split(":").map(Number);
+              return h * 60 + m;
+            };
+            const startMinutes = parseTime(coachSettings.silent_hours_start);
+            const endMinutes = parseTime(coachSettings.silent_hours_end);
+
+            // Handle midnight wrap (e.g., 22:00 to 02:00)
+            if (startMinutes > endMinutes) {
+              inSilentHours =
+                currentTimeMinutes >= startMinutes ||
+                currentTimeMinutes < endMinutes;
+            } else {
+              inSilentHours =
+                currentTimeMinutes >= startMinutes &&
+                currentTimeMinutes < endMinutes;
+            }
           }
-        }
 
-        if (!inSilentHours) {
-          // Check if this is a new topic (first 3 messages)
-          const messageCount = (messages?.length || 0) + 2; // +2 for current user + assistant messages
-          const isNewTopic = messageCount <= 6; // First 3 exchanges = 6 messages (user + assistant pairs)
+          if (!inSilentHours) {
+            // Check if this is a new topic (first 3 messages)
+            const messageCount = (messages?.length || 0) + 2; // +2 for current user + assistant messages
+            const isNewTopic = messageCount <= 6; // First 3 exchanges = 6 messages (user + assistant pairs)
 
-          if (!isNewTopic) {
-            // Get sensitivity threshold
-            const sensitivityLevel =
-              coachSettings?.sensitivity_level || "balanced";
-            const threshold = getSensitivityThreshold(sensitivityLevel);
+            if (!isNewTopic) {
+              // Get sensitivity threshold
+              const sensitivityLevel =
+                coachSettings?.sensitivity_level || "balanced";
+              const threshold = getSensitivityThreshold(sensitivityLevel);
 
-            // Run detection on user's message
-            const detection = detectDistortion(
-              trimmedContent,
-              userLanguage,
-              threshold,
-            );
+              // Run detection on user's message
+              const detection = detectDistortion(
+                trimmedContent,
+                userLanguage,
+                threshold,
+              );
 
-            if (detection) {
-              // Check if this distortion is disabled
-              const disabledDistortions =
-                coachSettings?.disabled_distortions || [];
-              if (!disabledDistortions.includes(detection.distortionCode)) {
-                // Fetch reframe
-                const reframe = await getReframe(
-                  supabaseAdmin,
-                  detection.distortionCode,
-                  trimmedContent,
-                  userLanguage,
-                );
+              if (detection) {
+                // Check if this distortion is disabled
+                const disabledDistortions =
+                  coachSettings?.disabled_distortions || [];
+                if (!disabledDistortions.includes(detection.distortionCode)) {
+                  // Fetch reframe
+                  const reframe = await getReframe(
+                    supabaseAdmin,
+                    detection.distortionCode,
+                    trimmedContent,
+                    userLanguage,
+                  );
 
-                if (reframe) {
-                  // Log encounter using atomic RPC function
-                  const { data: rawEncounterResult, error: encounterError } =
-                    await supabaseAdmin
-                      .rpc("log_coach_encounter", {
-                        p_user_id: user.id,
-                        p_distortion_code: detection.distortionCode,
-                        p_conversation_id: conversationId,
-                        p_original_message_preview: trimmedContent.substring(
-                          0,
-                          200,
-                        ),
-                        p_reframe_text: reframe.reframeText,
-                        p_confidence: detection.confidence,
-                        p_encounter_type: "chat",
-                      })
-                      .single();
+                  if (reframe) {
+                    // Log encounter using atomic RPC function
+                    const { data: rawEncounterResult, error: encounterError } =
+                      await supabaseAdmin
+                        .rpc("log_coach_encounter", {
+                          p_user_id: user.id,
+                          p_distortion_code: detection.distortionCode,
+                          p_conversation_id: conversationId,
+                          p_original_message_preview: trimmedContent.substring(
+                            0,
+                            200,
+                          ),
+                          p_reframe_text: reframe.reframeText,
+                          p_confidence: detection.confidence,
+                          p_encounter_type: "chat",
+                        })
+                        .single();
 
-                  const encounterResult = rawEncounterResult as { success?: boolean; error_message?: string; encounter_id?: string } | null;
-                  if (encounterError || !encounterResult?.success) {
-                    console.error(
-                      "Failed to log encounter:",
-                      encounterError || encounterResult?.error_message,
-                    );
-                    // Continue anyway - don't block coach from showing
+                    const encounterResult = rawEncounterResult as { success?: boolean; error_message?: string; encounter_id?: string } | null;
+                    if (encounterError || !encounterResult?.success) {
+                      logFailure("coach_encounter_log_failed", { code: dbCode(encounterError) });
+                      // Continue anyway - don't block coach from showing
+                    }
+
+                    // Build coach data for response
+                    coachData = {
+                      encounterId: encounterResult?.encounter_id || null,
+                      distortionCode: detection.distortionCode,
+                      distortionName: reframe.distortionName,
+                      shortDescription: reframe.shortDescription,
+                      reframeText: reframe.reframeText,
+                      educationalContent: reframe.educationalContent,
+                      socraticQuestions: reframe.socraticQuestions,
+                      confidence: detection.confidence,
+                    };
                   }
-
-                  // Build coach data for response
-                  coachData = {
-                    encounterId: encounterResult?.encounter_id || null,
-                    distortionCode: detection.distortionCode,
-                    distortionName: reframe.distortionName,
-                    shortDescription: reframe.shortDescription,
-                    reframeText: reframe.reframeText,
-                    educationalContent: reframe.educationalContent,
-                    socraticQuestions: reframe.socraticQuestions,
-                    confidence: detection.confidence,
-                  };
                 }
               }
             }
           }
         }
+      } catch (coachError) {
+        // Non-critical: log but don't fail the chat
+        logFailure("coach_detection_failed", { category: errorCategory(coachError), code: dbCode(coachError) });
       }
-    } catch (coachError) {
-      // Non-critical: log but don't fail the chat
-      console.error("Coach detection failed (non-critical):", coachError);
+    };
+
+    // Baseline (support schema absent): the old direct save. Installed: the final save is the
+    // atomic confirmation below, against the exact privacy revision and sources that were sent.
+    let assistantMessage: { id: string; created_at: string | null } | null = null;
+    let installedOutcome: Awaited<ReturnType<typeof confirmLegacyTurn>> | null = null;
+    if (legacyCtx) {
+      // Latest privacy and sources again before anything is published or saved.
+      const latest = await revalidatePreparedContext({
+        admin: supabaseAdmin as unknown as AdminLike,
+        userId: user.id,
+        conversationId,
+        supportSessionId: null,
+        prepared: legacyCtx.prepared,
+      });
+      if (!latest.ok) {
+        return new Response(JSON.stringify(latest.failure.body), { status: latest.failure.status, headers: responseHeaders });
+      }
+      req.signal.throwIfAborted();
+      await runCoach();
+      installedOutcome = await confirmLegacyTurn({
+        admin: supabaseAdmin as unknown as AdminLike,
+        userId: user.id,
+        conversationId,
+        requestId: requestId ?? null,
+        contentHash,
+        ctx: legacyCtx,
+        content: assistantContent,
+        template: buildLegacyWireTemplate({
+          trimmedContent,
+          userMessage,
+          quota: { used: quotaUsed, limit: quotaLimit },
+          now: new Date(),
+          content: assistantContent,
+          memoryUsed: memoryContext.length > 0 || companionMemoryContext.length > 0,
+          memoryIds: memoryIdsUsed,
+          coachData,
+        }),
+      });
+      if (!(installedOutcome.final && installedOutcome.status === 200)) {
+        execution.receiptFinal = installedOutcome.final === true;
+        execution.leavePending = installedOutcome.leavePending === true;
+        return new Response(JSON.stringify(installedOutcome.body), { status: installedOutcome.status, headers: responseHeaders });
+      }
+    } else {
+      // Save assistant message
+      const { data: saved, error: assistantSaveError } = await supabaseAdmin
+        .from("messages")
+        .insert({
+          conversation_id: conversationId,
+          role: "assistant",
+          content: assistantContent,
+        })
+        .select()
+        .single();
+
+      if (assistantSaveError || !saved) throw new Error("ASSISTANT_MESSAGE_NOT_SAVED");
+      assistantMessage = saved;
+
+      // Update conversation timestamp
+      await supabaseAdmin
+        .from("conversations")
+        .update({ updated_at: now.toISOString() })
+        .eq("id", conversationId);
+
+      await runCoach();
     }
 
     // Auto-generate conversation title if this is the first message
@@ -1188,8 +1478,20 @@ async function handleChat(req: Request, execution: ChatExecution, onDelta?: (tex
 
     // Quota was incremented atomically immediately before the provider request.
 
-    // Extract memories in background ONLY if privacy mode is OFF
+    // Extract memories in background ONLY if privacy mode is OFF. With the support schema
+    // installed, the privacy revision and suppression set are rechecked before the text goes
+    // to the provider and again before any candidate is stored (spec 8.4/8.5).
     if (!privacyModeEnabled) {
+      const extractionAllowed = eligible
+        ? () =>
+          legacyExtractionAllowed({
+            admin: supabaseAdmin as unknown as AdminLike,
+            userId: user.id,
+            conversationId,
+            userMessageId: userMessage?.id ?? null,
+            privacyRevision: eligible.privacyRevision,
+          })
+        : undefined;
       retainBackground(extractMemories(
         supabaseAdmin,
         user.id,
@@ -1197,6 +1499,7 @@ async function handleChat(req: Request, execution: ChatExecution, onDelta?: (tex
         trimmedContent,
         assistantContent,
         OPENAI_API_KEY,
+        extractionAllowed,
       ).catch(() => console.error("Memory extraction failed")));
     }
 
@@ -1210,13 +1513,19 @@ async function handleChat(req: Request, execution: ChatExecution, onDelta?: (tex
         })
         .then(({ error }: { error: unknown }) => {
           if (error) {
-            console.error("Failed to update companion memory usage:", error);
+            logFailure("companion_memory_usage_failed", { code: dbCode(error) });
           } else {
             console.log(
               `Updated usage for ${memoryIdsUsed.length} companion memories`,
             );
           }
         });
+    }
+
+    if (installedOutcome) {
+      // Already stored atomically by the database; never rewritten by the wrapper.
+      execution.receiptFinal = true;
+      return new Response(JSON.stringify(installedOutcome.body), { status: installedOutcome.status, headers: responseHeaders });
     }
 
     // Helper to convert date to Unix timestamp (seconds) for iOS Swift Codable
@@ -1257,7 +1566,7 @@ async function handleChat(req: Request, execution: ChatExecution, onDelta?: (tex
         quotaUsed: quotaUsed,
         quotaLimit: quotaLimit,
         conversationTitle: conversationTitle,
-        memoryUsed: memoryIdsUsed.length > 0,
+        memoryUsed: memoryContext.length > 0 || companionMemoryContext.length > 0,
         memoryIdsUsed: memoryIdsUsed,
         coachData: coachData,
       }),
@@ -1274,15 +1583,9 @@ async function handleChat(req: Request, execution: ChatExecution, onDelta?: (tex
     if (!req.signal.aborted && knownProviderFailure) {
       return new Response(JSON.stringify({ error: "AI provider unavailable", message: "The AI response could not be completed. You can explicitly retry this message.", code: "chat_provider_unavailable", retryable: true }), { status: 503, headers: { ...baseCorsHeaders, "Content-Type": "application/json" } });
     }
-    // Log full error for debugging
-    console.error("======== CHAT FUNCTION ERROR ========");
-    console.error("Error type:", typeof error);
-    console.error("Error name:", error instanceof Error ? error.name : "N/A");
-    console.error(
-      "Error message:",
-      error instanceof Error ? error.message : String(error),
-    );
-    console.error("Error stack:", error instanceof Error ? error.stack : "N/A");
+    // Content-free: a symbolic category and status only. An error message or stack can quote a
+    // provider body or a database row, so neither is ever logged.
+    logFailure("chat_error", { category: errorCategory(error), status: 500, aborted: req.signal.aborted });
     return new Response(
       JSON.stringify({ error: "An unexpected error occurred" }),
       { status: 500, headers: baseCorsHeaders },
@@ -1317,13 +1620,28 @@ Deno.serve(async (request: Request) => {
   } : undefined).then(async (response) => {
     let data = await response.json();
     if (!response.ok) data = failedChatResponse(data, execution);
-    if (execution.receipt) {
+    // A confirmed support turn was stored atomically by support_confirm_chat_turn and is
+    // never rewritten. An unknown commit state stores nothing: the claim stays pending, so a
+    // late commit cannot be contradicted and a replay can only return the confirmed answer.
+    if (execution.receipt && !execution.receiptFinal && !execution.leavePending) {
       try {
         const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-        const { data: persisted, error } = await admin.from("chat_requests").update({ response: data, response_status: response.status })
-          .eq("user_id", execution.receipt.userId).eq("request_id", execution.receipt.requestId)
-          .select("request_id").maybeSingle();
-        if (error || !persisted) throw new Error("RECEIPT_NOT_SAVED");
+        let write = admin.from("chat_requests").update({ response: data, response_status: response.status })
+          .eq("user_id", execution.receipt.userId).eq("request_id", execution.receipt.requestId);
+        // Privacy-capable turns (and installed-schema legacy turns) only ever fill a still-pending claim.
+        const guarded = execution.support || execution.guarded;
+        if (guarded) write = write.is("response", null);
+        const { data: persisted, error } = await write.select("request_id").maybeSingle();
+        if (error) throw new Error("RECEIPT_NOT_SAVED");
+        if (!persisted) {
+          if (!guarded) throw new Error("RECEIPT_NOT_SAVED");
+          // Already finalized elsewhere (for example a commit that raced this failure):
+          // serve that stored terminal state instead of contradicting it.
+          const terminal = await readTerminalClaim(admin as unknown as AdminLike, execution.receipt.userId, execution.receipt.requestId);
+          if (!terminal) throw new Error("RECEIPT_NOT_SAVED");
+          data = renderSupportWire(terminal.response);
+          response = new Response(null, { status: terminal.status, headers: response.headers });
+        }
       } catch {
         // Keep the claim on any persistence ambiguity; it cannot authorize replay.
         console.error("Chat receipt persistence failed");
@@ -1373,13 +1691,13 @@ async function generateConversationTitle(
         .eq("id", conversationId);
 
       if (error) {
-        console.error("Failed to update conversation title:", error);
+        logFailure("title_update_failed", { code: dbCode(error) });
       } else {
         console.log("Conversation title saved");
       }
     }
   } catch (err) {
-    console.error("Title generation error:", err instanceof Error ? err.message : "Unknown");
+    logFailure("title_generation_failed", { category: errorCategory(err) });
   }
 }
 
@@ -1503,7 +1821,12 @@ async function extractMemories(
   userMessage: string,
   _assistantMessage: string,
   openaiKey: string,
+  allowed?: () => Promise<boolean>,
 ): Promise<void> {
+  // Forgotten/suppressed sources and a moved privacy revision stop extraction before any
+  // text reaches the provider.
+  if (allowed && !(await allowed())) return;
+
   // Sanitize user input to prevent prompt injection
   const sanitizedMessage = sanitizeForPrompt(userMessage);
 
@@ -1591,6 +1914,8 @@ Return ONLY valid JSON array, no explanation. Example: [{"type": "person", "key"
       .filter((m) => m.key.length > 0 && m.value.length > 0);
 
     if (candidates.length === 0) return;
+    // A correction accepted while the model ran must not be undone by a late candidate.
+    if (allowed && !(await allowed())) return;
 
     // Use upsert with the UNIQUE constraint (user_id, fragment_type, key)
     // This will update existing memories with same key instead of duplicating
@@ -1643,7 +1968,7 @@ Return ONLY valid JSON array, no explanation. Example: [{"type": "person", "key"
         ignoreDuplicates: false,
       });
     if (error) {
-      console.error("Memory upsert error:", error.message);
+      logFailure("memory_upsert_failed", { code: dbCode(error) });
     } else {
       console.log(
         `Extracted/updated ${upserts.length} memories from conversation`,
@@ -1651,9 +1976,6 @@ Return ONLY valid JSON array, no explanation. Example: [{"type": "person", "key"
     }
   } catch (err) {
     // Log but don't throw - extraction is non-critical
-    console.error(
-      "Memory extraction error:",
-      err instanceof Error ? err.message : "Unknown",
-    );
+    logFailure("memory_extraction_failed", { category: errorCategory(err) });
   }
 }

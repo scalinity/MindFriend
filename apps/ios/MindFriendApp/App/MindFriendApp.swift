@@ -26,7 +26,9 @@ struct MindFriendApp: App {
     @ViewBuilder
     private var launchContent: some View {
         #if DEBUG
-        if ProcessInfo.processInfo.arguments.contains("--auth-ui-test") {
+        if SupportSessionUIFixture.isEnabled {
+            SupportSessionUIFixtureView()
+        } else if ProcessInfo.processInfo.arguments.contains("--auth-ui-test") {
             AuthUITestView()
         } else if ProcessInfo.processInfo.arguments.contains("--subscription-ui-test") {
             SubscriptionCatalogUITestView()
@@ -42,6 +44,15 @@ struct MindFriendApp: App {
         #endif
     }
 
+    private var appColorScheme: ColorScheme? {
+        #if DEBUG
+        if SupportSessionUIFixture.isEnabled {
+            return SupportSessionUIFixture.value(after: "--support-appearance") == "dark" ? .dark : .light
+        }
+        #endif
+        return selectedTheme.colorScheme
+    }
+
     var body: some Scene {
         WindowGroup {
             launchContent
@@ -52,12 +63,14 @@ struct MindFriendApp: App {
                 .environmentObject(container.ambientThemeService)
                 .environmentObject(localizationService)
                 .environmentObject(container.achievementService)
-                .preferredColorScheme(selectedTheme.colorScheme)
+                .preferredColorScheme(appColorScheme)
                 // Language changes propagate through @Environment(\.locale)
                 .environment(\.locale, Locale(identifier: localizationService.currentLanguage))
                 .environment(\.layoutDirection, localizationService.isRTL ? .rightToLeft : .leftToRight)
                 .task {
                     #if DEBUG
+                    // Unit-test hosts must not start live account/service work.
+                    if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil || SupportSessionUIFixture.isEnabled { return }
                     if ProcessInfo.processInfo.arguments.contains("--auth-ui-test") ||
                        ProcessInfo.processInfo.arguments.contains("--subscription-ui-test") ||
                        ProcessInfo.processInfo.arguments.contains("--sleep-ui-test") ||
@@ -125,21 +138,19 @@ struct MindFriendApp: App {
                         if let profile = await container.supabaseAuthService.fetchProfileWithCache() {
                             // Check if user needs onboarding
                             if profile.needsOnboarding {
-                                appState.requireOnboarding()
+                                appState.setAuthenticated(user: profile)
                             } else {
                                 // Update with verified network data
                                 appState.setAuthenticated(user: profile)
 
                             }
 
-                            // Set user context for crash reporting and analytics
-                            CrashReporter.shared.setUser(
-                                id: profile.id.uuidString,
-                                email: profile.email,
-                                username: profile.handle
-                            )
-                            Analytics.shared.identify(userId: profile.id.uuidString)
-                            Analytics.shared.setUserProperty(.subscriptionTier, value: profile.entitlements?.subscriptionTier ?? "free")
+                            if !profile.needsOnboarding {
+                                CrashReporter.shared.setUser(id: profile.id.uuidString)
+                                Analytics.shared.identify(userId: profile.id.uuidString)
+                                Analytics.shared.setUserProperty(.subscriptionTier, value: profile.entitlements?.subscriptionTier ?? "free")
+                            }
+
                         } else {
                             // Could not fetch profile, session may be invalid
                             if !appState.isUsingCachedData {
@@ -155,6 +166,7 @@ struct MindFriendApp: App {
                 }
                 .task(id: appState.authenticatedAccountID) {
                     #if DEBUG
+                    if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil || SupportSessionUIFixture.isEnabled { return }
                     if ProcessInfo.processInfo.arguments.contains("--auth-ui-test") ||
                        ProcessInfo.processInfo.arguments.contains("--subscription-ui-test") ||
                        ProcessInfo.processInfo.arguments.contains("--sleep-ui-test") ||
@@ -228,7 +240,7 @@ struct MindFriendApp: App {
             Task { @MainActor in
                 do {
                     let profile = try await container.supabaseAuthService.handleAuthCallback(url)
-                    if profile.needsOnboarding { appState.requireOnboarding() }
+                    if profile.needsOnboarding { appState.setAuthenticated(user: profile) }
                     else { appState.setAuthenticated(user: profile) }
                 } catch {
                     appState.showError(.apiError("The sign-in link could not be completed. Request a new link and try again."))
@@ -327,15 +339,94 @@ struct RootView: View {
             case .unauthenticated:
                 SignInView()
             case .onboarding:
-                OnboardingFlow()
+                OnboardingFlow().id(container.supabaseAuthService.userId)
             case .authenticated:
-                MainTabView()
+                AuthenticatedSupportRoot()
                     .ambientBackground(service: ambientService)
                     .privacyLockOverlay(onUnlock: {})
                     .badgeEarnedCelebration()
             }
         }
         .animation(.easeInOut(duration: 0.3), value: appState.authState)
+    }
+}
+
+/// Account data views are not constructed until their protected local repository is bound and loaded.
+private struct AuthenticatedSupportRoot: View {
+    @EnvironmentObject private var appState: AppState
+    @EnvironmentObject private var container: DependencyContainer
+    @State private var retry = UUID()
+    @State private var showHelp = false
+    @State private var showFreshJournalChoice = false
+    @Environment(\.scenePhase) private var scenePhase
+
+    private struct Scope: Hashable {
+        let ownerID: UUID?
+        let epoch: UInt64
+        let retry: UUID
+    }
+
+    var body: some View {
+        let scope = Scope(ownerID: appState.currentUser?.id, epoch: appState.accountEpoch, retry: retry)
+        Group {
+            if let coordinator = container.supportSessionCoordinator,
+               coordinator.identity.ownerID == scope.ownerID,
+               container.supportSessionAccountEpoch == scope.epoch {
+                SupportLoadedShell(coordinator: coordinator)
+                    .id(coordinator.identity.epochID)
+            } else {
+                VStack(spacing: 24) {
+                    if let message = container.supportSessionLoadError {
+                        ContentUnavailableView("Saved work unavailable", systemImage: "lock.doc",
+                                               description: Text(message))
+                        Button("Try again") { appState.retryAccountScope(); retry = UUID() }.buttonStyle(.borderedProminent)
+                        if container.supportSessionRecovery != nil {
+                            Button("Start with an empty journal") { showFreshJournalChoice = true }
+                        }
+                    } else {
+                        ProgressView("Opening your saved work…")
+                    }
+                    Button("Support and crisis resources") { showHelp = true }
+                }
+                .padding()
+            }
+        }
+        .task(id: scope) {
+            guard let ownerID = scope.ownerID else { return }
+            await container.prepareSupportSessionScope(ownerID: ownerID, accountEpoch: scope.epoch)
+        }
+        .sheet(isPresented: $showHelp) { CrisisResourcesView() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                SyncQueueManager.shared.applicationDidBecomeActive()
+                Task { try? await container.supportSync?.refresh() }
+            }
+        }
+        .confirmationDialog("Start with an empty journal?", isPresented: $showFreshJournalChoice, titleVisibility: .visible) {
+            Button("Keep recovery files and start empty") {
+                guard let ownerID = scope.ownerID else { return }
+                Task { await container.startFreshSupportJournal(ownerID: ownerID, accountEpoch: scope.epoch) }
+            }
+        } message: {
+            Text("Unreadable files stay on this device for recovery. They are not added to the empty journal. You can remove them later with a separate choice.")
+        }
+    }
+}
+
+/// Observes the presentation owner directly so an activity opened from any tab reaches its player.
+struct SupportLoadedShell: View {
+    @ObservedObject var coordinator: SupportSessionCoordinator
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        MainTabView()
+            .environmentObject(coordinator)
+            .fullScreenCover(item: Binding(get: { coordinator.activityPresentation },
+                                          set: { coordinator.activityPresentation = $0 })) { presentation in
+                SupportActivityView(coordinator: coordinator, presentation: presentation)
+                    .interactiveDismissDisabled()
+            }
+            .transaction { if reduceMotion { $0.disablesAnimations = true; $0.animation = nil } }
     }
 }
 

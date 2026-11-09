@@ -297,7 +297,7 @@ final class DeepLinkRouter: ObservableObject {
             case .unavailable:
                 return "This item is unavailable or you don't have access to it."
             case .premium:
-                return "This content requires Premium. Open Subscription in More to review your plan."
+                return "This content requires Premium. Review your plan in your account settings."
             }
         }
     }
@@ -340,6 +340,92 @@ final class DeepLinkRouter: ObservableObject {
             return .outcomes
         case .buddy, .unknown:
             return nil
+        }
+    }
+}
+
+// MARK: - Stable shell placement (Today / Chat / Explore / You)
+
+/// Where a deep link lands in the stable four-tab shell (SUPPORT_SESSION_SPEC §4.2).
+/// No case depends on activation state. Identifier-bearing routes are still resolved and ownership/membership/
+/// premium-checked by the presented destination before anything opens.
+enum SupportRoutePlacement: Equatable {
+    /// Select the tab root (Today, Chat, You).
+    case tabRoot(MainTab)
+    /// Select the destination's tab and push it onto that tab's preserved stack.
+    case destination(SupportDestination)
+    /// Present the existing resolving destination sheet over the given tab (identifier routes, mood check-in, quest).
+    case presented(tab: MainTab)
+    /// Handled by a separate authenticated app-level flow (buddy invitations).
+    case externalFlow
+    /// Unknown or invalid link; show the native "isn't supported" error.
+    case unavailable
+}
+
+extension DeepLinkRoute {
+    /// Exhaustive on purpose: adding a `DeepLinkRoute` case without a home must fail to compile.
+    var supportPlacement: SupportRoutePlacement {
+        switch self {
+        case .home:
+            return .tabRoot(SupportShellTab.today.mainTab)
+        case .quote:
+            // No quote content exists; the old link now opens an honest unavailable screen under Practices.
+            return .destination(.quote)
+        case .chat:
+            return .tabRoot(SupportShellTab.chat.mainTab)
+        case .profile:
+            return .tabRoot(SupportShellTab.you.mainTab)
+        case .settings:
+            return .destination(.settings)
+        case .mood, .quest:
+            return .presented(tab: SupportShellTab.today.mainTab)
+        case .moodHistory:
+            return .destination(.moodHistory)
+        case .streak:
+            return .destination(.streaks)
+        case .progress:
+            return .destination(.outcomes)
+        case .breathing:
+            return .destination(.quickBreathing)
+        case .meditation, .exerciseLibrary:
+            return .destination(.exerciseLibrary)
+        case .exercise, .program:
+            return .presented(tab: SupportShellTab.explore.mainTab)
+        case .programs:
+            return .destination(.programs)
+        case .therapeuticPrograms:
+            return .destination(.therapeuticPrograms)
+        case .journal:
+            return .destination(.journal)
+        case .microMoments(let id):
+            return id == nil ? .destination(.microMoments) : .presented(tab: SupportShellTab.explore.mainTab)
+        case .sleep(let id):
+            return id == nil ? .destination(.sleep) : .presented(tab: SupportShellTab.explore.mainTab)
+        case .circles(let id):
+            return id == nil ? .destination(.circles) : .presented(tab: SupportShellTab.explore.mainTab)
+        case .assessment(let code):
+            return code == nil ? .destination(.outcomes) : .presented(tab: SupportShellTab.you.mainTab)
+        case .insights:
+            return .destination(.weeklyInsights)
+        case .achievements:
+            return .destination(.achievements)
+        case .buddy:
+            return .externalFlow
+        case .unknown:
+            return .unavailable
+        }
+    }
+}
+
+extension DeepLinkRouter {
+    /// Static route → tab mapping for the stable shell. `nil` for routes with no tab (buddy flow, unknown links).
+    /// `MainTab.home/.chat/.circles/.profile` are the Today/Chat/Explore/You tags.
+    nonisolated static func supportShellTab(for route: DeepLinkRoute) -> MainTab? {
+        switch route.supportPlacement {
+        case .tabRoot(let tab): return tab
+        case .destination(let destination): return destination.tab.mainTab
+        case .presented(let tab): return tab
+        case .externalFlow, .unavailable: return nil
         }
     }
 }

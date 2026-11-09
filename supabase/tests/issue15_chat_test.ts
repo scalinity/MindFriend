@@ -48,6 +48,9 @@ function state() {
     calls: [] as string[],
     inputs: [] as Row[][],
     providerCalls: 0,
+    absenceReads: 0,
+    privacyMode: "enhanced",
+    legacyMemory: false,
     quotaCalls: 0,
     quotaUsed: 0,
     budgetCalls: [] as Row[],
@@ -301,6 +304,15 @@ Deno.test("issue 15: offline admission, durable explicit retry and legacy chat c
           remaining_microdollars: 10_000_000 - total,
         });
       }
+      if (name === "support_capabilities") {
+        // These legacy fixtures model a database WITHOUT the support schema, which PostgREST
+        // reports as a missing function. That is the "genuinely not deployed" baseline, as
+        // opposed to a transient error (which now fails closed for legacy requests too).
+        return Response.json({
+          code: "PGRST202",
+          message: "Could not find the function public.support_capabilities without parameters in the schema cache",
+        }, { status: 404 });
+      }
       throw new Error(`Unhandled RPC: ${name}`);
     }
     const table = url.pathname.split("/").at(-1)!;
@@ -309,17 +321,23 @@ Deno.test("issue 15: offline admission, durable explicit retry and legacy chat c
       return selected(url, [{ id: conversationId, user_id: s.owner }], headers);
     }
     if (table === "profiles") {
+      if (url.searchParams.get("select") === "last_absence_days") s.absenceReads++;
       return Response.json({
         subscription_tier: s.premium || s.staleProfilePremium ? "premium" : "free",
         preferred_language: s.language,
-        last_absence_days: null,
+        last_absence_days: 14,
       });
     }
     if (table === "user_settings") {
       return s.failSettings
         ? dbError()
-        : Response.json({ privacy_mode: "enhanced", ai_tone: "friendly" });
+        : Response.json({ privacy_mode: s.privacyMode, ai_tone: "friendly" });
     }
+    if (table === "memory_fragments") return Response.json(s.legacyMemory ? [{
+      fragment_type: "preference", key: "practice", value: "quiet", confidence: 0.9,
+    }] : []);
+    if (table === "companion_memory") return Response.json([]);
+    if (table === "daily_intents") return Response.json(null);
     if (table === "coach_settings") return Response.json({ is_enabled: false });
     if (table === "therapy_connections") return Response.json([]);
     if (table === "crisis_events") return new Response(null, { status: 201 });
@@ -477,6 +495,32 @@ Deno.test("issue 15: offline admission, durable explicit retry and legacy chat c
       },
     });
     await import("../functions/chat/index.ts");
+
+    await t.step("conversation-only excludes absence and both saved memory stores", async () => {
+      s = state();
+      await result(await chat());
+      equal(s.absenceReads, 0, "Private conversation must not read absence context");
+      assert(!s.calls.some((call) => /memory_fragments|companion_memory|daily_intents/.test(call)));
+      assert(!JSON.stringify(s.inputs).includes("Returning user"));
+    });
+
+    await t.step("personalized scope reads absence and discloses fragment-only context", async () => {
+      s = state();
+      s.privacyMode = "standard";
+      s.legacyMemory = true;
+      const data = await result(await chat());
+      equal(s.absenceReads, 1);
+      assert(JSON.stringify(s.inputs).includes("Returning user"));
+      equal(data.memoryUsed, true);
+      equal(data.memoryIdsUsed, []); // Legacy curated IDs remain backward compatible.
+    });
+    await t.step("unknown privacy mode excludes saved personal context", async () => {
+      s = state();
+      s.privacyMode = "unknown";
+      await result(await chat());
+      equal(s.absenceReads, 0);
+      assert(!s.calls.some((call) => /memory_fragments|companion_memory|daily_intents/.test(call)));
+    });
 
     await t.step("expired premium profile receives the free quota", async () => {
       s = state();

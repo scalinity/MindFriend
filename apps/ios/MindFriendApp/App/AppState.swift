@@ -15,6 +15,7 @@ final class AppState: ObservableObject {
     // MARK: - Auth State
     @Published var authState: AuthState = .unknown
     @Published var currentUser: UserProfile?
+    @Published private(set) var accountEpoch: UInt64 = 0
 
     /// Whether the initial auth check has completed
     @Published var hasCompletedInitialAuth: Bool = false
@@ -31,7 +32,8 @@ final class AppState: ObservableObject {
     }
 
     // MARK: - Entitlements
-    @Published var entitlements: Entitlements = .free
+    @Published private(set) var entitlementSnapshot: EntitlementSnapshot?
+    var entitlements: Entitlements { entitlementSnapshot?.legacy ?? .free }
 
     // MARK: - Today's Data
     @Published var todayQuest: Quest?
@@ -64,10 +66,14 @@ final class AppState: ObservableObject {
 
     // MARK: - Methods
 
+    /// Retry account-bound storage with a fresh lifecycle after a partial startup failure.
+    func retryAccountScope() { accountEpoch &+= 1 }
+
     func setAuthenticated(user: UserProfile) {
+        if currentUser?.id != user.id { accountEpoch &+= 1; entitlementSnapshot = nil }
         self.currentUser = user
-        self.entitlements = user.entitlements?.subscriptionTier == "premium" ? .premium : .free
-        self.authState = .authenticated
+        refreshProfileEntitlements(user, cached: false)
+        self.authState = user.needsOnboarding ? .onboarding : .authenticated
         self.hasCompletedInitialAuth = true
         self.isUsingCachedData = false
         self.sessionRestored = true
@@ -75,15 +81,18 @@ final class AppState: ObservableObject {
 
     /// Set authenticated state with cached data (before network verification)
     func setAuthenticatedFromCache(user: UserProfile) {
+        if currentUser?.id != user.id { accountEpoch &+= 1; entitlementSnapshot = nil }
         self.currentUser = user
-        self.authState = .authenticated
+        refreshProfileEntitlements(user, cached: true)
+        self.authState = user.needsOnboarding ? .onboarding : .authenticated
         self.isUsingCachedData = true
         // Don't set hasCompletedInitialAuth - that's for after network verification
     }
 
     func setUnauthenticated() {
+        if currentUser != nil { accountEpoch &+= 1 }
         self.currentUser = nil
-        self.entitlements = .free
+        self.entitlementSnapshot = nil
         self.todayQuest = nil
         self.todayMood = nil
         self.todayActionPlan = nil
@@ -108,8 +117,40 @@ final class AppState: ObservableObject {
         self.showError = true
     }
 
-    func updateEntitlements(_ entitlements: Entitlements) {
-        self.entitlements = entitlements
+    func refreshProfileEntitlements(_ profile: UserProfile, cached: Bool = false) {
+        guard currentUser?.id == profile.id else { return }
+        let values = profile.entitlements
+        let expired = values?.premiumExpiresAt.map { $0 <= Date() } ?? false
+        let tier: Tier = !expired && ["premium", "sponsored"].contains(values?.subscriptionTier ?? "") ? .premium : .free
+        mergeEntitlements(ownerID: profile.id, tier: tier, usage: values?.dailyAiUsed,
+                          quota: values?.dailyAiQuota, period: values?.quotaPeriodStartedAt,
+                          verifiedAt: values?.verifiedAt, source: cached ? .cachedProfile : .serverProfile)
+    }
+
+    func updateEntitlements(_ values: Entitlements) {
+        guard let ownerID = currentUser?.id else { return }
+        // Legacy constants describe tier only, and never provide quota evidence.
+        mergeEntitlements(ownerID: ownerID, tier: values.tier,
+                          usage: values.verifiedAt == nil ? nil : values.dailyAiUsed,
+                          quota: values.verifiedAt == nil ? nil : values.dailyAiQuota,
+                          period: values.quotaPeriodStartedAt, verifiedAt: values.verifiedAt,
+                          source: .serverBilling)
+    }
+
+    func recordChatQuota(ownerID: UUID, used: Int?, limit: Int?) {
+        guard currentUser?.id == ownerID else { return }
+        mergeEntitlements(ownerID: ownerID, tier: entitlements.tier, usage: used, quota: limit,
+                          period: nil, verifiedAt: Date(), source: .chatReceipt)
+    }
+
+    private func mergeEntitlements(ownerID: UUID, tier: Tier, usage: Int?, quota: Int?,
+                                   period: Date?, verifiedAt: Date?, source: EntitlementSnapshot.Source) {
+        guard currentUser?.id == ownerID else { return }
+        var snapshot = entitlementSnapshot ?? EntitlementSnapshot(
+            ownerID: ownerID, tier: tier, source: source, verifiedAt: nil,
+            usage: nil, quota: nil, quotaPeriodStartedAt: nil)
+        snapshot.merge(tier: tier, usage: usage, quota: quota, period: period, verifiedAt: verifiedAt, source: source)
+        entitlementSnapshot = snapshot
     }
 
     func showLevelUpCelebration(level: Int, title: String) {

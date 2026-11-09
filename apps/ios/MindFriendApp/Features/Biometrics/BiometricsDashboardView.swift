@@ -2,7 +2,7 @@ import SwiftUI
 import Charts
 
 struct BiometricsDashboardView: View {
-    @StateObject private var healthKit = HealthKitService()
+    @ObservedObject private var healthKit = HealthKitService.shared
     @State private var todaySummary: BiometricDailySummary?
     @State private var recentSummaries: [BiometricDailySummary] = []
     @State private var insights: [BiometricInsight] = []
@@ -17,7 +17,7 @@ struct BiometricsDashboardView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 20) {
-                    if !healthKit.isAuthorized {
+                    if !healthKit.hasCompletedPermissionRequest {
                         connectHealthKitCard
                     } else {
                         if healthKit.isSyncing {
@@ -48,7 +48,7 @@ struct BiometricsDashboardView: View {
             .navigationTitle("Body & Mind")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    if healthKit.isAuthorized {
+                    if healthKit.hasCompletedPermissionRequest {
                         Button {
                             showSettings = true
                         } label: {
@@ -331,7 +331,7 @@ struct BiometricsDashboardView: View {
         isLoading = true
         defer { isLoading = false }
 
-        guard healthKit.isAuthorized else { return }
+        guard healthKit.hasCompletedPermissionRequest else { return }
 
         // Sync if needed (hourly)
         if healthKit.lastSyncDate == nil ||

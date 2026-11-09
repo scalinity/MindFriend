@@ -16,56 +16,23 @@ struct MainTabView: View {
     @State private var blockedRequestID: UUID?
     @State private var deepLinkDismissing = false
 
+    /// Development switch for the stable Today/Chat/Explore/You shell. Evaluated once per view lifetime; the
+    /// legacy shell below is preserved unchanged as the rollback. See `SupportShellFeature`.
+    @State private var useSupportShell = SupportShellFeature.isEnabled()
+    @StateObject private var supportNavigator = SupportShellNavigator()
+
+    /// The stable shell has no activation-gated navigation, so deep links never wait for activation state.
     private var canPresentDeepLink: Bool {
-        appState.authState == .authenticated && appState.sessionRestored && activationLoaded &&
+        appState.authState == .authenticated && appState.sessionRestored && (useSupportShell || activationLoaded) &&
         !showFeatureUnlock && !appState.showCrisisResources && !appState.showPaywall &&
         !appState.showWelcomeBack && !appState.showError && !deepLinkDismissing
     }
 
     var body: some View {
-        TabView(selection: $appState.selectedTab) {
-            // Home - always visible
-            HomeView()
-                .tabItem {
-                    Label(MainTab.home.title, systemImage: MainTab.home.icon)
-                }
-                .tag(MainTab.home)
-
-            // Programs - requires activation
-            if programsUnlocked {
-                ProgramsLibraryView()
-                    .tabItem {
-                        Label(MainTab.programs.title, systemImage: MainTab.programs.icon)
-                    }
-                    .tag(MainTab.programs)
-            }
-
-            // Chat - always visible
-            ChatListView()
-                .tabItem {
-                    Label(MainTab.chat.title, systemImage: MainTab.chat.icon)
-                }
-                .tag(MainTab.chat)
-
-            // Progress/Outcomes - requires activation
-            if outcomesUnlocked {
-                OutcomeHomeView(outcomeService: container.outcomeService, authService: container.supabaseAuthService)
-                    .tabItem {
-                        Label(MainTab.outcomes.title, systemImage: MainTab.outcomes.icon)
-                    }
-                    .tag(MainTab.outcomes)
-            }
-
-            // Profile/More - always visible (includes Mentorship)
-            ProfileView()
-                .tabItem {
-                    Label("More", systemImage: "ellipsis")
-                }
-                .tag(MainTab.profile)
-        }
+        shellTabs
         .onReceive(container.activationService.$justActivated) { justActivated in
             if justActivated {
-                showFeatureUnlock = true
+                acknowledgeActivation()
             }
         }
         .onReceive(container.activationService.$unlockedFeatures) { features in
@@ -75,6 +42,9 @@ struct MainTabView: View {
             presentPendingDeepLink()
         }
         .task {
+            #if DEBUG
+            if SupportSessionUIFixture.isEnabled { return }
+            #endif
             // Load activation state on appear
             await container.activationService.loadActivationState()
             // Initialize local state
@@ -83,7 +53,7 @@ struct MainTabView: View {
             activationLoaded = true
             // Check if justActivated was set before view appeared (timing edge case)
             if container.activationService.justActivated {
-                showFeatureUnlock = true
+                acknowledgeActivation()
             }
         }
         .onChange(of: deepLinkRouter.pendingRequest) { _, _ in presentPendingDeepLink() }
@@ -98,7 +68,7 @@ struct MainTabView: View {
             // A link received while a sheet is open waits for its dismissal, without a timer.
             presentPendingDeepLink()
         }) { request in
-            DeepLinkDestinationView(request: request)
+            DeepLinkDestinationView(request: request, stableShell: useSupportShell)
                 .onAppear { deepLinkRouter.consume(request) }
         }
         .sheet(isPresented: $appState.showCrisisResources) {
@@ -139,6 +109,100 @@ struct MainTabView: View {
         // .celebrationOverlay(pending: $appState.pendingCelebrations)
     }
 
+    /// Legacy shell: tabs appear as features unlock. Kept byte-for-byte equivalent for rollback.
+    @ViewBuilder
+    private var legacyTabs: some View {
+        TabView(selection: $appState.selectedTab) {
+            // Home - always visible
+            HomeView()
+                .tabItem {
+                    Label(MainTab.home.title, systemImage: MainTab.home.icon)
+                }
+                .tag(MainTab.home)
+
+            // Programs - requires activation
+            if programsUnlocked {
+                ProgramsLibraryView()
+                    .tabItem {
+                        Label(MainTab.programs.title, systemImage: MainTab.programs.icon)
+                    }
+                    .tag(MainTab.programs)
+            }
+
+            // Chat - always visible
+            ChatListView()
+                .tabItem {
+                    Label(MainTab.chat.title, systemImage: MainTab.chat.icon)
+                }
+                .tag(MainTab.chat)
+
+            // Progress/Outcomes - requires activation
+            if outcomesUnlocked {
+                OutcomeHomeView(outcomeService: container.outcomeService, authService: container.supabaseAuthService)
+                    .tabItem {
+                        Label(MainTab.outcomes.title, systemImage: MainTab.outcomes.icon)
+                    }
+                    .tag(MainTab.outcomes)
+            }
+
+            // Profile/More - always visible (includes Mentorship)
+            ProfileView()
+                .tabItem {
+                    Label("More", systemImage: "ellipsis")
+                }
+                .tag(MainTab.profile)
+        }
+    }
+
+    @ViewBuilder
+    private var shellTabs: some View {
+        if useSupportShell {
+            // Account/epoch isolation is owned by the parent: AuthenticatedSupportRoot wraps this whole view in
+            // `.id(coordinator.identity.epochID)`, which also recreates `supportNavigator` and the pin store.
+            // This view deliberately does not add its own reset.
+            SupportShellTabs(accountID: appState.currentUser?.id)
+                .environmentObject(supportNavigator)
+        } else {
+            legacyTabs
+        }
+    }
+
+    /// The unlock celebration describes tabs that appear on activation. The stable shell never hides tabs, so
+    /// it only acknowledges the event (activation analytics/state are unchanged).
+    private func acknowledgeActivation() {
+        if useSupportShell {
+            container.activationService.clearJustActivated()
+        } else {
+            showFeatureUnlock = true
+        }
+    }
+
+    /// Route a request in the stable shell. Same request-identity and account guards as the legacy path,
+    /// with no activation hold. Record ownership, circle membership, and premium checks stay in
+    /// `DeepLinkDestinationView`, which every identifier-bearing route still goes through.
+    private func presentInStableShell(_ request: DeepLinkRouter.Request) {
+        switch request.route.supportPlacement {
+        case .tabRoot(let tab):
+            appState.selectedTab = tab
+            if case .chat(let id) = request.route, id != nil { return } // ChatListView resolves ownership and consumes this request.
+        case .destination(let destination):
+            appState.selectedTab = destination.tab.mainTab
+            supportNavigator.open(destination)
+        case .presented(let tab):
+            appState.selectedTab = tab
+            deepLinkPresentation = request
+            return
+        case .externalFlow:
+            return // Buddy acceptance has its own authenticated app-level path.
+        case .unavailable:
+            // Native unavailable screen with a way back, instead of a bare alert.
+            appState.selectedTab = SupportShellTab.today.mainTab
+            deepLinkPresentation = request
+            return
+        }
+        deepLinkRouter.consume(request)
+    }
+
     private func presentPendingDeepLink() {
         guard canPresentDeepLink,
               let request = deepLinkRouter.requestForPresentation(isAuthenticated: true) else { return }
@@ -148,6 +212,11 @@ struct MainTabView: View {
                 deepLinkDismissing = true
                 deepLinkPresentation = nil
             }
+            return
+        }
+
+        if useSupportShell {
+            presentInStableShell(request)
             return
         }
 
@@ -207,9 +276,119 @@ struct MainTabView: View {
 }
 
 
+/// The stable Today / Chat / Explore / You shell. Compact width: native `TabView`. Regular width (iPad, wide
+/// split view): the same four identities in a native `NavigationSplitView` sidebar. Tab tags reuse
+/// `MainTab.home/.chat/.circles/.profile`. Explore/You paths live in `SupportShellNavigator`, so they survive
+/// switching between layouts; Today/Chat view state is only kept while a layout is on screen.
+private struct SupportShellTabs: View {
+    @EnvironmentObject private var appState: AppState
+    @EnvironmentObject private var navigator: SupportShellNavigator
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @StateObject private var pins: SupportPinStore
+    /// Regular width keeps visited roots alive (like a TabView does) so switching doesn't discard their state.
+    @State private var visited: Set<MainTab> = []
+
+    init(accountID: UUID?) {
+        _pins = StateObject(wrappedValue: SupportPinStore(accountID: accountID))
+    }
+
+    /// Today derives its primary action from acknowledged local session state.
+    @ViewBuilder
+    private var todayRoot: some View {
+        SupportTodayView()
+    }
+
+    @ViewBuilder
+    private func root(for tab: SupportShellTab) -> some View {
+        switch tab {
+        case .today: todayRoot
+        case .chat: ChatListView()
+        case .explore: SupportExploreView()
+        case .you: SupportYouView(extensions: [
+            SupportYouExtension(id: "support-history", section: .history, title: "History", icon: "clock") { SupportSessionListView() },
+            SupportYouExtension(id: "support-steps", section: .progress, title: "Saved steps", icon: "checkmark.circle") { SupportSavedStepsView() },
+            SupportYouExtension(id: "support-reminders", section: .settings, title: "Step reminders", subtitle: "On this device", icon: "bell") { SupportStepReminderSettingsView() }
+        ])
+        }
+    }
+
+    var body: some View {
+        Group {
+            if sizeClass == .regular {
+                sidebarLayout
+            } else {
+                tabLayout
+            }
+        }
+        .environmentObject(pins)
+        .onAppear { select(appState.selectedTab) }
+        .onChange(of: appState.selectedTab) { _, tab in select(tab) }
+    }
+
+    private var tabLayout: some View {
+        TabView(selection: $appState.selectedTab) {
+            ForEach(SupportShellTab.allCases) { tab in
+                root(for: tab)
+                    .tabItem { Label(tab.title, systemImage: tab.icon) }
+                    .tag(tab.mainTab)
+            }
+        }
+    }
+
+    private var sidebarLayout: some View {
+        NavigationSplitView {
+            List(SupportShellTab.allCases, selection: Binding<SupportShellTab?>(
+                get: { SupportShellTab(mainTab: appState.selectedTab) },
+                set: { if let tab = $0 { appState.selectedTab = tab.mainTab } }
+            )) { tab in
+                Group {
+                    if dynamicTypeSize.isAccessibilitySize {
+                        Text(tab.title).fixedSize(horizontal: false, vertical: true)
+                    } else {
+                        Label(tab.title, systemImage: tab.icon)
+                    }
+                }
+                    .frame(minHeight: SupportTheme.minimumTarget)
+                    .accessibilityIdentifier("support-root-\(tab.title)")
+                    .tag(tab)
+            }
+            .navigationTitle("MindFriend")
+        } detail: {
+            ZStack {
+                ForEach(SupportShellTab.allCases) { tab in
+                    if visited.contains(tab.mainTab) {
+                        let isSelected = appState.selectedTab == tab.mainTab
+                        root(for: tab)
+                            .opacity(isSelected ? 1 : 0)
+                            .allowsHitTesting(isSelected)
+                            .accessibilityHidden(!isSelected)
+                    }
+                }
+            }
+        }
+    }
+
+    /// Onboarding, tutorials, and widgets may still select a legacy tab that no longer exists. Land on the
+    /// destination that replaced it instead of showing an empty tab.
+    private func select(_ tab: MainTab) {
+        if SupportShellTab(mainTab: tab) == nil {
+            if let destination = SupportDestination.replacingLegacyTab(tab) {
+                navigator.open(destination)
+            }
+            appState.selectedTab = tab.supportShellTag
+            return
+        }
+        visited.insert(tab)
+    }
+}
+
 /// Resolves linked identifiers through existing services before constructing their real views.
 private struct DeepLinkDestinationView: View {
     let request: DeepLinkRouter.Request
+    /// In the stable shell an unavailable link offers a route back to its category. The guarded resolver below
+    /// is unchanged: a missing/unauthorized record never falls back to a different record.
+    var stableShell = false
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var container: DependencyContainer
     @EnvironmentObject private var router: DeepLinkRouter
@@ -238,10 +417,20 @@ private struct DeepLinkDestinationView: View {
                     } description: {
                         Text(errorMessage)
                     } actions: {
-                        Button("Try Again") { retryID = UUID() }
+                        if retryable {
+                            Button("Try Again") { retryID = UUID() }
+                        }
+                        if stableShell {
+                            Button(returnTitle) {
+                                appState.selectedTab = returnTab
+                                dismiss()
+                            }
+                        }
                     }
                 } else if let destination {
+                    // One stack for the whole sheet: embedded roots must not add another.
                     destinationView(destination)
+                        .environment(\.supportRootEmbedded, true)
                 } else {
                     ProgressView("Opening link…")
                 }
@@ -254,6 +443,24 @@ private struct DeepLinkDestinationView: View {
         }
         .task(id: retryID) { await resolveDestination() }
     }
+
+    /// The tab whose category this link belongs to (Explore for circles/exercises/programs, You for assessments, ...).
+    private var returnTab: MainTab {
+        guard let tab = DeepLinkRouter.supportShellTab(for: request.route) else { return SupportShellTab.today.mainTab }
+        return tab
+    }
+
+    private var returnTitle: String {
+        let name = SupportShellTab(mainTab: returnTab)?.title ?? SupportShellTab.today.title
+        return String(localized: "Back to \(name)")
+    }
+
+    /// Retrying cannot fix an item that is gone or not yours, or a link that isn't supported.
+    private var retryable: Bool {
+        if case .unknown = request.route { return false }
+        return !isUnavailableError
+    }
+    @State private var isUnavailableError = false
 
     @ViewBuilder
     private func destinationView(_ destination: Destination) -> some View {
@@ -303,6 +510,11 @@ private struct DeepLinkDestinationView: View {
               container.supabaseAuthService.userId == userID else { return }
         destination = nil
         errorMessage = nil
+        isUnavailableError = false
+        if case .unknown = request.route {
+            errorMessage = "This link isn't supported or contains an invalid identifier."
+            return
+        }
         do {
             let resolved: Destination
             switch request.route {
@@ -359,7 +571,9 @@ private struct DeepLinkDestinationView: View {
             guard !Task.isCancelled, router.requestID == request.id,
                   appState.currentUser?.id == userID, container.supabaseAuthService.userId == userID,
                   appState.authState == .authenticated else { return }
-            errorMessage = DeepLinkRouter.destinationError(for: error)?.errorDescription
+            let destinationError = DeepLinkRouter.destinationError(for: error)
+            isUnavailableError = destinationError != nil
+            errorMessage = destinationError?.errorDescription
                 ?? "Couldn't load this item. Check your connection and try again."
         }
     }

@@ -176,6 +176,30 @@ final class LocalLogoutCompletionTests: XCTestCase {
         XCTAssertFalse(cleanupRan, "Keep the active UI until local credentials are actually removed")
     }
 
+    func testConfirmedAccountDeletionAttemptsEveryOwnerEraseDespiteEachEarlierFailure() async {
+        for failure in 0..<4 {
+            var events: [String] = []
+            let complete = await SupabaseAuthService.finishDeletedAccountCleanup(
+                endLocalSession: { events.append("session"); if failure == 0 { throw FixtureError.localRemovalFailed } },
+                eraseJournal: { await Task.yield(); events.append("journal"); if failure == 1 { throw FixtureError.localRemovalFailed } },
+                eraseCache: { events.append("cache"); if failure == 2 { throw FixtureError.localRemovalFailed } },
+                eraseQueuedData: { events.append("queue"); if failure == 3 { throw FixtureError.localRemovalFailed } }
+            )
+            XCTAssertFalse(complete, "A failed local cleanup must remain visible")
+            XCTAssertEqual(events, ["session", "journal", "cache", "queue"], "No deleted-owner erase may be skipped or replayed")
+        }
+    }
+
+    func testConfirmedAccountDeletionReturnsSuccessOnlyAfterAllErasesFinish() async {
+        var finished = false
+        let complete = await SupabaseAuthService.finishDeletedAccountCleanup(
+            endLocalSession: {}, eraseJournal: {}, eraseCache: {},
+            eraseQueuedData: { await Task.yield(); finished = true }
+        )
+        XCTAssertTrue(complete)
+        XCTAssertTrue(finished)
+    }
+
     func testConfirmedRevocationWaitsForLocalCleanup() async throws {
         var cleanupRan = false
         let remoteFailed = try await SupabaseAuthService.finishLogout(
@@ -663,4 +687,156 @@ private final class MonitoringFixtureNotificationCenter: InterventionNotificatio
     func removeDeliveredNotifications(withIdentifiers identifiers: [String]) { }
     func setNotificationCategories(_ categories: Set<UNNotificationCategory>) { }
     func setBadgeCount(_ newBadgeCount: Int) async throws { }
+}
+
+
+@MainActor
+final class ConfirmedAccountDeletionTests: XCTestCase {
+    private func rig() -> (SupabaseAuthService, SupabaseClient, DeletedAccountAuthStorage, UserDefaults, String, URLSession) {
+        DeletedAccountURLProtocol.fixture.reset()
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [DeletedAccountURLProtocol.self]
+        let transport = URLSession(configuration: configuration)
+        let storage = DeletedAccountAuthStorage()
+        let client = SupabaseClient(supabaseURL: URL(string: "https://deleted-account-fixture.invalid")!, supabaseKey: "synthetic-public",
+            options: .init(auth: .init(storage: storage, autoRefreshToken: false), global: .init(session: transport)))
+        let suite = "MindFriendConfirmedDeletionTests-" + UUID().uuidString
+        let defaults = UserDefaults(suiteName: suite)!
+        let service = SupabaseAuthService(client: client, authStorage: storage, accountDeletionSession: transport,
+            credentialRemovalDefaults: defaults, sdkSessionStorageKey: "sb-deleted-account-fixture-auth-token")
+        return (service, client, storage, defaults, suite, transport)
+    }
+
+    func testConfirmedDeletionWithCredentialFailurePurgesAndCannotResendOrRestore() async throws {
+        let (service, client, storage, defaults, suite, transport) = rig()
+        defer { defaults.removePersistentDomain(forName: suite); transport.invalidateAndCancel() }
+        let owner = DeletedAccountURLProtocol.fixture.owner
+        _ = try await client.auth.signIn(email: "synthetic@example.invalid", password: "synthetic")
+        let restored = await service.restoreSession(); XCTAssertTrue(restored)
+        var erased: [UUID] = [], pushUnregisters = 0
+        service.setAccountDeletedHandler { erased.append($0) }
+        service.setBeforeSignOutHandler { _ in pushUnregisters += 1 }
+        storage.failRemoval = true
+        do { try await service.deleteAccount(expectedOwner: owner); XCTFail("Local cleanup failure must be explicit") }
+        catch { XCTAssertTrue(error.localizedDescription.contains("account was deleted")) }
+        XCTAssertNil(service.session)
+        XCTAssertNil(service.currentUser)
+        XCTAssertTrue(service.signOutWarning?.contains("account was deleted") == true,
+            "The signed-out shell must receive the cleanup warning after the profile screen disappears")
+        XCTAssertEqual(erased, [owner])
+        XCTAssertEqual(pushUnregisters, 0, "A server-deleted account must not wait for push unregister")
+        XCTAssertEqual(DeletedAccountURLProtocol.fixture.deletionRequests, 1)
+        do { try await service.deleteAccount(expectedOwner: owner); XCTFail("A confirmed deletion must not be resent") } catch {}
+        XCTAssertEqual(DeletedAccountURLProtocol.fixture.deletionRequests, 1)
+        let removals = storage.removalAttempts
+        let blocked = await service.restoreSession(); XCTAssertFalse(blocked, "An unexpired but deleted credential must stay blocked")
+        XCTAssertGreaterThan(storage.removalAttempts, removals)
+        XCTAssertEqual(defaults.stringArray(forKey: "com.mindfriend.deletedCredentialOwners"), [owner.uuidString.lowercased()])
+        storage.failRemoval = false
+        let afterRemoval = await service.restoreSession(); XCTAssertFalse(afterRemoval, "Removal does not authorize restoring the deleted owner")
+        XCTAssertTrue(defaults.stringArray(forKey: "com.mindfriend.deletedCredentialOwners")?.isEmpty == true)
+    }
+
+    func testStoredDeletedCredentialIsBlockedByANewServiceWithTheSamePersistedMark() async throws {
+        let (service, client, storage, defaults, suite, transport) = rig()
+        defer { defaults.removePersistentDomain(forName: suite); transport.invalidateAndCancel() }
+        let owner = DeletedAccountURLProtocol.fixture.owner
+        _ = try await client.auth.signIn(email: "synthetic@example.invalid", password: "synthetic")
+        defaults.set([owner.uuidString.lowercased()], forKey: "com.mindfriend.deletedCredentialOwners")
+        storage.failRemoval = true
+        let relaunched = SupabaseAuthService(client: client, authStorage: storage, accountDeletionSession: transport,
+            credentialRemovalDefaults: defaults, sdkSessionStorageKey: "sb-deleted-account-fixture-auth-token")
+        let restored = await relaunched.restoreSession(); XCTAssertFalse(restored)
+        XCTAssertFalse(relaunched.isAuthenticated)
+        XCTAssertNil(relaunched.currentUser)
+        XCTAssertEqual(DeletedAccountURLProtocol.fixture.deletionRequests, 0)
+        _ = service // Retain the initial test host until the fixture request is finished.
+    }
+
+    func testAnotherAccountDuringConfirmedDeletionRemainsSignedInAndUntouched() async throws {
+        let (service, client, _, defaults, suite, transport) = rig()
+        defer { defaults.removePersistentDomain(forName: suite); transport.invalidateAndCancel() }
+        let original = DeletedAccountURLProtocol.fixture.owner, next = UUID()
+        _ = try await client.auth.signIn(email: "synthetic@example.invalid", password: "synthetic")
+        let restored = await service.restoreSession(); XCTAssertTrue(restored)
+        var erased: [UUID] = [], signOuts = 0
+        service.setAccountDeletedHandler { erased.append($0) }
+        service.setBeforeSignOutHandler { _ in signOuts += 1 }
+        let arrived = expectation(description: "Captured deletion arrived")
+        DeletedAccountURLProtocol.fixture.holdDeletion { arrived.fulfill() }
+        let deletion = Task { try await service.deleteAccount(expectedOwner: original) }
+        await fulfillment(of: [arrived], timeout: 3)
+        DeletedAccountURLProtocol.fixture.setOwner(next)
+        _ = try await client.auth.signIn(email: "second@example.invalid", password: "synthetic")
+        let switched = await service.restoreSession(); XCTAssertTrue(switched)
+        DeletedAccountURLProtocol.fixture.releaseDeletion()
+        try await deletion.value
+        XCTAssertEqual(service.userId, next)
+        XCTAssertEqual(client.auth.currentSession?.user.id, next)
+        XCTAssertEqual(erased, [original])
+        XCTAssertEqual(signOuts, 0)
+        XCTAssertEqual(DeletedAccountURLProtocol.fixture.deletionRequests, 1)
+    }
+}
+
+private final class DeletedAccountAuthStorage: AuthLocalStorage, @unchecked Sendable {
+    enum Fault: Error { case removalFailed }
+    private let lock = NSLock()
+    private var values: [String: Data] = [:]
+    private var removalFailure = false
+    private var removals = 0
+    var failRemoval: Bool { get { lock.withLock { removalFailure } } set { lock.withLock { removalFailure = newValue } } }
+    var removalAttempts: Int { lock.withLock { removals } }
+    func store(key: String, value: Data) throws { lock.withLock { values[key] = value } }
+    func retrieve(key: String) throws -> Data? { lock.withLock { values[key] } }
+    func remove(key: String) throws { try lock.withLock { removals += 1; if removalFailure { throw Fault.removalFailed }; values.removeValue(forKey: key) } }
+}
+
+private final class DeletedAccountURLProtocol: URLProtocol {
+    static let fixture = DeletedAccountHTTP()
+    private var responseTask: Task<Void, Never>?
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        responseTask = Task {
+            let data = await Self.fixture.respond(request)
+            guard !Task.isCancelled else { return }
+            client?.urlProtocol(self, didReceive: HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"])!, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: data)
+            client?.urlProtocolDidFinishLoading(self)
+        }
+    }
+    override func stopLoading() { responseTask?.cancel() }
+}
+
+private final class DeletedAccountHTTP: @unchecked Sendable {
+    private let lock = NSLock()
+    private var currentOwner = UUID()
+    private var deletes = 0
+    private var onDeletion: (() -> Void)?
+    private var continuation: CheckedContinuation<Void, Never>?
+    var owner: UUID { lock.withLock { currentOwner } }
+    var deletionRequests: Int { lock.withLock { deletes } }
+    func reset() { lock.withLock { currentOwner = UUID(); deletes = 0; onDeletion = nil; continuation = nil } }
+    func setOwner(_ owner: UUID) { lock.withLock { currentOwner = owner } }
+    func holdDeletion(_ onArrival: @escaping () -> Void) { lock.withLock { onDeletion = onArrival } }
+    func releaseDeletion() { let pending = lock.withLock { let value = continuation; continuation = nil; return value }; pending?.resume() }
+    func respond(_ request: URLRequest) async -> Data {
+        if request.url?.path.hasSuffix("delete-account") == true {
+            let callback = lock.withLock { deletes += 1; return onDeletion }
+            if let callback {
+                await withCheckedContinuation { pending in lock.withLock { continuation = pending }; callback() }
+            }
+            return Data("{\"success\":true}".utf8)
+        }
+        if request.url?.path.hasSuffix("/token") == true {
+            let object: [String: Any] = ["access_token": "synthetic-access", "token_type": "bearer", "expires_in": 3600,
+                "expires_at": Int(Date().timeIntervalSince1970) + 3600, "refresh_token": "synthetic-refresh",
+                "user": ["id": owner.uuidString, "aud": "authenticated", "role": "authenticated",
+                    "app_metadata": [:], "user_metadata": [:], "created_at": "2026-11-07T12:00:00Z", "updated_at": "2026-11-07T12:00:00Z"]]
+            return try! JSONSerialization.data(withJSONObject: object)
+        }
+        return Data("{}".utf8)
+    }
 }

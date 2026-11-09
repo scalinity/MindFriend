@@ -282,26 +282,31 @@ final class BillingService: ObservableObject {
             let subscriptionTier: String
             let dailyAiQuota: Int
             let dailyAiUsed: Int
+            let quotaResetAt: Date?
 
             enum CodingKeys: String, CodingKey {
                 case subscriptionTier = "subscription_tier"
                 case dailyAiQuota = "daily_ai_quota"
                 case dailyAiUsed = "daily_ai_used"
+                case quotaResetAt = "quota_reset_at"
             }
         }
 
         let entitlementsRow: DBEntitlementsRow = try await supabase
             .from(Tables.profiles)
-            .select("subscription_tier, daily_ai_quota, daily_ai_used")
+            .select("subscription_tier, daily_ai_quota, daily_ai_used, quota_reset_at")
             .eq("id", value: userId)
             .single()
             .execute()
             .value
 
+        guard authService.userId == userId else { throw CancellationError() }
         entitlements = Entitlements(
             tier: hasSponsoredAccess ? .premium : (Tier(rawValue: entitlementsRow.subscriptionTier) ?? .free),
             dailyAiQuota: hasSponsoredAccess ? -1 : entitlementsRow.dailyAiQuota,
-            dailyAiUsed: entitlementsRow.dailyAiUsed
+            dailyAiUsed: entitlementsRow.dailyAiUsed,
+            quotaPeriodStartedAt: entitlementsRow.quotaResetAt,
+            verifiedAt: Date()
         )
 
         // Also load subscription details

@@ -300,6 +300,16 @@ extension SupabaseDataServiceTests {
         XCTAssertEqual(response.message.createdAt.timeIntervalSince1970, 1710000001)
     }
 
+    func testChatWireResponseRetainsMemoryDisclosureAndUnknownLegacyState() throws {
+        let base = "\"message\":{\"id\":\"reply\",\"role\":\"assistant\",\"content\":\"Fixture\",\"createdAt\":1710000001,\"blocked\":false}"
+        let disclosed = try ChatFunctionResponse.decode(Data(("{" + base + ",\"memoryUsed\":true,\"memoryIdsUsed\":[\"owned-memory\"]}").utf8))
+        XCTAssertEqual(disclosed.memoryUsed, true)
+        XCTAssertEqual(disclosed.memoryIdsUsed, ["owned-memory"])
+        let legacy = try ChatFunctionResponse.decode(Data(("{" + base + "}").utf8))
+        XCTAssertNil(legacy.memoryUsed)
+        XCTAssertNil(legacy.memoryIdsUsed)
+    }
+
     func testChatWireResponseAcceptsInstalledBackendWithoutUserMessage() throws {
         let fixture = Data("""
         {"message":{"id":"legacy-assistant","role":"assistant","content":"Fixture","createdAt":1710000001,"blocked":false}}
@@ -782,6 +792,56 @@ private final class ChatTransportFixture: @unchecked Sendable {
     func snapshot()->Value {lock.lock();defer{lock.unlock()};return value}
 }
 
+extension SupabaseDataServiceTests {
+    @MainActor
+    func testOnboardingWireContractCarriesExpectedOwnerAndReceipt() throws {
+        let owner = UUID()
+        let parameters = SupabaseDataService.OnboardingParameters(
+            p_expected_user: owner, p_birth_year: 2000, p_confirms_thirteen: true,
+            p_accepts_terms: true, p_consent_version: OnboardingConsent.version)
+        let data = try JSONEncoder().encode(parameters)
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual((object["p_expected_user"] as? String)?.lowercased(), owner.uuidString.lowercased())
+        XCTAssertEqual(object["p_birth_year"] as? Int, 2000)
+        let receiptData = try JSONSerialization.data(withJSONObject: [
+            "user_id": owner.uuidString, "consent_version": OnboardingConsent.version,
+        ])
+        let receipt = try JSONDecoder().decode(SupabaseDataService.OnboardingReceipt.self, from: receiptData)
+        XCTAssertEqual(receipt.user_id, owner)
+        XCTAssertEqual(receipt.consent_version, OnboardingConsent.version)
+    }
+
+}
+
+extension SupabaseDataServiceTests {
+    @MainActor
+    func testAccountDeletionCapturesOwnerTokenAndRequiresConfirmedHTTPReceipt() async throws {
+        let owner = UUID()
+        let request = try SupabaseAuthService.accountDeletionRequest(owner: owner, token: "synthetic-owner-a",
+            projectURL: URL(string: "https://chat-fixture.invalid")!, apiKey: "synthetic-public")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer synthetic-owner-a")
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: try XCTUnwrap(request.httpBody)) as? [String: String])
+        XCTAssertEqual(body["expected_owner"], owner.uuidString.lowercased())
+        XCTAssertEqual(request.url?.path, "/functions/v1/delete-account")
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [ChatTransportURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+        for (status, object) in [(200, [:]), (200, ["success": false]), (403, ["success": true]), (200, ["success": true, "error": "not deleted"])] as [(Int, [String: Any])] {
+            ChatTransportURLProtocol.fixture.prepare(status: status, mime: "application/json",
+                chunks: [try JSONSerialization.data(withJSONObject: object)], failure: nil, keepOpen: false)
+            do {
+                _ = try await SupabaseAuthService.accountDeletionResponse(for: request, session: session)
+                XCTFail("Unconfirmed deletion must fail")
+            } catch {}
+        }
+        ChatTransportURLProtocol.fixture.prepare(status: 200, mime: "application/json",
+            chunks: [Data("{\"success\":true}".utf8)], failure: nil, keepOpen: false)
+        let receipt = try await SupabaseAuthService.accountDeletionResponse(for: request, session: session)
+        XCTAssertEqual(receipt.success, true)
+    }
+}
+
 @MainActor
 final class ForumLoadingTests: XCTestCase {
     private func makeService() -> ForumService {
@@ -896,14 +956,17 @@ final class ChatHistoryPaginationTests: XCTestCase {
         let service = service()
         var cursor: ChatHistoryCursor?
         var ids: [String] = []
+        var undated = 0
         for _ in 0..<8 {
             let page = try await service.getConversationPage(before: cursor)
             XCTAssertLessThanOrEqual(page.items.count, 100)
             ids += page.items.map { $0.id.lowercased() }
+            undated += page.items.filter { $0.dateIsKnown == false }.count
             cursor = page.nextCursor
             if cursor == nil { break }
         }
         XCTAssertNil(cursor, "Conversation pagination must terminate within the fixture's bounded page count")
+        XCTAssertEqual(undated, 3, "Missing legacy dates must remain unknown rather than become the current date")
         XCTAssertEqual(ids.count, 101)
         XCTAssertEqual(Set(ids).count, 101)
         let requests = ChatHistoryURLProtocol.fixture.requests
@@ -913,6 +976,36 @@ final class ChatHistoryPaginationTests: XCTestCase {
         XCTAssertEqual(lastQuery.first { $0.name == "updated_at" }?.value?.lowercased(), "is.null")
         XCTAssertEqual(lastQuery.first { $0.name == "id" }?.value?.lowercased(), "lt.\(ChatHistoryHTTP.id(1))")
         XCTAssertEqual(ids, (0..<101).reversed().map(ChatHistoryHTTP.id))
+    }
+
+    func testMessagePagesPreserveVoiceMetadataAndTheTimelineUsesProviderOrder() async throws {
+        let service = service()
+        ChatHistoryURLProtocol.fixture.includeVoiceMetadata()
+        let page = try await service.getMessagePage(conversationId: ChatHistoryHTTP.conversation.uuidString)
+        let turns = page.items.filter { $0.voiceCallID == ChatHistoryHTTP.voiceCall }
+        XCTAssertEqual(turns.map(\.voiceEventOrder), [2, 1])
+        XCTAssertEqual(turns.map(\.contentOrigin), [.model, nil])
+        let timeline = SupportChatRow.merge(messages: page.items, localEvents: [])
+        XCTAssertEqual(timeline.map(\.id).filter { [ChatHistoryHTTP.id(149), ChatHistoryHTTP.id(150)].contains($0) },
+                       [ChatHistoryHTTP.id(150), ChatHistoryHTTP.id(149)])
+    }
+
+    func testLoadingEarlierPageKeepsAVoiceCallInProviderOrderAndRetainsTheScrollAnchor() async throws {
+        let service = service()
+        ChatHistoryURLProtocol.fixture.includeVoiceAcrossPageBoundary()
+        let first = try await service.getMessagePage(conversationId: ChatHistoryHTTP.conversation.uuidString)
+        let firstTimeline = SupportChatRow.merge(messages: first.items, localEvents: [])
+        let anchor = try XCTUnwrap(firstTimeline.first?.id)
+        XCTAssertEqual(anchor, ChatHistoryHTTP.id(101))
+        let cursor = try XCTUnwrap(first.nextCursor)
+        let earlier = try await service.getMessagePage(conversationId: ChatHistoryHTTP.conversation.uuidString, before: cursor)
+        let combined = earlier.items + first.items
+        let timeline = SupportChatRow.merge(messages: combined, localEvents: [])
+        let callIDs = Set([ChatHistoryHTTP.id(100), ChatHistoryHTTP.id(101)])
+        XCTAssertEqual(timeline.map(\.id).filter { callIDs.contains($0) }, [ChatHistoryHTTP.id(100), ChatHistoryHTTP.id(101)])
+        XCTAssertTrue(timeline.contains { $0.id == anchor }, "Load earlier can still scroll to its captured native row")
+        XCTAssertEqual(Set(timeline.map(\.id)).count, combined.count)
+        XCTAssertEqual(timeline.count, 100)
     }
 
     func testMessagesTraverseBoundedPagesWithoutGapsOrDuplicates() async throws {
@@ -954,13 +1047,18 @@ private final class ChatHistoryURLProtocol: URLProtocol {
 }
 
 private final class ChatHistoryHTTP: @unchecked Sendable {
+    static let voiceCall = UUID(uuidString: "44444444-4444-4444-8444-444444444444")!
     static let owner = UUID(uuidString: "11111111-1111-4111-8111-111111111111")!
     static let conversation = UUID(uuidString: "22222222-2222-4222-8222-222222222222")!
     static func id(_ index: Int) -> String { String(format: "33333333-3333-4333-8333-%012d", index) }
     private let lock = NSLock()
     private var recorded: [URLRequest] = []
+    private var addVoiceMetadata = false
+    private var voiceAcrossBoundary = false
     var requests: [URLRequest] { lock.lock(); defer { lock.unlock() }; return recorded }
-    func reset() { lock.lock(); defer { lock.unlock() }; recorded = [] }
+    func reset() { lock.lock(); defer { lock.unlock() }; recorded = []; addVoiceMetadata = false; voiceAcrossBoundary = false }
+    func includeVoiceMetadata() { lock.lock(); defer { lock.unlock() }; addVoiceMetadata = true }
+    func includeVoiceAcrossPageBoundary() { lock.lock(); defer { lock.unlock() }; voiceAcrossBoundary = true }
     func respond(_ request: URLRequest) -> Data {
         lock.lock(); defer { lock.unlock() }; recorded.append(request)
         let query = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)!.queryItems ?? []
@@ -972,8 +1070,19 @@ private final class ChatHistoryHTTP: @unchecked Sendable {
                 return ["id": Self.id(index), "user_id": Self.owner.uuidString, "title": "Synthetic \(index)",
                         "created_at": date, "updated_at": date]
             }
-            return ["id": Self.id(index), "conversation_id": Self.conversation.uuidString, "role": "user",
+            var row: [String: Any] = ["id": Self.id(index), "conversation_id": Self.conversation.uuidString, "role": "user",
                     "content": "Synthetic \(index)", "created_at": date]
+            if addVoiceMetadata && index >= 149 {
+                row["voice_call_id"] = Self.voiceCall.uuidString
+                row["voice_event_order"] = 151 - index
+                if index == 149 { row["role"] = "assistant"; row["content_origin"] = "model" }
+            }
+            if voiceAcrossBoundary && [100, 101].contains(index) {
+                row["voice_call_id"] = Self.voiceCall.uuidString
+                row["voice_event_order"] = index - 99
+                if index == 101 { row["role"] = "assistant"; row["content_origin"] = "model" }
+            }
+            return row
         }
         if let filter = query.first(where: { $0.name == "or" })?.value {
             let timestamp = String(filter.dropFirst("(\(timestampField).lt.".count)).components(separatedBy: ",and(")[0]

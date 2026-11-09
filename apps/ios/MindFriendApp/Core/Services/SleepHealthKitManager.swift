@@ -35,8 +35,8 @@ final class SleepHealthKitManager: ObservableObject {
         try await healthStore.requestAuthorization(toShare: [], read: sleepDataTypes)
 
         // After requestAuthorization completes without throwing, the user has seen
-        // the authorization prompt. For read-only access, we set isAuthorized = true
-        // and rely on empty query results to detect denied permissions.
+        // the authorization prompt. isAuthorized allows queries after setup; it
+        // does not reveal read access. Empty results may mean no samples or no read access.
         // Note: authorizationStatus(for:) only tracks WRITE permissions, not read.
         isAuthorized = true
     }
