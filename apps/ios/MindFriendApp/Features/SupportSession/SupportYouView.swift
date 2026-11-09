@@ -36,7 +36,6 @@ struct SupportYouView: View {
     @State private var showSubscription = false
     @State private var showSOS = false
     @State private var badgeCount: Int?
-    @State private var replaceCandidate: SupportPin?
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -58,7 +57,6 @@ struct SupportYouView: View {
             }
             .sheet(isPresented: $showEditProfile) { EditProfileView() }
             .sheet(isPresented: $showSubscription) { SubscriptionView() }
-            .sheet(item: $replaceCandidate) { ReplacePinSheet(candidate: $0).environmentObject(pins) }
             .fullScreenCover(isPresented: $showSOS) {
                 SOSInterventionView().environmentObject(container)
             }
@@ -198,24 +196,13 @@ struct SupportYouView: View {
         }
     }
 
+    /// Pinning lives on the opened page's toolbar; the row only shows that it is pinned.
     private func pinnableRow(_ destination: SupportDestination) -> some View {
         HStack {
             NavigationLink(value: destination) { SupportRowLabel(destination) }
-            if destination.isPinnable {
-                Menu {
-                    if pins.isPinned(destination) {
-                        Button("Unpin from Today") { pins.unpin(destination) }
-                    } else if pins.isFull {
-                        Button("Replace a pin…") { replaceCandidate = SupportPin(destination) }
-                    } else {
-                        Button("Pin to Today") { pins.pin(destination) }
-                    }
-                } label: {
-                    Image(systemName: pins.isPinned(destination) ? "pin.fill" : "ellipsis.circle")
-                        .frame(minWidth: 44, minHeight: 44)
-                }
-                .buttonStyle(.borderless)
-                .accessibilityLabel("Pin options for \(destination.title)")
+            if pins.isPinned(destination) {
+                Image(systemName: "pin.fill").font(.caption).foregroundStyle(SupportTheme.accent)
+                    .accessibilityHidden(true)
             }
         }
     }

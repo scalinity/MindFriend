@@ -246,6 +246,7 @@ struct ChatView: View {
             .focused($isInputFocused)
         }
         .sentryMaskChat()
+        .supportScreen()
         .navigationTitle(dynamicTypeSize.isAccessibilitySize ? "Chat" : displayTitle)
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
@@ -271,10 +272,9 @@ struct ChatView: View {
                 Button {
                     appState.showCrisisResources = true
                 } label: {
-                    Image(systemName: "heart.text.square.fill")
-                        .foregroundStyle(.red)
+                    Image(systemName: "lifepreserver")
                 }
-                .accessibilityLabel("Get crisis help")
+                .accessibilityLabel("Support and crisis resources")
                 .accessibilityHint("Opens crisis resources and hotlines")
             }
         }
@@ -511,7 +511,7 @@ struct ChatView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .fixedSize(horizontal: false, vertical: true)
         .padding()
-        .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+        .background(SupportTheme.surface, in: RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
         .accessibilityIdentifier("chat-send-feedback")
     }
 
@@ -799,7 +799,7 @@ struct TypingIndicator: View {
             HStack(spacing: 4) {
                 ForEach(0..<3, id: \.self) { index in
                     Circle()
-                        .fill(Color.secondary)
+                        .fill(SupportTheme.textSecondary)
                         .frame(width: 8, height: 8)
                         .scaleEffect(animating ? 1.2 : 0.8)
                         .animation(
@@ -812,8 +812,7 @@ struct TypingIndicator: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
-            .background(Color(uiColor: .secondarySystemBackground))
-            .cornerRadius(20)
+            .background(SupportTheme.surface, in: RoundedRectangle(cornerRadius: 20))
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("MindFriend is typing")
 
@@ -839,8 +838,9 @@ struct ChatInputBar: View {
                 .lineLimit(1...5)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
-                .background(Color(uiColor: .secondarySystemBackground))
-                .cornerRadius(20)
+                .foregroundStyle(SupportTheme.textPrimary)
+                .background(SupportTheme.field, in: RoundedRectangle(cornerRadius: 20))
+                .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(SupportTheme.border, lineWidth: 1))
                 .submitLabel(.send)
                 .onSubmit {
                     if canSend {
@@ -853,7 +853,7 @@ struct ChatInputBar: View {
             Button(action: onSend) {
                 Image(systemName: "arrow.up.circle.fill")
                     .font(.title)
-                    .foregroundStyle(canSend ? Color.accentColor : Color.secondary)
+                    .foregroundStyle(canSend ? SupportTheme.accent : SupportTheme.textSecondary)
             }
             .disabled(!canSend)
             .accessibilityLabel("Send message")
@@ -861,7 +861,7 @@ struct ChatInputBar: View {
         }
         .padding(.horizontal)
         .padding(.vertical, 8)
-        .background(Color(uiColor: .systemBackground))
+        .background(SupportTheme.canvas)
     }
 }
 
