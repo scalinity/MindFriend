@@ -5,7 +5,7 @@ import UIKit
 
 /// One development switch for the stable Today / Chat / Explore / You shell (SUPPORT_SESSION_SPEC §10.1.7).
 ///
-/// - Default: ON in every build. 1.0.6 ships the Today / Chat / Explore / You shell.
+/// - Default: ON in every build. 2.0.0 ships the Today / Chat / Explore / You shell.
 /// - Override without a rebuild: launch argument `-mf.supportShell.enabled YES|NO`
 ///   (UserDefaults picks launch arguments up automatically) or `defaults write <bundle> mf.supportShell.enabled -bool NO`.
 /// - Turning it off only swaps the navigation shell back to the legacy tabs. Records, pins, and sessions are untouched.
