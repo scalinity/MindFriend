@@ -65,6 +65,11 @@ verify_jwt = false  # Verified internally in function code
 [functions.voice-token]
 verify_jwt = false  # Verified internally in function code
 
+# The voice relay. Released clients authenticate the token request and the WebSocket upgrade
+# inside the function, matching the production deployment.
+[functions.test-auth-diagnostic]
+verify_jwt = false
+
 [functions.b2b-stripe-webhook]
 verify_jwt = false
 

@@ -6,6 +6,7 @@ import { getCorsHeaders } from "../_shared/cors.ts";
 import { createLogger } from "../_shared/logger.ts";
 import { errorResponse } from "../_shared/error-handler.ts";
 import { deleteAccountMedia } from "./storage-cleanup.ts";
+import { parseDeletionRequest } from "./request-body.ts";
 
 const log = createLogger("delete-account");
 
@@ -66,17 +67,12 @@ Deno.serve(async (req) => {
     const userId = user.id;
     // Older clients omit this field. New clients bind a destructive request to the account
     // selected before the request began, even if their SDK session changes meanwhile.
-    let body: Record<string, unknown> = {};
-    if (req.body !== null) {
-      try {
-        const parsed = await req.json();
-        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("invalid body");
-        body = parsed;
-      } catch {
-        return new Response(JSON.stringify({ error: "Invalid deletion request" }), {
-          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
+    // Released clients send an empty POST; an empty body is a request without that binding.
+    const body = parseDeletionRequest(await req.text());
+    if (body === null) {
+      return new Response(JSON.stringify({ error: "Invalid deletion request" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
     if (body.expected_owner !== undefined &&
       (typeof body.expected_owner !== "string" || body.expected_owner.toLowerCase() !== userId.toLowerCase())) {
