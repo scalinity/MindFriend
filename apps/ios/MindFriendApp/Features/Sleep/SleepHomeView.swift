@@ -4,6 +4,7 @@ import SwiftUI
 struct SleepHomeView: View {
     @EnvironmentObject private var container: DependencyContainer
     @EnvironmentObject private var appState: AppState
+    @Environment(\.supportRootEmbedded) private var supportRootEmbedded
     @StateObject private var viewModel: SleepViewModel
     @State private var selectedContent: SleepContent?
     @State private var showPlayer = false
@@ -14,7 +15,8 @@ struct SleepHomeView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        // Inside the shell, Explore's stack hosts Sleep; standalone it brings its own.
+        SupportRootNavigation(embedded: supportRootEmbedded) {
             ZStack {
                 // Night-themed background gradient
                 LinearGradient(

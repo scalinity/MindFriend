@@ -185,7 +185,8 @@ final class SupportNavigationTests: XCTestCase {
         XCTAssertFalse(SupportDestination.liveSessions.ownsNavigationStack)
         XCTAssertFalse(SupportDestination.journal.ownsNavigationStack, "journal is a hub; its children are embedded")
         XCTAssertTrue(SupportDestination.circles.ownsNavigationStack)
-        XCTAssertEqual(SupportDestination.allCases.filter(\.ownsNavigationStack).count, 16)
+        XCTAssertTrue(SupportDestination.sleep.ownsNavigationStack, "Sleep embeds in Explore's stack")
+        XCTAssertEqual(SupportDestination.allCases.filter(\.ownsNavigationStack).count, 17)
     }
 
     func testSimplerViewUsesTheImmediatelyReversiblePreference() {
