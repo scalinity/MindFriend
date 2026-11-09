@@ -10,53 +10,54 @@ struct LockScreenView: View {
 
     var body: some View {
         ZStack {
-            Color(.systemBackground)
+            SupportTheme.canvas
                 .ignoresSafeArea()
 
-            VStack(spacing: 32) {
+            VStack(spacing: SupportTheme.Spacing.xl) {
                 Spacer()
 
                 Image(systemName: lockManager.biometricType.iconName)
                     .font(.system(size: 80))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .symbolEffect(.pulse, isActive: isAuthenticating)
 
                 Text("MindFriend is locked")
                     .font(.title2)
+                    .accessibilityAddTraits(.isHeader)
                     .fontWeight(.medium)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
 
                 Text("Unlock with \(lockManager.biometricType.displayName)")
                     .font(.subheadline)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(SupportTheme.textSecondary)
 
                 Button {
                     unlock()
                 } label: {
-                    HStack(spacing: 12) {
+                    HStack(spacing: SupportTheme.Spacing.s) {
                         Image(systemName: lockManager.biometricType.iconName)
                         Text("Unlock with \(lockManager.biometricType.displayName)")
                     }
                     .font(.headline)
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 32)
-                    .padding(.vertical, 16)
-                    .background(Color.accentColor)
+                    .foregroundStyle(SupportTheme.onAccent)
+                    .padding(.horizontal, SupportTheme.Spacing.xl)
+                    .padding(.vertical, SupportTheme.Spacing.m)
+                    .background(SupportTheme.accent)
                     .clipShape(Capsule())
                 }
                 .disabled(isAuthenticating)
-                .padding(.top, 32)
+                .padding(.top, SupportTheme.Spacing.xl)
 
                 Spacer()
 
                 Text("Your privacy is protected")
                     .font(.caption)
-                    .foregroundStyle(.tertiary)
-                    .padding(.bottom, 32)
+                    .foregroundStyle(SupportTheme.textSecondary)
+                    .padding(.bottom, SupportTheme.Spacing.xl)
             }
         }
         .alert("Unlock Failed", isPresented: $showError) {
-            Button("Try Again", role: .cancel) { }
+            Button("Try Again", role: .cancel) {}
         } message: {
             Text(errorMessage)
         }
@@ -81,6 +82,7 @@ struct LockScreenView: View {
 }
 
 struct PrivacyLockOverlay: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @StateObject private var lockManager = PrivacyLockManager.shared
     let onUnlock: () -> Void
 
@@ -93,7 +95,7 @@ struct PrivacyLockOverlay: ViewModifier {
                     .transition(.opacity)
             }
         }
-        .animation(.easeInOut(duration: 0.3), value: lockManager.isLocked)
+        .animation(reduceMotion ? .easeInOut(duration: 0.2) : (.easeInOut(duration: 0.3)), value: lockManager.isLocked)
         .task {
             // Load privacy lock settings on app launch
             await lockManager.loadSettings()

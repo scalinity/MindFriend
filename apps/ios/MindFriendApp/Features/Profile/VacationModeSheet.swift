@@ -6,7 +6,7 @@ struct VacationModeSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var startDate = Date()
-    @State private var endDate = Date().addingTimeInterval(7 * 24 * 60 * 60) // Default 7 days
+    @State private var endDate = Date().addingTimeInterval(7 * 24 * 60 * 60)  // Default 7 days
     @State private var reason = ""
     @State private var isActivating = false
     @State private var errorMessage: String?
@@ -20,6 +20,8 @@ struct VacationModeSheet: View {
                 infoSection
                 activateButton
             }
+            .supportScreen()
+            .foregroundStyle(SupportTheme.textPrimary)
             .navigationTitle("Vacation Mode")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -27,7 +29,8 @@ struct VacationModeSheet: View {
                     Button("Cancel") { dismiss() }
                 }
             }
-            .alert("Error", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
+            .alert("Error", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } }))
+            {
                 Button("OK") { errorMessage = nil }
             } message: {
                 if let errorMessage = errorMessage {
@@ -37,7 +40,7 @@ struct VacationModeSheet: View {
             .alert("Vacation Mode Activated", isPresented: $showSuccess) {
                 Button("Done") { dismiss() }
             } message: {
-                Text("Your streak is frozen for \(dayCount) days")
+                Text("Vacation mode is active for \(dayCount) days")
             }
             .disabled(isActivating)
         }
@@ -54,7 +57,7 @@ struct VacationModeSheet: View {
                 Text("Duration")
                 Spacer()
                 Text("\(dayCount) days")
-                    .foregroundStyle(dayCount > 14 ? .red : .secondary)
+                    .foregroundStyle(dayCount > 14 ? .red : SupportTheme.textSecondary)
             }
         } header: {
             Text("Vacation Period")
@@ -63,9 +66,10 @@ struct VacationModeSheet: View {
                 Text(error)
                     .foregroundStyle(.red)
             } else {
-                Text("Your streak will be frozen during this period")
+                Text("Take this time at your own pace")
             }
         }
+        .listRowBackground(SupportTheme.surface)
     }
 
     private var reasonSection: some View {
@@ -83,26 +87,28 @@ struct VacationModeSheet: View {
         } footer: {
             HStack {
                 Text("\(reason.count)/200")
-                    .foregroundStyle(reason.count > 200 ? .red : .secondary)
+                    .foregroundStyle(reason.count > 200 ? .red : SupportTheme.textSecondary)
                 Spacer()
             }
         }
+        .listRowBackground(SupportTheme.surface)
     }
 
     private var infoSection: some View {
         Section {
-            Label("Your streak won't be affected during vacation mode", systemImage: "shield.fill")
-                .foregroundStyle(.secondary)
+            Label("Your usual activities remain available", systemImage: "shield.fill")
+                .foregroundStyle(SupportTheme.textSecondary)
                 .font(.caption)
 
             Label("You can still complete quests if you want", systemImage: "checkmark.circle.fill")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .font(.caption)
 
             Label("Free tier: 1 vacation per month", systemImage: "info.circle.fill")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .font(.caption)
         }
+        .listRowBackground(SupportTheme.surface)
     }
 
     private var activateButton: some View {
@@ -113,16 +119,17 @@ struct VacationModeSheet: View {
                 HStack {
                     if isActivating {
                         ProgressView()
-                            .tint(.white)
+                            .tint(SupportTheme.textPrimary)
                     }
                     Text(isActivating ? "Activating..." : "Activate Vacation Mode")
                         .frame(maxWidth: .infinity)
                 }
             }
             .disabled(isActivating || !isValid)
-            .listRowBackground(isValid ? Color.blue : Color.gray.opacity(0.3))
-            .foregroundStyle(.white)
+            .listRowBackground(isValid ? SupportTheme.accent : SupportTheme.textSecondary.opacity(0.3))
+            .foregroundStyle(SupportTheme.textPrimary)
         }
+        .listRowBackground(SupportTheme.surface)
     }
 
     // MARK: - Computed Properties
@@ -131,30 +138,30 @@ struct VacationModeSheet: View {
         let days = Calendar.current.dateComponents([.day], from: startDate, to: endDate).day ?? 0
         return days + 1  // +1 for inclusive counting (matching server logic)
     }
-    
+
     private var validationError: String? {
         let today = Calendar.current.startOfDay(for: Date())
         let start = Calendar.current.startOfDay(for: startDate)
-        
+
         // Check if start date is in the past
         if start < today {
             return "Start date cannot be in the past"
         }
-        
+
         // Check day count range
         if dayCount < 1 {
             return "Vacation must be at least 1 day"
         }
-        
+
         if dayCount > 14 {
             return "Maximum vacation duration is 14 days"
         }
-        
+
         // Check reason length
         if reason.count > 200 {
             return "Reason must be 200 characters or less"
         }
-        
+
         return nil
     }
 
@@ -170,17 +177,18 @@ struct VacationModeSheet: View {
             errorMessage = validationError
             return
         }
-        
+
         isActivating = true
         defer { isActivating = false }
 
         do {
             // Sanitize reason (remove HTML/script tags)
-            let sanitizedReason = reason
+            let sanitizedReason =
+                reason
                 .trimmingCharacters(in: .whitespacesAndNewlines)
                 .replacingOccurrences(of: "<", with: "")
                 .replacingOccurrences(of: ">", with: "")
-            
+
             let service = StreakShieldService(supabase: container.supabase)
             _ = try await service.toggleVacation(
                 action: .activate,

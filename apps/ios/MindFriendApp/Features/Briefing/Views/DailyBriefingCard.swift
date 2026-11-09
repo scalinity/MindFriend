@@ -50,26 +50,25 @@ struct DailyBriefingCard: View {
     // MARK: - Loading State
 
     private var loadingView: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: SupportTheme.Spacing.s) {
             ProgressView()
             Text("Loading your briefing...")
                 .font(.subheadline)
-                .foregroundColor(.secondary)
+                .foregroundColor(SupportTheme.textSecondary)
         }
         .frame(maxWidth: .infinity)
-        .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
+        .supportCard()
         .shadow(radius: 2)
     }
 
     // MARK: - Briefing View
 
     private func briefingView(_ briefing: DailyBriefing) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             // Greeting - use current name, not cached
             Text(currentGreeting)
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
             // Mood prediction
             if let mood = briefing.predictedMood, let outlook = briefing.moodOutlook {
@@ -79,7 +78,7 @@ struct DailyBriefingCard: View {
                         .font(.subheadline)
                     Text("(\(String(format: "%.1f", mood)))")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(SupportTheme.textSecondary)
                 }
             }
 
@@ -106,39 +105,40 @@ struct DailyBriefingCard: View {
                 Spacer()
                 Text("Tap to view full briefing →")
                     .font(.caption)
-                    .foregroundColor(.blue)
+                    .foregroundColor(SupportTheme.accent)
             }
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
+        .background(SupportTheme.canvas)
+        .cornerRadius(SupportTheme.controlRadius)
         .shadow(radius: 2)
     }
 
     // MARK: - Error State
 
     private func errorView(_ error: String) -> some View {
-        VStack(spacing: 12) {
+        VStack(spacing: SupportTheme.Spacing.s) {
             Image(systemName: "exclamationmark.triangle")
                 .font(.largeTitle)
-                .foregroundColor(.orange)
+                .foregroundColor(SupportTheme.accent)
             Text("Unable to load briefing")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
             Text(error)
                 .font(.caption)
-                .foregroundColor(.secondary)
+                .foregroundColor(SupportTheme.textSecondary)
             Button("Retry") {
                 Task {
                     await viewModel.refreshBriefing()
                 }
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.supportPrimary)
         }
         .padding()
         .frame(maxWidth: .infinity)
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
+        .background(SupportTheme.canvas)
+        .cornerRadius(SupportTheme.controlRadius)
         .shadow(radius: 2)
     }
 

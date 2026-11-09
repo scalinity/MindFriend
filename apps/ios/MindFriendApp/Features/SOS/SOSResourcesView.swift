@@ -5,6 +5,7 @@ import SwiftUI
 
 /// Crisis resources and support options screen
 struct SOSResourcesView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject var container: DependencyContainer
 
     var sosCoordinator: SOSCoordinator {
@@ -18,22 +19,23 @@ struct SOSResourcesView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 24) {
+            VStack(spacing: SupportTheme.Spacing.l) {
                 // Header
-                VStack(spacing: 8) {
+                VStack(spacing: SupportTheme.Spacing.xs) {
                     Image(systemName: "heart.fill")
                         .font(.system(size: 40))
-                        .foregroundStyle(.pink)
+                        .foregroundStyle(SupportTheme.accent)
 
                     Text("How are you feeling now?")
                         .font(.title2)
+                        .accessibilityAddTraits(.isHeader)
                         .fontWeight(.bold)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(SupportTheme.textPrimary)
                 }
-                .padding(.top, 40)
+                .padding(.top, SupportTheme.Spacing.xl)
 
                 // Mood selector
-                HStack(spacing: 16) {
+                HStack(spacing: SupportTheme.Spacing.m) {
                     ForEach(1...5, id: \.self) { mood in
                         Button {
                             selectedMood = mood
@@ -41,7 +43,7 @@ struct SOSResourcesView: View {
                         } label: {
                             Text(moodEmoji(for: mood))
                                 .font(.system(size: 36))
-                                .scaleEffect(selectedMood == mood ? 1.2 : 1.0)
+                                .scaleEffect(reduceMotion ? 1 : (selectedMood == mood ? 1.2 : 1.0))
                                 .opacity(selectedMood == mood ? 1.0 : 0.6)
                         }
                         .buttonStyle(.plain)
@@ -49,25 +51,26 @@ struct SOSResourcesView: View {
                         .accessibilityAddTraits(selectedMood == mood ? .isSelected : [])
                     }
                 }
-                .padding(.vertical, 8)
+                .padding(.vertical, SupportTheme.Spacing.xs)
 
                 Divider()
-                    .background(Color.white.opacity(0.3))
-                    .padding(.horizontal, 40)
+                    .background(SupportTheme.textPrimary.opacity(0.3))
+                    .padding(.horizontal, SupportTheme.Spacing.xl)
 
                 // Resources section
-                VStack(spacing: 12) {
+                VStack(spacing: SupportTheme.Spacing.s) {
                     Text("What would help?")
                         .font(.headline)
-                        .foregroundStyle(.white.opacity(0.8))
+                        .accessibilityAddTraits(.isHeader)
+                        .foregroundStyle(SupportTheme.textPrimary.opacity(0.8))
 
-                    VStack(spacing: 12) {
+                    VStack(spacing: SupportTheme.Spacing.s) {
                         // Chat with MindFriend
                         ResourceButton(
                             icon: "bubble.left.fill",
                             title: "Chat with MindFriend",
                             subtitle: "Talk through what you're feeling",
-                            color: .blue
+                            color: SupportTheme.accent
                         ) {
                             onChatWithAI()
                         }
@@ -77,7 +80,7 @@ struct SOSResourcesView: View {
                             icon: "phone.fill",
                             title: "Call 988",
                             subtitle: "Suicide & Crisis Lifeline (24/7)",
-                            color: .green
+                            color: SupportTheme.accent
                         ) {
                             if let url = URL(string: "tel://988") {
                                 UIApplication.shared.open(url)
@@ -89,7 +92,7 @@ struct SOSResourcesView: View {
                             icon: "message.fill",
                             title: "Text HOME to 741741",
                             subtitle: "Crisis Text Line (24/7)",
-                            color: .purple
+                            color: SupportTheme.accent
                         ) {
                             if let url = URL(string: "sms:741741?body=HOME") {
                                 UIApplication.shared.open(url)
@@ -98,23 +101,27 @@ struct SOSResourcesView: View {
 
                         // Emergency Contact
                         if let settings = sosCoordinator.settings,
-                           let contactName = settings.emergencyContactName,
-                           let contactPhone = settings.emergencyContactPhone {
+                            let contactName = settings.emergencyContactName,
+                            let contactPhone = settings.emergencyContactPhone
+                        {
                             ResourceButton(
                                 icon: "person.fill",
                                 title: "Contact \(contactName)",
                                 subtitle: "Send them a message",
-                                color: .orange
+                                color: SupportTheme.accent
                             ) {
-                                let message = "I'm having a hard time right now. Just wanted to let you know I'm using my MindFriend app to help."
-                                if let encodedMessage = message.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-                                   let url = URL(string: "sms:\(contactPhone)?body=\(encodedMessage)") {
+                                let message =
+                                    "I'm having a hard time right now. Just wanted to let you know I'm using my MindFriend app to help."
+                                if let encodedMessage = message.addingPercentEncoding(
+                                    withAllowedCharacters: .urlQueryAllowed),
+                                    let url = URL(string: "sms:\(contactPhone)?body=\(encodedMessage)")
+                                {
                                     UIApplication.shared.open(url)
                                 }
                             }
                         }
                     }
-                    .padding(.horizontal, 24)
+                    .padding(.horizontal, SupportTheme.Spacing.l)
                 }
 
                 Spacer(minLength: 40)
@@ -126,32 +133,21 @@ struct SOSResourcesView: View {
                 } label: {
                     Text("I'm feeling better")
                         .font(.body.weight(.semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(SupportTheme.textPrimary)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
+                        .padding(.vertical, SupportTheme.Spacing.m)
                         .background(
-                            LinearGradient(
-                                colors: [.teal, .blue],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
+                            SupportTheme.surface
                         )
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
                 }
-                .padding(.horizontal, 24)
-                .padding(.bottom, 40)
+                .padding(.horizontal, SupportTheme.Spacing.l)
+                .padding(.bottom, SupportTheme.Spacing.xl)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(
-            LinearGradient(
-                colors: [
-                    Color(red: 0.15, green: 0.2, blue: 0.35),
-                    Color(red: 0.1, green: 0.1, blue: 0.2)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
+            SupportTheme.surface
         )
     }
 
@@ -189,7 +185,7 @@ struct ResourceButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 16) {
+            HStack(spacing: SupportTheme.Spacing.m) {
                 ZStack {
                     Circle()
                         .fill(color.opacity(0.2))
@@ -200,25 +196,25 @@ struct ResourceButton: View {
                         .foregroundStyle(color)
                 }
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     Text(title)
                         .font(.body.weight(.semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(SupportTheme.textPrimary)
 
                     Text(subtitle)
                         .font(.caption)
-                        .foregroundStyle(.white.opacity(0.6))
+                        .foregroundStyle(SupportTheme.textPrimary.opacity(0.6))
                 }
 
                 Spacer()
 
                 Image(systemName: "chevron.right")
                     .font(.body)
-                    .foregroundStyle(.white.opacity(0.4))
+                    .foregroundStyle(SupportTheme.textPrimary.opacity(0.4))
             }
-            .padding(16)
-            .background(Color.white.opacity(0.1))
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .padding(SupportTheme.Spacing.m)
+            .background(SupportTheme.textPrimary.opacity(0.1))
+            .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
         }
         .buttonStyle(.plain)
     }

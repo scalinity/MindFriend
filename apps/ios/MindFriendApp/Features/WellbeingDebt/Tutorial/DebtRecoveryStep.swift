@@ -9,6 +9,7 @@ import SwiftUI
 
 /// Step 4: Explain recovery program and encourage getting started
 struct DebtRecoveryStep: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let onComplete: () -> Void
 
     @State private var showSparkle = false
@@ -16,54 +17,58 @@ struct DebtRecoveryStep: View {
     var body: some View {
         TutorialStepLayout(
             icon: "heart.circle.fill",
-            iconColor: .pink,
+            iconColor: SupportTheme.accent,
             headline: "We've Got Your Back",
             subheadline: "When your debt approaches danger levels, we'll help you recover.",
             primaryLabel: "Get Started",
             primaryAction: onComplete,
             skipAction: nil
         ) {
-            VStack(spacing: 16) {
+            VStack(spacing: SupportTheme.Spacing.m) {
                 // Recovery program preview card
-                VStack(spacing: 8) {
+                VStack(spacing: SupportTheme.Spacing.xs) {
                     HStack {
                         Image(systemName: "sparkles")
-                            .foregroundStyle(.yellow)
-                            .scaleEffect(showSparkle ? 1.2 : 1.0)
+                            .foregroundStyle(SupportTheme.Celebration.gold)
+                            .scaleEffect(reduceMotion ? 1 : (showSparkle ? 1.2 : 1.0))
 
                         Text("Recovery Program")
                             .font(.headline)
+                            .accessibilityAddTraits(.isHeader)
 
                         Spacer()
                     }
 
                     Text("A personalized 7-day action plan with specific activities to rebuild your reserves.")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                         .multilineTextAlignment(.leading)
                         .fixedSize(horizontal: false, vertical: true)
 
                     // Sample recovery items
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                         recoveryItem(day: "Day 1", activity: "Sleep recovery focus")
                         recoveryItem(day: "Day 2", activity: "Light exercise")
                         recoveryItem(day: "Day 3", activity: "Social connection")
                     }
                 }
-                .padding(12)
-                .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
+                .padding(SupportTheme.Spacing.s)
+                .background(SupportTheme.surface, in: RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
 
                 // Reassurance text
                 Text("We'll alert you before things get critical and guide you back to balance.")
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal)
             }
             .padding(.horizontal)
             .onAppear {
-                withAnimation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true)) {
+                withAnimation(
+                    reduceMotion
+                        ? .easeInOut(duration: 0.2) : (.easeInOut(duration: 0.6).repeatForever(autoreverses: true))
+                ) {
                     showSparkle = true
                 }
             }
@@ -72,24 +77,24 @@ struct DebtRecoveryStep: View {
 
     @ViewBuilder
     private func recoveryItem(day: String, activity: String) -> some View {
-        HStack(spacing: 6) {
+        HStack(spacing: SupportTheme.Spacing.xs) {
             Text(day)
                 .font(.caption2.bold())
-                .foregroundStyle(.blue)
+                .foregroundStyle(SupportTheme.accent)
                 .fixedSize(horizontal: true, vertical: false)
 
             Text(activity)
                 .font(.caption2)
-                .foregroundStyle(.primary)
+                .foregroundStyle(SupportTheme.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
 
             Spacer(minLength: 0)
 
             Image(systemName: "chevron.right")
                 .font(.system(size: 8))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
-        .padding(.vertical, 3)
+        .padding(.vertical, SupportTheme.Spacing.xxs)
     }
 }
 

@@ -12,114 +12,65 @@ struct ProgramsCertificateStep: View {
     let onComplete: () -> Void
 
     @State private var showCertificate = false
-    @State private var showSparkles = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         TutorialStepView(
             icon: "rosette",
-            iconColor: .yellow,
+            iconColor: SupportTheme.Celebration.gold,
             headline: "Earn Certificates",
             subheadline: "Complete a program to earn a certificate that celebrates your achievement.",
             primaryLabel: "Explore Programs",
             primaryAction: onComplete
         ) {
-            VStack(spacing: 16) {
-                // Certificate preview
-                ZStack {
-                    // Background sparkles
-                    if showSparkles {
-                        ForEach(0..<8, id: \.self) { i in
-                            Image(systemName: "sparkle")
-                                .font(.caption)
-                                .foregroundStyle(.yellow.opacity(0.6))
-                                .offset(
-                                    x: CGFloat.random(in: -80...80),
-                                    y: CGFloat.random(in: -60...60)
-                                )
-                                .scaleEffect(CGFloat.random(in: 0.5...1.0))
-                        }
-                    }
+            VStack(spacing: SupportTheme.Spacing.m) {
+                VStack(spacing: SupportTheme.Spacing.xs) {
+                    Image(systemName: "checkmark.seal.fill")
+                        .font(.largeTitle)
+                        .foregroundStyle(SupportTheme.Celebration.gold)
+                        .accessibilityHidden(true)
 
-                    // Certificate card
-                    VStack(spacing: 8) {
-                        // Seal
-                        ZStack {
-                            Circle()
-                                .fill(
-                                    LinearGradient(
-                                        colors: [.yellow, .orange],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                                .frame(width: 60, height: 60)
+                    Text("Certificate of completion")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(SupportTheme.textSecondary)
 
-                            Image(systemName: "checkmark.seal.fill")
-                                .font(.title)
-                                .foregroundStyle(.white)
-                        }
+                    Text("21-Day Anxiety Reset")
+                        .font(.headline)
+                        .foregroundStyle(SupportTheme.textPrimary)
 
-                        // Certificate text
-                        VStack(spacing: 8) {
-                            Text("Certificate of Completion")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
+                    Text("Completed January 2026")
+                        .font(.caption)
+                        .foregroundStyle(SupportTheme.textSecondary)
 
-                            Text("21-Day Anxiety Reset")
-                                .font(.headline)
-
-                            Text("Completed January 2026")
-                                .font(.caption)
-                                .foregroundStyle(.tertiary)
-                        }
-
-                        // Badge
-                        HStack(spacing: 6) {
-                            Image(systemName: "medal.fill")
-                                .foregroundStyle(.orange)
-                            Text("+500 XP")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.orange)
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(Color.orange.opacity(0.1))
-                        .clipShape(Capsule())
-                    }
-                    .padding(24)
-                    .background(Color(.secondarySystemBackground))
-                    .clipShape(RoundedRectangle(cornerRadius: 20))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 20)
-                            .strokeBorder(
-                                LinearGradient(
-                                    colors: [.yellow.opacity(0.5), .orange.opacity(0.5)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                ),
-                                lineWidth: 2
-                            )
-                    )
-                    .scaleEffect(showCertificate ? 1 : 0.8)
-                    .opacity(showCertificate ? 1 : 0)
+                    Label("+500 XP", systemImage: "medal.fill")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(SupportTheme.textPrimary)
+                        .padding(.horizontal, SupportTheme.Spacing.s)
+                        .padding(.vertical, SupportTheme.Spacing.xxs)
+                        .background(SupportTheme.elevated, in: Capsule())
                 }
-                .padding(.horizontal, 24)
+                .padding(SupportTheme.Spacing.l)
+                .frame(maxWidth: .infinity)
+                .background(SupportTheme.surface, in: RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
+                .overlay(
+                    RoundedRectangle(cornerRadius: SupportTheme.cardRadius)
+                        .strokeBorder(SupportTheme.Celebration.gold, lineWidth: 2)
+                )
+                .scaleEffect(showCertificate || reduceMotion ? 1 : 0.95)
+                .opacity(showCertificate ? 1 : 0)
+                .padding(.horizontal, SupportTheme.Spacing.l)
 
-                // Benefits
-                Text("Share your achievements and track your growth journey!")
+                Text("Share your achievements and see how far you have come.")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 24)
+                    .padding(.horizontal, SupportTheme.Spacing.l)
                     .opacity(showCertificate ? 1 : 0)
             }
             .onAppear {
-                withAnimation(.spring(response: 0.6, dampingFraction: 0.7).delay(0.3)) {
+                withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .easeOut(duration: 0.4).delay(0.2)) {
                     showCertificate = true
-                }
-                withAnimation(.easeInOut(duration: 0.5).delay(0.6)) {
-                    showSparkles = true
                 }
             }
         }

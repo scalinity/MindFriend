@@ -1,5 +1,5 @@
-import SwiftUI
 import Charts
+import SwiftUI
 
 struct BiometricsDashboardView: View {
     @ObservedObject private var healthKit = HealthKitService.shared
@@ -16,7 +16,7 @@ struct BiometricsDashboardView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 20) {
+                VStack(spacing: SupportTheme.Spacing.l) {
                     if !healthKit.hasCompletedPermissionRequest {
                         connectHealthKitCard
                     } else {
@@ -45,6 +45,8 @@ struct BiometricsDashboardView: View {
                 }
                 .padding()
             }
+            .supportScreen()
+            .foregroundStyle(SupportTheme.textPrimary)
             .navigationTitle("Body & Mind")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -54,6 +56,8 @@ struct BiometricsDashboardView: View {
                         } label: {
                             Image(systemName: "gearshape")
                         }
+                        .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                        .accessibilityLabel("Settings")
                     }
                 }
             }
@@ -82,17 +86,18 @@ struct BiometricsDashboardView: View {
     // MARK: - Connect Card
 
     private var connectHealthKitCard: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             Image(systemName: "heart.text.square.fill")
                 .font(.system(size: 60))
-                .foregroundStyle(.pink.gradient)
+                .foregroundStyle(SupportTheme.accent.gradient)
 
             Text("Connect Apple Health")
                 .font(.title2.bold())
+                .accessibilityAddTraits(.isHeader)
 
             Text("Understand how your sleep, activity, and stress levels affect your mood.")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .multilineTextAlignment(.center)
 
             Button {
@@ -101,11 +106,11 @@ struct BiometricsDashboardView: View {
                 Label("Connect Health Data", systemImage: "link")
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.supportPrimary)
             .controlSize(.large)
         }
         .padding()
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .background(SupportTheme.surface, in: RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
     }
 
     // MARK: - Syncing
@@ -115,27 +120,28 @@ struct BiometricsDashboardView: View {
             ProgressView()
             Text("Syncing health data...")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, SupportTheme.Spacing.xs)
     }
 
     // MARK: - Today's Metrics
 
     private var todayMetricsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("Today")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
             if let summary = todaySummary {
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: SupportTheme.Spacing.s) {
                     if let sleepHours = summary.sleepHours {
                         MetricCard(
                             icon: "moon.zzz.fill",
                             title: "Sleep",
                             value: String(format: "%.1fh", sleepHours),
                             subtitle: summary.sleepQualityScore.map { "\(Int($0 * 100))% efficiency" },
-                            color: .indigo
+                            color: SupportTheme.accent
                         )
                     }
 
@@ -155,7 +161,7 @@ struct BiometricsDashboardView: View {
                             title: "Steps",
                             value: summary.stepsFormatted ?? "\(steps)",
                             subtitle: summary.distanceFormatted,
-                            color: .green
+                            color: SupportTheme.accent
                         )
                     }
 
@@ -165,7 +171,7 @@ struct BiometricsDashboardView: View {
                             title: "Active Energy",
                             value: "\(activeKcal) cal",
                             subtitle: summary.exerciseMinutes.map { "\($0) min exercise" },
-                            color: .orange
+                            color: SupportTheme.accent
                         )
                     }
                 }
@@ -175,7 +181,7 @@ struct BiometricsDashboardView: View {
                     .padding()
             } else {
                 Text("No data for today yet")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .frame(maxWidth: .infinity)
                     .padding()
             }
@@ -185,9 +191,10 @@ struct BiometricsDashboardView: View {
     // MARK: - Alerts
 
     private var alertsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("Alerts")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
             ForEach(alerts.prefix(3)) { alert in
                 BiometricAlertCard(alert: alert) {
@@ -203,10 +210,11 @@ struct BiometricsDashboardView: View {
     // MARK: - Insights
 
     private var insightsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             HStack {
                 Text("Insights")
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
                 Spacer()
                 NavigationLink("See All") {
                     InsightsListView(insights: insights, healthKit: healthKit)
@@ -219,11 +227,11 @@ struct BiometricsDashboardView: View {
                     icon: "lightbulb.fill",
                     title: insight.title,
                     description: insight.description,
-                    color: .blue
+                    color: SupportTheme.accent
                 )
-                    .onTapGesture {
-                        selectedInsight = insight
-                    }
+                .onTapGesture {
+                    selectedInsight = insight
+                }
             }
         }
     }
@@ -231,9 +239,10 @@ struct BiometricsDashboardView: View {
     // MARK: - Correlations
 
     private var correlationsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("Your Patterns")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
             ForEach(correlations) { correlation in
                 CorrelationCard(correlation: correlation)
@@ -244,9 +253,10 @@ struct BiometricsDashboardView: View {
     // MARK: - Trends
 
     private var trendsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("7-Day Trends")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
             // Sleep trend chart
             if recentSummaries.contains(where: { $0.sleepDurationMinutes != nil }) {
@@ -261,10 +271,10 @@ struct BiometricsDashboardView: View {
     }
 
     private var sleepTrendChart: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             Text("Sleep")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
 
             Chart(recentSummaries.reversed()) { summary in
                 if let hours = summary.sleepHours {
@@ -272,7 +282,7 @@ struct BiometricsDashboardView: View {
                         x: .value("Date", summary.date),
                         y: .value("Hours", hours)
                     )
-                    .foregroundStyle(.indigo.gradient)
+                    .foregroundStyle(SupportTheme.accent.gradient)
                 }
             }
             .frame(height: 120)
@@ -292,14 +302,14 @@ struct BiometricsDashboardView: View {
             }
         }
         .padding()
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .background(SupportTheme.surface, in: RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
     }
 
     private var stepsTrendChart: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             Text("Steps")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
 
             Chart(recentSummaries.reversed()) { summary in
                 if let steps = summary.stepsCount {
@@ -307,13 +317,13 @@ struct BiometricsDashboardView: View {
                         x: .value("Date", summary.date),
                         y: .value("Steps", steps)
                     )
-                    .foregroundStyle(.green.gradient)
+                    .foregroundStyle(SupportTheme.accent.gradient)
 
                     AreaMark(
                         x: .value("Date", summary.date),
                         y: .value("Steps", steps)
                     )
-                    .foregroundStyle(.green.opacity(0.1).gradient)
+                    .foregroundStyle(SupportTheme.accent.opacity(0.1).gradient)
                 }
             }
             .frame(height: 120)
@@ -322,7 +332,7 @@ struct BiometricsDashboardView: View {
             }
         }
         .padding()
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .background(SupportTheme.surface, in: RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
     }
 
     // MARK: - Data Loading
@@ -334,8 +344,7 @@ struct BiometricsDashboardView: View {
         guard healthKit.hasCompletedPermissionRequest else { return }
 
         // Sync if needed (hourly)
-        if healthKit.lastSyncDate == nil ||
-           Date().timeIntervalSince(healthKit.lastSyncDate!) > 3600 {
+        if healthKit.lastSyncDate == nil || Date().timeIntervalSince(healthKit.lastSyncDate!) > 3600 {
             try? await healthKit.syncBiometrics(days: 7)
         }
 
@@ -405,27 +414,28 @@ struct MetricCard: View {
     let color: Color
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             HStack {
                 Image(systemName: icon)
                     .foregroundStyle(color)
                 Text(title)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
 
             Text(value)
                 .font(.title2.bold())
+                .accessibilityAddTraits(.isHeader)
 
             if let subtitle = subtitle {
                 Text(subtitle)
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
-        .background(color.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
+        .background(color.opacity(0.1), in: RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(title): \(value)")
     }
@@ -438,28 +448,28 @@ struct BiometricAlertCard: View {
     let onDismiss: () -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: SupportTheme.Spacing.s) {
             Image(systemName: alert.alertType.icon)
                 .font(.title2)
                 .foregroundStyle(alertColor)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text(alert.title)
                     .font(.subheadline.bold())
                 Text(alert.message)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
 
             Spacer()
 
             if alert.suggestedActionType != nil {
                 Image(systemName: "chevron.right")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
         }
         .padding()
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .background(SupportTheme.surface, in: RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
         .swipeActions(edge: .trailing) {
             Button(role: .destructive) {
                 onDismiss()
@@ -473,8 +483,8 @@ struct BiometricAlertCard: View {
 
     private var alertColor: Color {
         switch alert.severity {
-        case .info: return .blue
-        case .warning: return .orange
+        case .info: return SupportTheme.accent
+        case .warning: return SupportTheme.accent
         case .urgent: return .red
         }
     }
@@ -492,24 +502,26 @@ struct CorrelationCard: View {
                     .font(.subheadline)
                 Text(correlation.directionLabel ?? "—")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
 
             Spacer()
 
             // Visual correlation indicator
-            HStack(spacing: 2) {
+            HStack(spacing: SupportTheme.Spacing.xxs) {
                 ForEach(0..<5, id: \.self) { i in
-                    RoundedRectangle(cornerRadius: 2)
+                    RoundedRectangle(cornerRadius: SupportTheme.cardRadius)
                         .fill(correlationBarColor(at: i))
                         .frame(width: 8, height: 20)
                 }
             }
         }
         .padding()
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .background(SupportTheme.surface, in: RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(correlation.biometricTypeDisplay): \(correlation.strengthLabel ?? "no") \(correlation.directionLabel ?? "") correlation with mood")
+        .accessibilityLabel(
+            "\(correlation.biometricTypeDisplay): \(correlation.strengthLabel ?? "no") \(correlation.directionLabel ?? "") correlation with mood"
+        )
     }
 
     private func correlationBarColor(at index: Int) -> Color {
@@ -517,9 +529,9 @@ struct CorrelationCard: View {
         let threshold = Double(index + 1) / 5.0
 
         if strength >= threshold {
-            return correlation.correlationCoefficient > 0 ? .green : .red
+            return correlation.correlationCoefficient > 0 ? SupportTheme.accent : .red
         }
-        return Color.gray.opacity(0.3)
+        return SupportTheme.textSecondary.opacity(0.3)
     }
 }
 

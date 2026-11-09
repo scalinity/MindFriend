@@ -29,6 +29,8 @@ struct FamilyManagementView: View {
                     familyContentView
                 }
             }
+            .supportScreen()
+            .foregroundStyle(SupportTheme.textPrimary)
             .navigationTitle("Family Plan")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -37,8 +39,10 @@ struct FamilyManagementView: View {
                         dismiss()
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
+                    .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                    .accessibilityLabel("Close")
                 }
             }
             .task {
@@ -53,7 +57,9 @@ struct FamilyManagementView: View {
                 }
                 Button("Cancel", role: .cancel) {}
             } message: { member in
-                Text("Remove \(member.displayName ?? member.invitedEmail ?? "this member") from your family plan? They will lose premium access.")
+                Text(
+                    "Remove \(member.displayName ?? member.invitedEmail ?? "this member") from your family plan? They will lose premium access."
+                )
             }
             .alert("Error", isPresented: $showError, presenting: error) { _ in
                 Button("OK", role: .cancel) {}
@@ -66,18 +72,19 @@ struct FamilyManagementView: View {
     // MARK: - No Family Group
 
     private var noFamilyGroupView: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: SupportTheme.Spacing.l) {
             Image(systemName: "person.3.fill")
                 .font(.system(size: 60))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
 
             Text("No Family Plan")
                 .font(.title2)
+                .accessibilityAddTraits(.isHeader)
                 .fontWeight(.semibold)
 
             Text("Upgrade to a Couples or Family plan to share premium access with your loved ones.")
                 .font(.body)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
 
@@ -86,7 +93,7 @@ struct FamilyManagementView: View {
             } label: {
                 Text("View Plans")
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.supportPrimary)
         }
         .padding()
     }
@@ -97,23 +104,24 @@ struct FamilyManagementView: View {
         List {
             // Header Section
             Section {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                     if let group = billingService.familyGroup {
                         Text(group.name)
                             .font(.title3)
+                            .accessibilityAddTraits(.isHeader)
                             .fontWeight(.semibold)
 
                         if billingService.isFamilyAdmin {
                             Label("You're the admin", systemImage: "crown.fill")
                                 .font(.caption)
-                                .foregroundStyle(.orange)
+                                .foregroundStyle(SupportTheme.accent)
                         }
                     }
 
                     if let sub = billingService.subscription {
                         HStack {
                             Text("Seats:")
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                             Text("\(sub.seatsUsed) / \(sub.seatsTotal)")
                                 .fontWeight(.medium)
 
@@ -122,17 +130,19 @@ struct FamilyManagementView: View {
                             if sub.availableSeats > 0 {
                                 Text("\(sub.availableSeats) available")
                                     .font(.caption)
-                                    .foregroundStyle(.green)
+                                    .foregroundStyle(SupportTheme.accent)
                             } else {
                                 Text("Full")
                                     .font(.caption)
-                                    .foregroundStyle(.orange)
+                                    .foregroundStyle(SupportTheme.accent)
                             }
                         }
                     }
                 }
-                .padding(.vertical, 4)
+                .padding(.vertical, SupportTheme.Spacing.xxs)
             }
+
+            .listRowBackground(SupportTheme.surface)
 
             // Members Section
             Section {
@@ -140,7 +150,8 @@ struct FamilyManagementView: View {
                     MemberRow(
                         member: member,
                         isCurrentUser: member.userId == billingService.familyGroup?.adminUserId,
-                        canRemove: billingService.isFamilyAdmin && member.userId != billingService.familyGroup?.adminUserId,
+                        canRemove: billingService.isFamilyAdmin
+                            && member.userId != billingService.familyGroup?.adminUserId,
                         onRemove: {
                             memberToRemove = member
                             showRemoveConfirm = true
@@ -152,9 +163,11 @@ struct FamilyManagementView: View {
                     Text("Members")
                     Spacer()
                     Text("\(billingService.familyMembers.count)")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
             }
+
+            .listRowBackground(SupportTheme.surface)
 
             // Invite Section (Admin only)
             if billingService.isFamilyAdmin {
@@ -168,14 +181,15 @@ struct FamilyManagementView: View {
                     } else {
                         HStack {
                             Image(systemName: "exclamationmark.triangle.fill")
-                                .foregroundStyle(.orange)
+                                .foregroundStyle(SupportTheme.accent)
                             Text("All seats are filled")
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                         }
                     }
                 } footer: {
                     Text("Invited members will receive a code to join your plan and gain premium access.")
                 }
+                .listRowBackground(SupportTheme.surface)
             }
 
             // Pending Invitations (Admin only)
@@ -185,6 +199,7 @@ struct FamilyManagementView: View {
                 } header: {
                     Text("Pending Invitations")
                 }
+                .listRowBackground(SupportTheme.surface)
             }
         }
         .refreshable {
@@ -236,36 +251,36 @@ struct MemberRow: View {
     let onRemove: () -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: SupportTheme.Spacing.s) {
             // Avatar
             ZStack {
                 Circle()
-                    .fill(Color.accentColor.opacity(0.2))
+                    .fill(SupportTheme.accent.opacity(0.2))
                     .frame(width: 40, height: 40)
 
                 Text(initials)
                     .font(.subheadline)
                     .fontWeight(.medium)
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(SupportTheme.accent)
             }
 
             // Info
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 4) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
+                HStack(spacing: SupportTheme.Spacing.xxs) {
                     Text(member.displayName ?? member.invitedEmail ?? "Member")
                         .font(.body)
 
                     if isCurrentUser {
                         Text("(Admin)")
                             .font(.caption)
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(SupportTheme.accent)
                     }
                 }
 
                 if let handle = member.handle {
                     Text("@\(handle)")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
 
                 Text(statusText)
@@ -286,10 +301,12 @@ struct MemberRow: View {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundStyle(.red.opacity(0.7))
                 }
+                .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                .accessibilityLabel("Close")
                 .buttonStyle(.plain)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, SupportTheme.Spacing.xxs)
     }
 
     private var initials: String {
@@ -319,9 +336,9 @@ struct MemberRow: View {
 
     private var statusColor: Color {
         switch member.status {
-        case .pending: return .orange
-        case .active: return .green
-        case .removed: return .secondary
+        case .pending: return SupportTheme.accent
+        case .active: return SupportTheme.accent
+        case .removed: return SupportTheme.textSecondary
         }
     }
 
@@ -330,11 +347,11 @@ struct MemberRow: View {
         switch member.status {
         case .pending:
             Image(systemName: "clock.fill")
-                .foregroundStyle(.orange)
+                .foregroundStyle(SupportTheme.accent)
                 .font(.caption)
         case .active:
             Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(.green)
+                .foregroundStyle(SupportTheme.accent)
                 .font(.caption)
         case .removed:
             EmptyView()
@@ -358,7 +375,7 @@ struct FamilyPlanInviteSheet: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 24) {
+            VStack(spacing: SupportTheme.Spacing.l) {
                 if let response = inviteResponse {
                     // Success state
                     inviteSuccessView(response: response)
@@ -368,6 +385,8 @@ struct FamilyPlanInviteSheet: View {
                 }
             }
             .padding()
+            .supportScreen()
+            .foregroundStyle(SupportTheme.textPrimary)
             .navigationTitle("Invite Member")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -376,8 +395,10 @@ struct FamilyPlanInviteSheet: View {
                         dismiss()
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
+                    .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                    .accessibilityLabel("Close")
                 }
             }
         }
@@ -386,25 +407,26 @@ struct FamilyPlanInviteSheet: View {
     // MARK: - Input View
 
     private var inviteInputView: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: SupportTheme.Spacing.l) {
             Image(systemName: "person.badge.plus")
                 .font(.system(size: 50))
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(SupportTheme.accent)
 
-            VStack(spacing: 8) {
+            VStack(spacing: SupportTheme.Spacing.xs) {
                 Text("Invite to Your Plan")
                     .font(.title2)
+                    .accessibilityAddTraits(.isHeader)
                     .fontWeight(.semibold)
 
                 Text("Enter the email address of the person you'd like to invite.")
                     .font(.body)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .multilineTextAlignment(.center)
             }
 
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                 TextField("Email address", text: $email)
-                    .textFieldStyle(.roundedBorder)
+                    .supportField()
                     .textContentType(.emailAddress)
                     .keyboardType(.emailAddress)
                     .textInputAutocapitalization(.never)
@@ -425,16 +447,16 @@ struct FamilyPlanInviteSheet: View {
             } label: {
                 if isLoading {
                     ProgressView()
-                        .tint(.white)
+                        .tint(SupportTheme.textPrimary)
                 } else {
                     Text("Send Invitation")
                 }
             }
             .frame(maxWidth: .infinity)
             .padding()
-            .background(isValidEmail ? Color.accentColor : Color.secondary)
-            .foregroundStyle(.white)
-            .cornerRadius(12)
+            .background(isValidEmail ? SupportTheme.accent : SupportTheme.textSecondary)
+            .foregroundStyle(SupportTheme.onAccent)
+            .cornerRadius(SupportTheme.controlRadius)
             .disabled(!isValidEmail || isLoading)
 
             Spacer()
@@ -444,35 +466,34 @@ struct FamilyPlanInviteSheet: View {
     // MARK: - Success View
 
     private func inviteSuccessView(response: SendInviteResponse) -> some View {
-        VStack(spacing: 24) {
+        VStack(spacing: SupportTheme.Spacing.l) {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 60))
-                .foregroundStyle(.green)
+                .foregroundStyle(SupportTheme.accent)
 
             Text("Invitation Created!")
                 .font(.title2)
+                .accessibilityAddTraits(.isHeader)
                 .fontWeight(.semibold)
 
             Text(response.message)
                 .font(.body)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .multilineTextAlignment(.center)
 
             // Invite Code Display with tap-to-reveal (P3-S6)
             if let inviteCode = response.inviteCode {
-                VStack(spacing: 8) {
+                VStack(spacing: SupportTheme.Spacing.xs) {
                     Text("Invite Code")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
 
                     if isCodeRevealed {
                         Text(inviteCode)
                             .font(.system(.title, design: .monospaced))
                             .fontWeight(.bold)
-                            .foregroundStyle(Color.accentColor)
-                            .padding()
-                            .background(Color(.secondarySystemBackground))
-                            .cornerRadius(12)
+                            .foregroundStyle(SupportTheme.accent)
+                            .supportCard()
                             .accessibilityLabel("Invite code: \(inviteCode)")
 
                         Button {
@@ -482,22 +503,23 @@ struct FamilyPlanInviteSheet: View {
                                 showCopiedFeedback = false
                             }
                         } label: {
-                            Label(showCopiedFeedback ? "Copied!" : "Copy Code", systemImage: showCopiedFeedback ? "checkmark" : "doc.on.doc")
-                                .font(.subheadline)
+                            Label(
+                                showCopiedFeedback ? "Copied!" : "Copy Code",
+                                systemImage: showCopiedFeedback ? "checkmark" : "doc.on.doc"
+                            )
+                            .font(.subheadline)
                         }
                     } else {
                         Button {
                             isCodeRevealed = true
                         } label: {
-                            HStack(spacing: 8) {
+                            HStack(spacing: SupportTheme.Spacing.xs) {
                                 Image(systemName: "eye.fill")
                                 Text("Tap to reveal code")
                             }
                             .font(.headline)
-                            .foregroundStyle(Color.accentColor)
-                            .padding()
-                            .background(Color(.secondarySystemBackground))
-                            .cornerRadius(12)
+                            .foregroundStyle(SupportTheme.accent)
+                            .supportCard()
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("Reveal invite code")
@@ -507,10 +529,11 @@ struct FamilyPlanInviteSheet: View {
 
             // Expiry info
             if let expiresAtStr = response.expiresAt,
-               let expiresAt = ISO8601DateFormatter().date(from: expiresAtStr) {
+                let expiresAt = ISO8601DateFormatter().date(from: expiresAtStr)
+            {
                 Text("Expires \(expiresAt.formatted(date: .abbreviated, time: .omitted))")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
 
             Spacer()
@@ -521,7 +544,7 @@ struct FamilyPlanInviteSheet: View {
                 Text("Done")
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.supportPrimary)
         }
     }
 
@@ -570,13 +593,13 @@ struct PendingInvitationsView: View {
             if isLoading {
                 ProgressView()
                     .frame(maxWidth: .infinity)
-            } else if let _ = loadError {
-                VStack(spacing: 8) {
+            } else if loadError != nil {
+                VStack(spacing: SupportTheme.Spacing.xs) {
                     Image(systemName: "exclamationmark.triangle")
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(SupportTheme.accent)
                     Text("Failed to load invitations")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                     Button("Retry") {
                         Task { await loadInvitations() }
                     }
@@ -584,19 +607,19 @@ struct PendingInvitationsView: View {
                 }
             } else if invitations.isEmpty {
                 Text("No pending invitations")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .font(.subheadline)
             } else {
                 ForEach(invitations) { invitation in
                     HStack {
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                             Text(invitation.email)
                                 .font(.subheadline)
 
                             if !invitation.isExpired {
                                 Text("Expires \(invitation.expiresAt.formatted(date: .abbreviated, time: .omitted))")
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(SupportTheme.textSecondary)
                             } else {
                                 Text("Expired")
                                     .font(.caption)
@@ -610,7 +633,7 @@ struct PendingInvitationsView: View {
                         if revealedCodes.contains(invitation.id) {
                             Text(invitation.inviteCode)
                                 .font(.caption.monospaced())
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                                 .onTapGesture {
                                     UIPasteboard.general.string = invitation.inviteCode
                                 }
@@ -620,7 +643,7 @@ struct PendingInvitationsView: View {
                             } label: {
                                 Text("Tap to reveal")
                                     .font(.caption)
-                                    .foregroundStyle(Color.accentColor)
+                                    .foregroundStyle(SupportTheme.accent)
                             }
                             .buttonStyle(.plain)
                         }

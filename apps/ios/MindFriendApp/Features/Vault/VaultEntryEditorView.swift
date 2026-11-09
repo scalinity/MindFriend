@@ -56,6 +56,7 @@ struct VaultEntryEditorView: View {
                         .accessibilityLabel("Entry title")
                         .accessibilityHint("Optional title for your journal entry")
                 }
+                .listRowBackground(SupportTheme.surface)
 
                 Section {
                     TextEditor(text: $entryBody)
@@ -69,6 +70,8 @@ struct VaultEntryEditorView: View {
                     Text("Your entry is encrypted and stored only on this device.")
                 }
 
+                .listRowBackground(SupportTheme.surface)
+
                 if isEditing {
                     Section {
                         Button(role: .destructive) {
@@ -81,8 +84,11 @@ struct VaultEntryEditorView: View {
                             }
                         }
                     }
+                    .listRowBackground(SupportTheme.surface)
                 }
             }
+            .supportScreen()
+            .foregroundStyle(SupportTheme.textPrimary)
             .navigationTitle(isEditing ? "Edit Entry" : "New Entry")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -157,8 +163,9 @@ struct VaultEntryEditorView: View {
 }
 
 #Preview("Edit Entry") {
-    VaultEntryEditorView(entry: VaultEntry(
-        title: "Sample Entry",
-        body: "This is a sample journal entry for preview purposes."
-    ))
+    VaultEntryEditorView(
+        entry: VaultEntry(
+            title: "Sample Entry",
+            body: "This is a sample journal entry for preview purposes."
+        ))
 }

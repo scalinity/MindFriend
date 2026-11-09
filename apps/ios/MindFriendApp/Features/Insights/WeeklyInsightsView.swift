@@ -1,5 +1,5 @@
-import SwiftUI
 import Charts
+import SwiftUI
 
 /// Main Weekly Insights screen showing mood analysis, patterns, and AI recommendations
 struct WeeklyInsightsView: View {
@@ -18,14 +18,14 @@ struct WeeklyInsightsView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 20) {
+            VStack(spacing: SupportTheme.Spacing.l) {
                 if isLoading || isGenerating {
-                    VStack(spacing: 12) {
+                    VStack(spacing: SupportTheme.Spacing.s) {
                         ProgressView()
                         if isGenerating {
                             Text("Generating your insights...")
                                 .font(.subheadline)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(SupportTheme.textSecondary)
                         }
                     }
                     .frame(height: 200)
@@ -59,14 +59,16 @@ struct WeeklyInsightsView: View {
                             .foregroundColor(.red)
                             .padding()
                             .background(Color.red.opacity(0.1))
-                            .cornerRadius(8)
+                            .cornerRadius(SupportTheme.controlRadius)
                     }
                 }
             }
             .padding()
         }
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle("Weekly Insights")
-        .background(Color(.systemGroupedBackground))
+        .background(SupportTheme.canvas)
         .task { await loadInsights(forceRegenerate: false) }
         .refreshable { await loadInsights(forceRegenerate: true) }
         .onChange(of: container.supabaseAuthService.userId) { _, newValue in
@@ -151,50 +153,53 @@ struct CurrentWeekCard: View {
     let insight: WeeklySummary
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
             HStack {
                 Text("This Week")
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
                 Spacer()
                 Text(insight.weekLabel)
                     .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(SupportTheme.textSecondary)
             }
 
             if let avg = insight.avgMood {
-                HStack(spacing: 20) {
+                HStack(spacing: SupportTheme.Spacing.l) {
                     VStack {
                         Text(String(format: "%.1f", avg))
                             .font(.system(size: 48, weight: .bold, design: .rounded))
                         Text("avg mood")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(SupportTheme.textSecondary)
                     }
 
                     Spacer()
 
                     // Only show trend for meaningful values (not baseline/insufficientData)
                     if let trend = insight.moodTrend,
-                       trend != .baseline && trend != .insufficientData {
-                        VStack(alignment: .trailing, spacing: 4) {
+                        trend != .baseline && trend != .insufficientData
+                    {
+                        VStack(alignment: .trailing, spacing: SupportTheme.Spacing.xxs) {
                             Text(trend.emoji)
                                 .font(.title)
+                                .accessibilityAddTraits(.isHeader)
                             Text(insight.moodTrendMessage)
                                 .font(.subheadline)
-                                .foregroundColor(trend.color)
+                                .foregroundColor(SupportTheme.accent)
                                 .multilineTextAlignment(.trailing)
                         }
                     }
                 }
             } else {
                 Text("Not enough mood data yet")
-                    .foregroundColor(.secondary)
+                    .foregroundColor(SupportTheme.textSecondary)
             }
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemGroupedBackground))
-        .cornerRadius(16)
+        .background(SupportTheme.surface)
+        .cornerRadius(SupportTheme.controlRadius)
     }
 }
 
@@ -207,9 +212,10 @@ struct MoodChartCard: View {
     private let dayKeys = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("Mood by Day")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
             if let moodByDay = insight.moodByDay, !moodByDay.isEmpty {
                 // Use Charts framework for visualization
@@ -221,7 +227,7 @@ struct MoodChartCard: View {
                                 y: .value("Mood", value)
                             )
                             .foregroundStyle(moodColor(value))
-                            .cornerRadius(4)
+                            .cornerRadius(SupportTheme.controlRadius)
                         }
                     }
                 }
@@ -232,21 +238,21 @@ struct MoodChartCard: View {
                 .frame(height: 150)
             } else {
                 // Fallback bar chart
-                HStack(alignment: .bottom, spacing: 8) {
+                HStack(alignment: .bottom, spacing: SupportTheme.Spacing.xs) {
                     ForEach(Array(zip(days, dayKeys)), id: \.0) { day, key in
                         VStack {
                             if let moods = insight.moodByDay, let value = moods[key] {
-                                RoundedRectangle(cornerRadius: 4)
+                                RoundedRectangle(cornerRadius: SupportTheme.cardRadius)
                                     .fill(moodColor(value))
                                     .frame(width: 30, height: CGFloat(value) * 25)
                             } else {
-                                RoundedRectangle(cornerRadius: 4)
-                                    .fill(Color.gray.opacity(0.3))
+                                RoundedRectangle(cornerRadius: SupportTheme.cardRadius)
+                                    .fill(SupportTheme.textSecondary.opacity(0.3))
                                     .frame(width: 30, height: 20)
                             }
                             Text(day)
                                 .font(.caption2)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(SupportTheme.textSecondary)
                         }
                     }
                 }
@@ -258,25 +264,25 @@ struct MoodChartCard: View {
                 HStack {
                     Label("Low: \(min)", systemImage: "arrow.down")
                         .font(.caption)
-                        .foregroundColor(.orange)
+                        .foregroundColor(SupportTheme.accent)
                     Spacer()
                     Label("High: \(max)", systemImage: "arrow.up")
                         .font(.caption)
-                        .foregroundColor(.green)
+                        .foregroundColor(SupportTheme.accent)
                 }
             }
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemGroupedBackground))
-        .cornerRadius(16)
+        .background(SupportTheme.surface)
+        .cornerRadius(SupportTheme.controlRadius)
     }
 
     private func moodColor(_ value: Double) -> Color {
         switch value {
-        case 4...: return .green
-        case 3..<4: return .blue
-        case 2..<3: return .orange
+        case 4...: return SupportTheme.accent
+        case 3..<4: return SupportTheme.accent
+        case 2..<3: return SupportTheme.accent
         default: return .red
         }
     }
@@ -288,25 +294,28 @@ struct PatternsCard: View {
     let patterns: [DetectedPattern]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Label("Patterns Detected", systemImage: "chart.line.uptrend.xyaxis")
                 .font(.headline)
 
             ForEach(patterns, id: \.description) { pattern in
-                HStack(alignment: .top, spacing: 12) {
+                HStack(alignment: .top, spacing: SupportTheme.Spacing.s) {
                     Image(systemName: pattern.icon)
-                        .foregroundColor(.yellow)
+                        .foregroundColor(SupportTheme.Celebration.gold)
                         .frame(width: 24)
 
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                         Text(pattern.description)
                             .font(.subheadline)
 
                         // Confidence indicator
-                        HStack(spacing: 4) {
+                        HStack(spacing: SupportTheme.Spacing.xxs) {
                             ForEach(0..<5) { i in
                                 Circle()
-                                    .fill(Double(i) / 5.0 < pattern.confidence ? Color.yellow : Color.gray.opacity(0.3))
+                                    .fill(
+                                        Double(i) / 5.0 < pattern.confidence
+                                            ? SupportTheme.Celebration.gold : SupportTheme.textSecondary.opacity(0.3)
+                                    )
                                     .frame(width: 6, height: 6)
                             }
                         }
@@ -316,8 +325,8 @@ struct PatternsCard: View {
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemGroupedBackground))
-        .cornerRadius(16)
+        .background(SupportTheme.surface)
+        .cornerRadius(SupportTheme.controlRadius)
     }
 }
 
@@ -328,7 +337,7 @@ struct AIInsightCard: View {
     let recommendations: [InsightRecommendation]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Label("AI Insight", systemImage: "sparkles")
                 .font(.headline)
 
@@ -340,19 +349,19 @@ struct AIInsightCard: View {
 
                 Text("Recommendations")
                     .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(SupportTheme.textSecondary)
 
                 ForEach(recommendations, id: \.title) { rec in
-                    HStack(alignment: .top, spacing: 12) {
+                    HStack(alignment: .top, spacing: SupportTheme.Spacing.s) {
                         Image(systemName: "arrow.right.circle.fill")
-                            .foregroundColor(.accentColor)
+                            .foregroundColor(SupportTheme.accent)
 
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                             Text(rec.title)
                                 .fontWeight(.medium)
                             Text(rec.reason)
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(SupportTheme.textSecondary)
                         }
                     }
                 }
@@ -360,8 +369,8 @@ struct AIInsightCard: View {
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.accentColor.opacity(0.1))
-        .cornerRadius(16)
+        .background(SupportTheme.surface)
+        .cornerRadius(SupportTheme.controlRadius)
     }
 }
 
@@ -371,11 +380,12 @@ struct ActivitySummaryCard: View {
     let insight: WeeklySummary
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("Activity Summary")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: SupportTheme.Spacing.s) {
                 InsightStatBox(icon: "checkmark.circle", label: "Quests", value: "\(insight.questCount)")
                 InsightStatBox(icon: "figure.mind.and.body", label: "Exercises", value: "\(insight.exerciseCount)")
                 InsightStatBox(icon: "face.smiling", label: "Moods", value: "\(insight.checkinCount)")
@@ -389,17 +399,17 @@ struct ActivitySummaryCard: View {
             if let circleCount = insight.circleCheckinCount, circleCount > 0 {
                 HStack {
                     Image(systemName: "person.2")
-                        .foregroundColor(.accentColor)
+                        .foregroundColor(SupportTheme.accent)
                     Text("\(circleCount) circle check-ins")
                         .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(SupportTheme.textSecondary)
                 }
             }
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemGroupedBackground))
-        .cornerRadius(16)
+        .background(SupportTheme.surface)
+        .cornerRadius(SupportTheme.controlRadius)
     }
 }
 
@@ -409,19 +419,20 @@ struct InsightStatBox: View {
     let value: String
 
     var body: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: SupportTheme.Spacing.xxs) {
             Image(systemName: icon)
                 .font(.title2)
-                .foregroundColor(.accentColor)
+                .foregroundColor(SupportTheme.accent)
             Text(value)
                 .font(.title3)
+                .accessibilityAddTraits(.isHeader)
                 .fontWeight(.bold)
             Text(label)
                 .font(.caption)
-                .foregroundColor(.secondary)
+                .foregroundColor(SupportTheme.textSecondary)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 8)
+        .padding(.vertical, SupportTheme.Spacing.xs)
     }
 }
 
@@ -431,12 +442,13 @@ struct PastWeeksSection: View {
     let insights: [WeeklySummary]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("Past Weeks")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
+                HStack(spacing: SupportTheme.Spacing.s) {
                     ForEach(insights) { insight in
                         PastWeekCard(insight: insight)
                     }
@@ -450,42 +462,45 @@ struct PastWeekCard: View {
     let insight: WeeklySummary
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             Text(insight.weekLabel)
                 .font(.caption)
-                .foregroundColor(.secondary)
+                .foregroundColor(SupportTheme.textSecondary)
 
             if let avg = insight.avgMood {
-                HStack(spacing: 4) {
+                HStack(spacing: SupportTheme.Spacing.xxs) {
                     Text(String(format: "%.1f", avg))
                         .font(.title2)
+                        .accessibilityAddTraits(.isHeader)
                         .fontWeight(.bold)
 
                     // Only show trend icon for meaningful values
                     if let trend = insight.moodTrend,
-                       trend != .insufficientData && trend != .baseline {
+                        trend != .insufficientData && trend != .baseline
+                    {
                         Image(systemName: trend.icon)
-                            .foregroundColor(trend.color)
+                            .foregroundColor(SupportTheme.accent)
                             .font(.caption)
                     }
                 }
             } else {
                 Text("--")
                     .font(.title2)
-                    .foregroundColor(.secondary)
+                    .accessibilityAddTraits(.isHeader)
+                    .foregroundColor(SupportTheme.textSecondary)
             }
 
-            HStack(spacing: 8) {
+            HStack(spacing: SupportTheme.Spacing.xs) {
                 Label("\(insight.questCount)", systemImage: "checkmark")
                 Label("\(insight.exerciseCount)", systemImage: "figure.walk")
             }
             .font(.caption2)
-            .foregroundColor(.secondary)
+            .foregroundColor(SupportTheme.textSecondary)
         }
         .padding()
         .frame(width: 140)
-        .background(Color(.secondarySystemGroupedBackground))
-        .cornerRadius(12)
+        .background(SupportTheme.surface)
+        .cornerRadius(SupportTheme.controlRadius)
     }
 }
 
@@ -493,23 +508,26 @@ struct PastWeekCard: View {
 
 struct EmptyInsightCard: View {
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             Image(systemName: "chart.bar.doc.horizontal")
                 .font(.system(size: 48))
-                .foregroundColor(.secondary)
+                .foregroundColor(SupportTheme.textSecondary)
 
             Text("No Insights Yet")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
-            Text("Log your moods, complete quests, and do exercises throughout the week. Your personalized insights will appear here every Sunday.")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
+            Text(
+                "Log your moods, complete quests, and do exercises throughout the week. Your personalized insights will appear here every Sunday."
+            )
+            .font(.subheadline)
+            .foregroundColor(SupportTheme.textSecondary)
+            .multilineTextAlignment(.center)
         }
-        .padding(32)
+        .padding(SupportTheme.Spacing.xl)
         .frame(maxWidth: .infinity)
-        .background(Color(.secondarySystemGroupedBackground))
-        .cornerRadius(16)
+        .background(SupportTheme.surface)
+        .cornerRadius(SupportTheme.controlRadius)
     }
 }
 

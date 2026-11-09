@@ -9,7 +9,7 @@ struct PatternsView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 20) {
+            VStack(spacing: SupportTheme.Spacing.l) {
                 if viewModel.isLoading {
                     loadingView
                 } else if viewModel.patterns.isEmpty {
@@ -24,6 +24,8 @@ struct PatternsView: View {
             }
             .padding()
         }
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle("Detected Patterns")
         .navigationBarTitleDisplayMode(.large)
         .task {
@@ -36,7 +38,7 @@ struct PatternsView: View {
 
     private var filterSection: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
+            HStack(spacing: SupportTheme.Spacing.xs) {
                 LongitudinalFilterChip(
                     title: "All",
                     isSelected: selectedFilter == nil
@@ -59,7 +61,7 @@ struct PatternsView: View {
     // MARK: - Patterns Section
 
     private var patternsSection: some View {
-        LazyVStack(spacing: 16) {
+        LazyVStack(spacing: SupportTheme.Spacing.m) {
             ForEach(filteredPatterns) { pattern in
                 PatternDetailCard(pattern: pattern)
             }
@@ -76,11 +78,11 @@ struct PatternsView: View {
     // MARK: - Loading View
 
     private var loadingView: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             ProgressView()
             Text("Analyzing your patterns...")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
         .frame(maxWidth: .infinity, minHeight: 300)
     }
@@ -88,18 +90,21 @@ struct PatternsView: View {
     // MARK: - Empty State
 
     private var emptyStateView: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             Image(systemName: "waveform.path.ecg")
                 .font(.system(size: 48))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
             Text("No Patterns Detected Yet")
                 .font(.headline)
-            Text("Continue tracking your mood regularly. We'll identify patterns in your wellness journey once we have enough data.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+                .accessibilityAddTraits(.isHeader)
+            Text(
+                "Continue tracking your mood regularly. We'll identify patterns in your wellness journey once we have enough data."
+            )
+            .font(.subheadline)
+            .foregroundStyle(SupportTheme.textSecondary)
+            .multilineTextAlignment(.center)
         }
-        .padding(32)
+        .padding(SupportTheme.Spacing.xl)
     }
 }
 
@@ -134,12 +139,13 @@ final class PatternsViewModel: ObservableObject {
 // MARK: - Pattern Detail Card
 
 struct PatternDetailCard: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let pattern: LongitudinalPattern
 
     @State private var isExpanded = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             // Header
             HStack {
                 Image(systemName: pattern.patternIcon)
@@ -149,12 +155,13 @@ struct PatternDetailCard: View {
                     .background(patternColor.opacity(0.1))
                     .clipShape(Circle())
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     Text(pattern.patternType.displayName)
                         .font(.headline)
+                        .accessibilityAddTraits(.isHeader)
                     Text("Confidence: \(pattern.confidenceLabel)")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
 
                 Spacer()
@@ -165,13 +172,13 @@ struct PatternDetailCard: View {
             // Description
             Text(pattern.patternDescription)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
 
             // Expanded details
             if isExpanded {
                 Divider()
 
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                     DetailRow(label: "First Detected", value: formattedDate(pattern.firstDetected))
                     DetailRow(label: "Last Detected", value: formattedDate(pattern.lastDetected))
                     DetailRow(label: "Occurrences", value: "\(pattern.occurrences)")
@@ -180,7 +187,7 @@ struct PatternDetailCard: View {
 
             // Toggle button
             Button {
-                withAnimation(.easeInOut(duration: 0.2)) {
+                withAnimation(reduceMotion ? nil : (.easeInOut(duration: 0.2))) {
                     isExpanded.toggle()
                 }
             } label: {
@@ -190,22 +197,20 @@ struct PatternDetailCard: View {
                     Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                         .font(.caption)
                 }
-                .foregroundStyle(.blue)
+                .foregroundStyle(SupportTheme.accent)
             }
             .buttonStyle(.plain)
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .shadow(color: .black.opacity(0.05), radius: 8, y: 2)
+        .supportCard()
+        .shadow(color: SupportTheme.canvas.opacity(0.05), radius: 8, y: 2)
     }
 
     private var patternColor: Color {
         switch pattern.patternType {
-        case .seasonalMood: return .orange
-        case .weeklyRhythm: return .blue
-        case .eventResponse: return .purple
-        case .improvementTrend: return .green
+        case .seasonalMood: return SupportTheme.accent
+        case .weeklyRhythm: return SupportTheme.accent
+        case .eventResponse: return SupportTheme.accent
+        case .improvementTrend: return SupportTheme.accent
         }
     }
 
@@ -223,7 +228,7 @@ struct ConfidenceIndicator: View {
     let confidence: Double
 
     var body: some View {
-        VStack(spacing: 2) {
+        VStack(spacing: SupportTheme.Spacing.xxs) {
             Text("\(Int(confidence * 100))%")
                 .font(.caption)
                 .fontWeight(.semibold)
@@ -232,10 +237,10 @@ struct ConfidenceIndicator: View {
             // Mini bar
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(Color(.systemGray5))
+                    RoundedRectangle(cornerRadius: SupportTheme.cardRadius)
+                        .fill(SupportTheme.field)
 
-                    RoundedRectangle(cornerRadius: 2)
+                    RoundedRectangle(cornerRadius: SupportTheme.cardRadius)
                         .fill(confidenceColor)
                         .frame(width: geometry.size.width * confidence)
                 }
@@ -245,9 +250,9 @@ struct ConfidenceIndicator: View {
     }
 
     private var confidenceColor: Color {
-        if confidence >= 0.9 { return .green }
-        if confidence >= 0.7 { return .blue }
-        if confidence >= 0.5 { return .orange }
+        if confidence >= 0.9 { return SupportTheme.accent }
+        if confidence >= 0.7 { return SupportTheme.accent }
+        if confidence >= 0.5 { return SupportTheme.accent }
         return .red
     }
 }
@@ -260,7 +265,7 @@ struct DetailRow: View {
         HStack {
             Text(label)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
             Spacer()
             Text(value)
                 .font(.caption)
@@ -272,12 +277,12 @@ struct DetailRow: View {
 // MARK: - Preview
 
 #if DEBUG
-struct PatternsView_Previews: PreviewProvider {
-    static var previews: some View {
-        NavigationStack {
-            PatternsView()
-                .environmentObject(DependencyContainer.preview)
+    struct PatternsView_Previews: PreviewProvider {
+        static var previews: some View {
+            NavigationStack {
+                PatternsView()
+                    .environmentObject(DependencyContainer.preview)
+            }
         }
     }
-}
 #endif

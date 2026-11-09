@@ -20,10 +20,10 @@ struct PromoCodeField: View {
     }
 
     var body: some View {
-        VStack(spacing: 12) {
-            HStack(spacing: 12) {
+        VStack(spacing: SupportTheme.Spacing.s) {
+            HStack(spacing: SupportTheme.Spacing.s) {
                 TextField("Enter promo code", text: $code)
-                    .textFieldStyle(.roundedBorder)
+                    .supportField()
                     .textInputAutocapitalization(.characters)
                     .autocorrectionDisabled()
                     .disabled(hasValidatedCode || isValidating)
@@ -37,7 +37,7 @@ struct PromoCodeField: View {
                         Text("Clear")
                             .fontWeight(.semibold)
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.supportSecondary)
                     .accessibilityLabel("Clear promo code button")
                 } else if !code.isEmpty {
                     Button {
@@ -45,13 +45,13 @@ struct PromoCodeField: View {
                     } label: {
                         if isValidating {
                             ProgressView()
-                                .tint(.white)
+                                .tint(SupportTheme.textPrimary)
                         } else {
                             Text("Apply")
                                 .fontWeight(.semibold)
                         }
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.supportPrimary)
                     .disabled(isValidating)
                     .accessibilityLabel("Apply promo code button")
                 }
@@ -59,38 +59,38 @@ struct PromoCodeField: View {
 
             // Success message with discount
             if let promo = validatedPromo {
-                HStack(spacing: 8) {
+                HStack(spacing: SupportTheme.Spacing.xs) {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
+                        .foregroundStyle(SupportTheme.accent)
 
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                         Text("Promo Applied")
                             .font(.subheadline)
                             .fontWeight(.semibold)
-                            .foregroundStyle(.green)
+                            .foregroundStyle(SupportTheme.accent)
 
                         Text(promo.discountDescription)
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
 
                     Spacer()
                 }
-                .padding(.vertical, 8)
-                .padding(.horizontal, 12)
-                .background(Color.green.opacity(0.1))
-                .cornerRadius(8)
+                .padding(.vertical, SupportTheme.Spacing.xs)
+                .padding(.horizontal, SupportTheme.Spacing.s)
+                .background(SupportTheme.surface)
+                .cornerRadius(SupportTheme.controlRadius)
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel("Promo code applied: \(promo.discountDescription)")
             }
 
             // Error message
             if showError {
-                HStack(spacing: 8) {
+                HStack(spacing: SupportTheme.Spacing.xs) {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundStyle(.red)
 
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                         Text("Invalid Code")
                             .font(.subheadline)
                             .fontWeight(.semibold)
@@ -98,15 +98,15 @@ struct PromoCodeField: View {
 
                         Text(errorMessage)
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
 
                     Spacer()
                 }
-                .padding(.vertical, 8)
-                .padding(.horizontal, 12)
+                .padding(.vertical, SupportTheme.Spacing.xs)
+                .padding(.horizontal, SupportTheme.Spacing.s)
                 .background(Color.red.opacity(0.1))
-                .cornerRadius(8)
+                .cornerRadius(SupportTheme.controlRadius)
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel("Error: \(errorMessage)")
             }
@@ -182,7 +182,7 @@ private struct PromoCodeFieldPreviewWrapper: View {
         campaignName: "Summer Sale"
     )
     @State var isValidating = false
-    
+
     var body: some View {
         PromoCodeField(
             billingService: BillingService(authService: SupabaseAuthService()),

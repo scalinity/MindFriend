@@ -1,6 +1,6 @@
-import SwiftUI
 import Charts
 import Supabase
+import SwiftUI
 
 // MARK: - Longitudinal Dashboard View
 
@@ -22,17 +22,17 @@ struct LongitudinalDashboardView: View {
     var body: some View {
         SupportRootNavigation(embedded: supportEmbedded) {
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: SupportTheme.Spacing.l) {
                     // Show report generation success banner
                     if viewModel.reportSuccess {
                         reportSuccessBanner
                     }
-                    
+
                     // Show report generation error as a dismissible banner if we have data
                     if let reportError = viewModel.reportError {
                         reportErrorBanner(reportError)
                     }
-                    
+
                     if viewModel.isLoading {
                         loadingView
                     } else if let error = viewModel.loadError {
@@ -45,6 +45,8 @@ struct LongitudinalDashboardView: View {
                 }
                 .padding()
             }
+            .supportScreen()
+            .foregroundStyle(SupportTheme.textPrimary)
             .navigationTitle("Your Journey")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
@@ -64,6 +66,8 @@ struct LongitudinalDashboardView: View {
                         } label: {
                             Image(systemName: "ellipsis.circle")
                         }
+                        .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                        .accessibilityLabel("More options")
                     }
                 }
             }
@@ -93,7 +97,7 @@ struct LongitudinalDashboardView: View {
     // MARK: - Content View
 
     private var contentView: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: SupportTheme.Spacing.l) {
             // Yearly Heat Map
             yearlyHeatMapSection
 
@@ -130,27 +134,28 @@ struct LongitudinalDashboardView: View {
     // MARK: - Year at a Glance
 
     private var yearAtGlanceCard: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
             HStack {
                 Text("Year at a Glance")
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
                 Spacer()
                 if let year = viewModel.currentYearStat?.year {
                     Text(String(year))
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
             }
 
             if let yearStat = viewModel.currentYearStat {
-                HStack(spacing: 20) {
+                HStack(spacing: SupportTheme.Spacing.l) {
                     // Quarterly mood summary
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                         Text("Quarterly Mood")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
 
-                        HStack(spacing: 4) {
+                        HStack(spacing: SupportTheme.Spacing.xxs) {
                             ForEach(0..<4, id: \.self) { quarter in
                                 QuarterMoodIndicator(
                                     quarter: quarter + 1,
@@ -166,16 +171,17 @@ struct LongitudinalDashboardView: View {
 
                     // Year comparison
                     if let comparison = yearStat.yearlyComparison {
-                        VStack(alignment: .leading, spacing: 8) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                             Text("vs Last Year")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
 
                             HStack {
                                 Image(systemName: comparison.isImprovement ? "arrow.up.right" : "arrow.down.right")
-                                    .foregroundStyle(comparison.isImprovement ? .green : .red)
+                                    .foregroundStyle(comparison.isImprovement ? SupportTheme.accent : .red)
                                 Text(comparison.moodDeltaFormatted)
                                     .font(.title3)
+                                    .accessibilityAddTraits(.isHeader)
                                     .fontWeight(.semibold)
                             }
                         }
@@ -186,10 +192,10 @@ struct LongitudinalDashboardView: View {
                 if let patterns = yearStat.seasonalPatterns {
                     Divider()
 
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                         Text("Seasonal Patterns")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
 
                         SeasonalPatternBar(patterns: patterns)
                     }
@@ -199,14 +205,16 @@ struct LongitudinalDashboardView: View {
                 if !yearStat.milestonesAchieved.isEmpty {
                     Divider()
 
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                         Text("Milestones")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
 
                         ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
-                                ForEach(yearStat.milestonesAchieved, id: \.name) { milestone in
+                            HStack(spacing: SupportTheme.Spacing.xs) {
+                                ForEach(
+                                    yearStat.milestonesAchieved.filter { $0.type.lowercased() != "streak" }, id: \.name
+                                ) { milestone in
                                     MilestoneBadge(milestone: milestone)
                                 }
                             }
@@ -216,34 +224,33 @@ struct LongitudinalDashboardView: View {
             } else {
                 Text("Not enough data for yearly summary yet")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .shadow(color: .black.opacity(0.05), radius: 8, y: 2)
+        .supportCard()
+        .shadow(color: SupportTheme.canvas.opacity(0.05), radius: 8, y: 2)
     }
 
     // MARK: - Mood Trend Section
 
     private var moodTrendSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
             HStack {
                 Text("12-Month Mood Trend")
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
                 Spacer()
                 NavigationLink(destination: YearlyOverviewView()) {
                     Text("See All")
                         .font(.subheadline)
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(SupportTheme.accent)
                 }
             }
 
             if viewModel.monthlyStats.isEmpty {
                 Text("Start tracking to see your mood trends")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .frame(height: 200)
                     .frame(maxWidth: .infinity)
             } else {
@@ -258,28 +265,27 @@ struct LongitudinalDashboardView: View {
                         .foregroundStyle(trendColor(for: trend))
                     Text(trendDescription(for: trend))
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
             }
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .shadow(color: .black.opacity(0.05), radius: 8, y: 2)
+        .supportCard()
+        .shadow(color: SupportTheme.canvas.opacity(0.05), radius: 8, y: 2)
     }
 
     // MARK: - Patterns Section
 
     private var patternsSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
             HStack {
                 Text("Detected Patterns")
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
                 Spacer()
                 NavigationLink(destination: PatternsView()) {
                     Text("View All")
                         .font(.subheadline)
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(SupportTheme.accent)
                 }
             }
 
@@ -287,24 +293,23 @@ struct LongitudinalDashboardView: View {
                 LongitudinalPatternCard(pattern: pattern)
             }
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .shadow(color: .black.opacity(0.05), radius: 8, y: 2)
+        .supportCard()
+        .shadow(color: SupportTheme.canvas.opacity(0.05), radius: 8, y: 2)
     }
 
     // MARK: - Life Events Section
 
     private var lifeEventsSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
             HStack {
                 Text("Recent Life Events")
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
                 Spacer()
                 NavigationLink(destination: LifeEventsView()) {
                     Text("View All")
                         .font(.subheadline)
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(SupportTheme.accent)
                 }
             }
 
@@ -312,16 +317,14 @@ struct LongitudinalDashboardView: View {
                 LifeEventRow(event: event)
             }
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .shadow(color: .black.opacity(0.05), radius: 8, y: 2)
+        .supportCard()
+        .shadow(color: SupportTheme.canvas.opacity(0.05), radius: 8, y: 2)
     }
 
     // MARK: - Quick Actions
 
     private var quickActionsSection: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: SupportTheme.Spacing.s) {
             NavigationLink(destination: LifeEventsView()) {
                 HStack {
                     Image(systemName: "calendar.badge.plus")
@@ -329,11 +332,9 @@ struct LongitudinalDashboardView: View {
                     Text("Log Life Event")
                     Spacer()
                     Image(systemName: "chevron.right")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
-                .padding()
-                .background(Color(.secondarySystemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .supportCard()
             }
             .buttonStyle(.plain)
 
@@ -349,12 +350,10 @@ struct LongitudinalDashboardView: View {
                         ProgressView()
                     } else {
                         Image(systemName: "chevron.right")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                 }
-                .padding()
-                .background(Color(.secondarySystemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .supportCard()
             }
             .buttonStyle(.plain)
             .disabled(viewModel.isExporting)
@@ -364,11 +363,11 @@ struct LongitudinalDashboardView: View {
     // MARK: - Loading View
 
     private var loadingView: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             ProgressView()
             Text("Loading your journey...")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
         .frame(maxWidth: .infinity, minHeight: 300)
     }
@@ -376,22 +375,23 @@ struct LongitudinalDashboardView: View {
     // MARK: - Error View
 
     private func errorView(_ error: String) -> some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             Image(systemName: "exclamationmark.triangle")
                 .font(.largeTitle)
-                .foregroundStyle(.orange)
+                .foregroundStyle(SupportTheme.accent)
             Text("Unable to load data")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
             Text(error)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .multilineTextAlignment(.center)
             Button("Try Again") {
                 Task {
                     await viewModel.refresh()
                 }
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.supportPrimary)
         }
         .frame(maxWidth: .infinity, minHeight: 300)
     }
@@ -399,32 +399,33 @@ struct LongitudinalDashboardView: View {
     // MARK: - Empty State
 
     private var emptyStateView: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: SupportTheme.Spacing.l) {
             // Show heat map even when no other data
             yearlyHeatMapSection
 
-            VStack(spacing: 16) {
+            VStack(spacing: SupportTheme.Spacing.m) {
                 Image(systemName: "chart.line.uptrend.xyaxis")
                     .font(.system(size: 48))
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(SupportTheme.accent)
                 Text("Your Journey Starts Here")
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
                 Text("Track your mood regularly to see long-term patterns and insights about your wellness journey.")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .multilineTextAlignment(.center)
             }
-            .padding(32)
+            .padding(SupportTheme.Spacing.xl)
         }
     }
 
     // MARK: - Helpers
 
     private func reportErrorBanner(_ error: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             HStack {
                 Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(SupportTheme.accent)
                 Text("Report generation failed")
                     .font(.subheadline)
                     .fontWeight(.medium)
@@ -433,23 +434,25 @@ struct LongitudinalDashboardView: View {
                     viewModel.reportError = nil
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
+                .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                .accessibilityLabel("Close")
             }
             Text(error)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .lineLimit(3)
         }
         .padding()
-        .background(Color.orange.opacity(0.1))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .background(SupportTheme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
     }
 
     private var reportSuccessBanner: some View {
         HStack {
             Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(.green)
+                .foregroundStyle(SupportTheme.accent)
             Text("Report generated successfully!")
                 .font(.subheadline)
                 .fontWeight(.medium)
@@ -457,12 +460,12 @@ struct LongitudinalDashboardView: View {
             NavigationLink(destination: ReportsView()) {
                 Text("View")
                     .font(.subheadline)
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(SupportTheme.accent)
             }
         }
         .padding()
-        .background(Color.green.opacity(0.1))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .background(SupportTheme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
     }
 
     private func trendIcon(for trend: MoodTrend) -> String {
@@ -476,9 +479,9 @@ struct LongitudinalDashboardView: View {
 
     private func trendColor(for trend: MoodTrend) -> Color {
         switch trend {
-        case .improving: return .green
+        case .improving: return SupportTheme.accent
         case .declining: return .red
-        case .stable, .baseline, .insufficientData: return .secondary
+        case .stable, .baseline, .insufficientData: return SupportTheme.textSecondary
         }
     }
 
@@ -637,7 +640,8 @@ final class LongitudinalDashboardViewModel: ObservableObject {
             )
 
             if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-               let rootVC = windowScene.windows.first?.rootViewController {
+                let rootVC = windowScene.windows.first?.rootViewController
+            {
                 rootVC.present(activityVC, animated: true)
             }
         } catch {
@@ -649,10 +653,10 @@ final class LongitudinalDashboardViewModel: ObservableObject {
 // MARK: - Preview
 
 #if DEBUG
-struct LongitudinalDashboardView_Previews: PreviewProvider {
-    static var previews: some View {
-        LongitudinalDashboardView()
-            .environmentObject(DependencyContainer.preview)
+    struct LongitudinalDashboardView_Previews: PreviewProvider {
+        static var previews: some View {
+            LongitudinalDashboardView()
+                .environmentObject(DependencyContainer.preview)
+        }
     }
-}
 #endif

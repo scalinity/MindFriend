@@ -1,6 +1,6 @@
-import SwiftUI
 import AuthenticationServices
 import GoogleSignIn
+import SwiftUI
 
 struct SignInView: View {
     private let googleClientID: String? = {
@@ -9,8 +9,9 @@ struct SignInView: View {
         // registers (`com.googleusercontent.apps.<id>`) so we don't crash a
         // release build on missing xcconfig wiring.
         if let clientID = Bundle.main.object(forInfoDictionaryKey: "GOOGLE_CLIENT_ID") as? String,
-           !clientID.isEmpty,
-           !clientID.contains("YOUR_GOOGLE_CLIENT_ID") {
+            !clientID.isEmpty,
+            !clientID.contains("YOUR_GOOGLE_CLIENT_ID")
+        {
             return clientID
         }
         if let urlTypes = Bundle.main.object(forInfoDictionaryKey: "CFBundleURLTypes") as? [[String: Any]] {
@@ -36,114 +37,108 @@ struct SignInView: View {
     @State private var successMessage = ""
 
     #if DEBUG
-    private var testEmailSignIn: ((String, String) async throws -> UserProfile)?
+        private var testEmailSignIn: ((String, String) async throws -> UserProfile)?
 
-    init(testEmailSignIn: ((String, String) async throws -> UserProfile)? = nil) {
-        self.testEmailSignIn = testEmailSignIn
-    }
+        init(testEmailSignIn: ((String, String) async throws -> UserProfile)? = nil) {
+            self.testEmailSignIn = testEmailSignIn
+        }
     #endif
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                Spacer()
+            ScrollView {
+                VStack(spacing: SupportTheme.Spacing.l) {
+                    Spacer()
 
-                // Logo and tagline
-                VStack(spacing: 12) {
-                    Image("AppLogo")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 120, height: 120)
+                    // Logo and tagline
+                    VStack(spacing: SupportTheme.Spacing.s) {
+                        Image("AppLogo")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 120, height: 120)
 
-                    Text("MindFriend")
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
+                        Text("MindFriend")
+                            .font(.largeTitle)
+                            .accessibilityAddTraits(.isHeader)
+                            .fontWeight(.bold)
 
-                    Text("Your AI wellness companion")
-                        .font(.title3)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                // Features list
-                VStack(alignment: .leading, spacing: 16) {
-                    FeatureRow(icon: "sparkles", text: "Daily wellness quests")
-                    FeatureRow(icon: "bubble.left.and.bubble.right.fill", text: "AI-powered chat support")
-                    FeatureRow(icon: "chart.line.uptrend.xyaxis", text: "Track your mood journey")
-                    FeatureRow(icon: "person.3.fill", text: "Connect with friends")
-                }
-                .padding(.horizontal, 32)
-
-                Spacer()
-
-                // Sign in buttons
-                VStack(spacing: 12) {
-                    SignInWithAppleButton { request in
-                        request.requestedScopes = [.email, .fullName]
-                    } onCompletion: { result in
-                        handleSignIn(result)
+                        Text("Your AI wellness companion")
+                            .font(.title3)
+                            .accessibilityAddTraits(.isHeader)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
-                    .signInWithAppleButtonStyle(.black)
-                    .frame(height: 50)
-                    .cornerRadius(12)
-                    .accessibilityLabel("Sign in with Apple")
 
-                    Button {
-                        handleGoogleSignIn()
-                    } label: {
-                        HStack(spacing: 12) {
-                            Image("GoogleLogo")
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 20, height: 20)
-                            Text("Continue with Google")
-                                .fontWeight(.medium)
+                    Spacer()
+
+                    Text("A quiet place to reflect, find support and care for your wellbeing.")
+                        .font(.body)
+                        .foregroundStyle(SupportTheme.textSecondary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, SupportTheme.Spacing.l)
+
+                    // Sign in buttons
+                    VStack(spacing: SupportTheme.Spacing.s) {
+                        SignInWithAppleButton { request in
+                            request.requestedScopes = [.email, .fullName]
+                        } onCompletion: { result in
+                            handleSignIn(result)
                         }
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 50)
-                        .background(Color(.systemGray5))
-                        .foregroundStyle(.primary)
-                        .cornerRadius(12)
-                    }
-                    .accessibilityLabel("Continue with Google")
+                        .frame(minHeight: SupportTheme.primaryButtonHeight)
+                        .cornerRadius(SupportTheme.controlRadius)
+                        .accessibilityLabel("Sign in with Apple")
 
-                    // Email sign in button
-                    Button {
-                        showEmailAuth = true
-                    } label: {
-                        HStack {
-                            Image(systemName: "envelope.fill")
-                            Text("Continue with Email")
+                        Button {
+                            handleGoogleSignIn()
+                        } label: {
+                            HStack(spacing: SupportTheme.Spacing.s) {
+                                Image("GoogleLogo")
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: 20, height: 20)
+                                Text("Continue with Google")
+                                    .fontWeight(.medium)
+                            }
                         }
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 50)
-                        .background(Color(.systemGray5))
-                        .foregroundStyle(.primary)
-                        .cornerRadius(12)
-                    }
-                    .accessibilityLabel("Continue with Email")
-                }
-                .padding(.horizontal, 24)
+                        .buttonStyle(.supportSecondary)
+                        .accessibilityLabel("Continue with Google")
 
-                VStack(spacing: 8) {
-                    Link("Terms of Service", destination: AppURLs.termsOfUse)
-                    Link("Privacy Policy", destination: AppURLs.privacyPolicy)
-                }
+                        // Email sign in button
+                        Button {
+                            showEmailAuth = true
+                        } label: {
+                            HStack {
+                                Image(systemName: "envelope.fill")
+                                Text("Continue with Email")
+                            }
+                        }
+                        .buttonStyle(.supportSecondary)
+                        .accessibilityLabel("Continue with Email")
+                    }
+                    .padding(.horizontal, SupportTheme.Spacing.l)
+
+                    VStack(spacing: SupportTheme.Spacing.xs) {
+                        Link("Terms of Service", destination: AppURLs.termsOfUse)
+                        Link("Privacy Policy", destination: AppURLs.privacyPolicy)
+                    }
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal, 24)
-                    .padding(.top, 16)
-                    .padding(.bottom, 8)
+                    .padding(.horizontal, SupportTheme.Spacing.l)
+                    .padding(.top, SupportTheme.Spacing.m)
+                    .padding(.bottom, SupportTheme.Spacing.xs)
+                }
+                .padding(.vertical, SupportTheme.Spacing.l)
             }
+            .supportScreen()
+            .foregroundStyle(SupportTheme.textPrimary)
             .overlay {
                 if isLoading {
-                    Color.black.opacity(0.3)
+                    SupportTheme.canvas.opacity(0.3)
                         .ignoresSafeArea()
                     ProgressView()
                         .scaleEffect(1.5)
-                        .tint(.white)
+                        .tint(SupportTheme.textPrimary)
                 }
             }
             .alert("Sign In Error", isPresented: $showError, presenting: error) { _ in
@@ -171,8 +166,9 @@ struct SignInView: View {
         switch result {
         case .success(let authorization):
             guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential,
-                  let identityToken = credential.identityToken,
-                  let authCode = credential.authorizationCode else {
+                let identityToken = credential.identityToken,
+                let authCode = credential.authorizationCode
+            else {
                 error = AuthError.invalidCredentials
                 showError = true
                 return
@@ -209,7 +205,8 @@ struct SignInView: View {
 
     private func handleGoogleSignIn() {
         guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-              let rootViewController = windowScene.windows.first?.rootViewController else {
+            let rootViewController = windowScene.windows.first?.rootViewController
+        else {
             return
         }
 
@@ -217,7 +214,8 @@ struct SignInView: View {
         // NSInvalidArgumentException on an empty clientID (was a release-only
         // crash when GOOGLE_CLIENT_ID wasn't plumbed through xcconfig).
         guard let clientID = googleClientID, !clientID.isEmpty else {
-            self.error = AuthError.unknown("Google Sign-In is not configured for this build. Please use email sign-in or contact support.")
+            self.error = AuthError.unknown(
+                "Google Sign-In is not configured for this build. Please use email sign-in or contact support.")
             self.showError = true
             return
         }
@@ -260,9 +258,9 @@ struct SignInView: View {
 
     private func signInWithEmail(email: String, password: String) async throws -> UserProfile {
         #if DEBUG
-        if let testEmailSignIn {
-            return try await testEmailSignIn(email, password)
-        }
+            if let testEmailSignIn {
+                return try await testEmailSignIn(email, password)
+            }
         #endif
         return try await container.supabaseAuthService.signIn(email: email, password: password)
     }
@@ -338,6 +336,7 @@ struct SignInView: View {
 // MARK: - Email Auth View
 
 struct EmailAuthView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dismiss) private var dismiss
     @Binding var isLoading: Bool
 
@@ -361,31 +360,32 @@ struct EmailAuthView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: SupportTheme.Spacing.l) {
                     // Header
-                    VStack(spacing: 8) {
+                    VStack(spacing: SupportTheme.Spacing.xs) {
                         Image(systemName: "envelope.circle.fill")
                             .font(.system(size: 60))
-                            .foregroundStyle(Color.accentColor)
+                            .foregroundStyle(SupportTheme.accent)
 
                         Text(isSignUp ? "Create Account" : "Welcome Back")
                             .font(.title)
+                            .accessibilityAddTraits(.isHeader)
                             .fontWeight(.bold)
 
                         Text(isSignUp ? "Sign up with your email" : "Sign in with your email")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
-                    .padding(.top, 32)
+                    .padding(.top, SupportTheme.Spacing.xl)
 
                     // Form fields
-                    VStack(spacing: 16) {
+                    VStack(spacing: SupportTheme.Spacing.m) {
                         if isSignUp {
                             TextField("Display Name", text: $displayName)
                                 .textContentType(.name)
                                 .focused($focusedField, equals: .displayName)
                                 .padding()
-                                .background(Color(.systemGray6))
-                                .cornerRadius(12)
+                                .background(SupportTheme.field)
+                                .cornerRadius(SupportTheme.controlRadius)
                         }
 
                         TextField("Email", text: $email)
@@ -394,26 +394,26 @@ struct EmailAuthView: View {
                             .autocapitalization(.none)
                             .focused($focusedField, equals: .email)
                             .padding()
-                            .background(Color(.systemGray6))
-                            .cornerRadius(12)
+                            .background(SupportTheme.field)
+                            .cornerRadius(SupportTheme.controlRadius)
 
                         SecureField("Password", text: $password)
                             .textContentType(isSignUp ? .newPassword : .password)
                             .focused($focusedField, equals: .password)
                             .padding()
-                            .background(Color(.systemGray6))
-                            .cornerRadius(12)
+                            .background(SupportTheme.field)
+                            .cornerRadius(SupportTheme.controlRadius)
 
                         if isSignUp {
                             SecureField("Confirm Password", text: $confirmPassword)
                                 .textContentType(.newPassword)
                                 .focused($focusedField, equals: .confirmPassword)
                                 .padding()
-                                .background(Color(.systemGray6))
-                                .cornerRadius(12)
+                                .background(SupportTheme.field)
+                                .cornerRadius(SupportTheme.controlRadius)
                         }
                     }
-                    .padding(.horizontal, 24)
+                    .padding(.horizontal, SupportTheme.Spacing.l)
 
                     // Action button
                     Button {
@@ -427,12 +427,12 @@ struct EmailAuthView: View {
                             .fontWeight(.semibold)
                             .frame(maxWidth: .infinity)
                             .frame(height: 54)
-                            .background(isFormValid ? Color.accentColor : Color.gray)
-                            .foregroundStyle(.white)
-                            .cornerRadius(12)
+                            .background(isFormValid ? SupportTheme.accent : SupportTheme.textSecondary)
+                            .foregroundStyle(SupportTheme.onAccent)
+                            .cornerRadius(SupportTheme.controlRadius)
                     }
                     .disabled(!isFormValid || isLoading)
-                    .padding(.horizontal, 24)
+                    .padding(.horizontal, SupportTheme.Spacing.l)
 
                     // Forgot password (sign in only)
                     if !isSignUp {
@@ -440,15 +440,15 @@ struct EmailAuthView: View {
                             showForgotPassword = true
                         }
                         .font(.subheadline)
-                        .foregroundStyle(Color.accentColor)
+                        .foregroundStyle(SupportTheme.accent)
                     }
 
                     // Toggle sign in/sign up
                     HStack {
                         Text(isSignUp ? "Already have an account?" : "Don't have an account?")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                         Button(isSignUp ? "Sign In" : "Sign Up") {
-                            withAnimation {
+                            withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .default) {
                                 isSignUp.toggle()
                                 clearForm()
                             }
@@ -505,10 +505,10 @@ struct FeatureRow: View {
     let text: String
 
     var body: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: SupportTheme.Spacing.m) {
             Image(systemName: icon)
                 .font(.title2)
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(SupportTheme.accent)
                 .frame(width: 32)
                 .accessibilityHidden(true)
 

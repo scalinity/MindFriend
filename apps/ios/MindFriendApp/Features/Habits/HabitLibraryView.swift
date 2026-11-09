@@ -12,10 +12,9 @@ struct HabitLibraryView: View {
     @State private var selectedCategory: HabitCategory?
     @State private var showCreateSheet = false
     @State private var selectedHabit: Habit?
-    @State private var sortOption: SortOption = .streak
+    @State private var sortOption: SortOption = .name
 
     enum SortOption: String, CaseIterable {
-        case streak = "Streak"
         case name = "Name"
         case recent = "Recent"
     }
@@ -30,8 +29,6 @@ struct HabitLibraryView: View {
 
         // Sort
         switch sortOption {
-        case .streak:
-            result.sort { (streakInfoMap[$0.id]?.currentStreak ?? 0) > (streakInfoMap[$1.id]?.currentStreak ?? 0) }
         case .name:
             result.sort { $0.name.localizedCompare($1.name) == .orderedAscending }
         case .recent:
@@ -43,7 +40,7 @@ struct HabitLibraryView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 20) {
+            VStack(spacing: SupportTheme.Spacing.l) {
                 // Create habit button
                 Button {
                     showCreateSheet = true
@@ -53,21 +50,22 @@ struct HabitLibraryView: View {
                             .font(.title2)
                         Text("Create New Habit")
                             .font(.headline)
+                            .accessibilityAddTraits(.isHeader)
                         Spacer()
                         Image(systemName: "chevron.right")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                     .padding()
-                    .background(Color.accentColor.opacity(0.1))
-                    .foregroundStyle(Color.accentColor)
-                    .cornerRadius(12)
+                    .background(SupportTheme.surface)
+                    .foregroundStyle(SupportTheme.accent)
+                    .cornerRadius(SupportTheme.controlRadius)
                 }
                 .buttonStyle(.plain)
 
                 // Category filter chips
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 12) {
+                    HStack(spacing: SupportTheme.Spacing.s) {
                         FilterChip(
                             label: "All",
                             isSelected: selectedCategory == nil,
@@ -88,43 +86,43 @@ struct HabitLibraryView: View {
                 HStack {
                     Text("Sort by")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
 
                     Picker("Sort", selection: $sortOption) {
                         ForEach(SortOption.allCases, id: \.self) { option in
                             Text(option.rawValue).tag(option)
                         }
                     }
-                    .pickerStyle(.segmented)
-                    .frame(maxWidth: 200)
+                    .pickerStyle(.menu)
 
                     Spacer()
                 }
 
                 // Habit list
                 if isLoading {
-                    VStack(spacing: 12) {
+                    VStack(spacing: SupportTheme.Spacing.s) {
                         ProgressView()
                         Text("Loading habits...")
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 40)
+                    .padding(.vertical, SupportTheme.Spacing.xl)
                 } else if filteredHabits.isEmpty {
                     emptyStateView
                 } else {
-                    LazyVStack(spacing: 12) {
+                    LazyVStack(spacing: SupportTheme.Spacing.s) {
                         ForEach(filteredHabits) { habit in
                             HabitCompletionCard(
                                 habit: habit,
-                                streakInfo: streakInfoMap[habit.id] ?? HabitStreakInfo(
-                                    currentStreak: 0,
-                                    longestStreak: 0,
-                                    lastCompletionDate: nil,
-                                    isCompletedToday: false,
-                                    willResetNextDay: false
-                                ),
+                                streakInfo: streakInfoMap[habit.id]
+                                    ?? HabitStreakInfo(
+                                        currentStreak: 0,
+                                        longestStreak: 0,
+                                        lastCompletionDate: nil,
+                                        isCompletedToday: false,
+                                        willResetNextDay: false
+                                    ),
                                 onComplete: {
                                     await completeHabit(habit)
                                 },
@@ -138,6 +136,8 @@ struct HabitLibraryView: View {
             }
             .padding()
         }
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle("My Habits")
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
@@ -147,6 +147,8 @@ struct HabitLibraryView: View {
                 } label: {
                     Image(systemName: "plus")
                 }
+                .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                .accessibilityLabel("Add")
             }
         }
         .sheet(isPresented: $showCreateSheet) {
@@ -159,13 +161,14 @@ struct HabitLibraryView: View {
             NavigationStack {
                 HabitDetailView(
                     habit: habit,
-                    streakInfo: streakInfoMap[habit.id] ?? HabitStreakInfo(
-                        currentStreak: 0,
-                        longestStreak: 0,
-                        lastCompletionDate: nil,
-                        isCompletedToday: false,
-                        willResetNextDay: false
-                    )
+                    streakInfo: streakInfoMap[habit.id]
+                        ?? HabitStreakInfo(
+                            currentStreak: 0,
+                            longestStreak: 0,
+                            lastCompletionDate: nil,
+                            isCompletedToday: false,
+                            willResetNextDay: false
+                        )
                 )
                 .environmentObject(container)
             }
@@ -180,21 +183,24 @@ struct HabitLibraryView: View {
 
     @ViewBuilder
     private var emptyStateView: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             Image(systemName: "repeat.circle")
                 .font(.system(size: 50))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
 
-            VStack(spacing: 4) {
+            VStack(spacing: SupportTheme.Spacing.xxs) {
                 Text("No Habits Yet")
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
 
-                Text(selectedCategory != nil
-                    ? "No \(selectedCategory!.displayName.lowercased()) habits found"
-                    : "Create your first habit to start building healthy routines")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
+                Text(
+                    selectedCategory != nil
+                        ? "No \(selectedCategory!.displayName.lowercased()) habits found"
+                        : "Create your first habit to start building healthy routines"
+                )
+                .font(.subheadline)
+                .foregroundStyle(SupportTheme.textSecondary)
+                .multilineTextAlignment(.center)
             }
 
             Button {
@@ -202,10 +208,10 @@ struct HabitLibraryView: View {
             } label: {
                 Label("Create Habit", systemImage: "plus")
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.supportPrimary)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 40)
+        .padding(.vertical, SupportTheme.Spacing.xl)
     }
 
     private func loadHabits() async {

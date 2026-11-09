@@ -3,10 +3,10 @@ import SwiftUI
 /// Displays daily wellness score with visual ring indicator
 /// MVP implementation showing score placeholder until backend integration complete
 struct WellnessScoreCard: View {
-    let score: Int // 0-100
-    let confidence: Int // 0-100
-    let trend: [Int] // Last 7 days
-    let delta: Int? // Change from yesterday
+    let score: Int  // 0-100
+    let confidence: Int  // 0-100
+    let trend: [Int]  // Last 7 days
+    let delta: Int?  // Change from yesterday
 
     @State private var showBreakdown = false
 
@@ -27,36 +27,37 @@ struct WellnessScoreCard: View {
     }
 
     var body: some View {
-        VStack(spacing: 16) {
-            HStack(alignment: .top, spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
+            HStack(alignment: .top, spacing: SupportTheme.Spacing.m) {
                 // Score information
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                     Text("Today's Wellness")
                         .font(.headline)
-                        .foregroundStyle(.secondary)
+                        .accessibilityAddTraits(.isHeader)
+                        .foregroundStyle(SupportTheme.textSecondary)
 
                     if let delta = delta {
-                        HStack(spacing: 4) {
+                        HStack(spacing: SupportTheme.Spacing.xxs) {
                             Image(systemName: delta >= 0 ? "arrow.up.right" : "arrow.down.right")
                                 .font(.caption)
                             Text("\(delta >= 0 ? "+" : "")\(delta) from yesterday")
                                 .font(.subheadline)
                         }
-                        .foregroundStyle(delta >= 0 ? .green : .orange)
+                        .foregroundStyle(delta >= 0 ? SupportTheme.accent : SupportTheme.accent)
                     }
 
                     Text(colorZone.label)
                         .font(.callout)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
 
                     if confidence < 80 {
-                        HStack(spacing: 4) {
+                        HStack(spacing: SupportTheme.Spacing.xxs) {
                             Image(systemName: "info.circle")
                                 .font(.caption)
                             Text("Confidence: \(confidence)%")
                                 .font(.caption)
                         }
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                     }
                 }
 
@@ -68,10 +69,10 @@ struct WellnessScoreCard: View {
 
             // 7-day trend sparkline
             if !trend.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     Text("7-Day Trend")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
 
                     MiniTrendLine(scores: trend)
                         .frame(height: 40)
@@ -79,9 +80,9 @@ struct WellnessScoreCard: View {
             }
         }
         .padding()
-        .background(.regularMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .shadow(color: .black.opacity(0.05), radius: 8, y: 4)
+        .background(SupportTheme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
+        .shadow(color: SupportTheme.canvas.opacity(0.05), radius: 8, y: 4)
         .onTapGesture {
             showBreakdown = true
         }
@@ -93,6 +94,7 @@ struct WellnessScoreCard: View {
 
 /// Circular progress ring showing wellness score
 struct WellnessScoreRing: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let score: Int
     let colorZone: ColorZone
     let size: CGFloat
@@ -107,34 +109,35 @@ struct WellnessScoreRing: View {
         ZStack {
             // Background ring
             Circle()
-                .stroke(colorZone.color.opacity(0.2), lineWidth: size * 0.12)
+                .stroke(SupportTheme.accent.opacity(0.2), lineWidth: size * 0.12)
 
             // Progress ring
             Circle()
-                .trim(from: 0, to: animatedProgress)
+                .trim(from: 0, to: reduceMotion ? Double(score) / 100 : animatedProgress)
                 .stroke(
-                    colorZone.color.gradient,
+                    SupportTheme.accent.gradient,
                     style: StrokeStyle(
                         lineWidth: size * 0.12,
                         lineCap: .round
                     )
                 )
+                .opacity(reduceMotion ? (animatedProgress > 0 ? 1 : 0) : 1)
                 .rotationEffect(.degrees(-90))
 
             // Score text
             VStack(spacing: size * 0.02) {
                 Text("\(score)")
                     .font(.system(size: size * 0.4, weight: .bold, design: .rounded))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(SupportTheme.textPrimary)
 
                 Text("Wellness")
                     .font(.system(size: size * 0.12, weight: .medium))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
         }
         .frame(width: size, height: size)
         .onAppear {
-            withAnimation(.easeOut(duration: 0.8)) {
+            withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : (.easeOut(duration: 0.8))) {
                 animatedProgress = progress
             }
         }
@@ -167,7 +170,7 @@ struct MiniTrendLine: View {
                     }
                 }
             }
-            .stroke(Color.blue.gradient, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+            .stroke(SupportTheme.accent.gradient, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
 
             // Fill area under line
             Path { path in
@@ -187,11 +190,7 @@ struct MiniTrendLine: View {
                 path.closeSubpath()
             }
             .fill(
-                LinearGradient(
-                    colors: [Color.blue.opacity(0.3), Color.clear],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
+                SupportTheme.surface
             )
         }
     }
@@ -209,8 +208,7 @@ struct ScoreBreakdownPlaceholder: View {
             ("Mood", Int(Double(score) * 1.0), 0.30, "face.smiling"),
             ("Sleep", Int(Double(score) * 0.95), 0.25, "bed.double"),
             ("Activity", Int(Double(score) * 0.9), 0.20, "figure.walk"),
-            ("Streaks", Int(Double(score) * 1.05), 0.15, "flame"),
-            ("Exercises", Int(Double(score) * 0.85), 0.10, "heart.circle")
+            ("Exercises", Int(Double(score) * 0.85), 0.10, "heart.circle"),
         ]
         return baseValues.map { (name, value, weight, icon) in
             (name, min(value, 100), weight, icon)
@@ -220,21 +218,23 @@ struct ScoreBreakdownPlaceholder: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: SupportTheme.Spacing.l) {
                     // Overall score display
-                    VStack(spacing: 8) {
+                    VStack(spacing: SupportTheme.Spacing.xs) {
                         WellnessScoreRing(score: score, colorZone: colorZoneForScore(score), size: 140)
 
                         Text(labelForScore(score))
                             .font(.title3.weight(.semibold))
+                            .accessibilityAddTraits(.isHeader)
                             .foregroundStyle(colorForScore(score))
                     }
                     .padding(.top)
 
                     // Component breakdown
-                    VStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
                         Text("What Contributed")
                             .font(.headline)
+                            .accessibilityAddTraits(.isHeader)
                             .padding(.horizontal)
 
                         ForEach(components, id: \.name) { component in
@@ -250,19 +250,21 @@ struct ScoreBreakdownPlaceholder: View {
                         // Backend integration note
                         Text("Using sample data. Backend integration in progress.")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                             .multilineTextAlignment(.center)
                             .frame(maxWidth: .infinity)
-                            .padding(.top, 8)
+                            .padding(.top, SupportTheme.Spacing.xs)
                     }
                     .padding(.vertical)
-                    .background(Color(.secondarySystemBackground))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .background(SupportTheme.surface)
+                    .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
 
                     Spacer()
                 }
                 .padding()
             }
+            .supportScreen()
+            .foregroundStyle(SupportTheme.textPrimary)
             .navigationTitle("Wellness Breakdown")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -305,10 +307,10 @@ struct ComponentBreakdownRow: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             HStack {
                 Image(systemName: icon)
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(SupportTheme.accent)
                     .frame(width: 24)
 
                 Text(name)
@@ -317,14 +319,14 @@ struct ComponentBreakdownRow: View {
 
                 Spacer()
 
-                VStack(alignment: .trailing, spacing: 2) {
+                VStack(alignment: .trailing, spacing: SupportTheme.Spacing.xxs) {
                     Text("\(value)")
                         .font(.subheadline)
                         .fontWeight(.semibold)
 
                     Text("\(Int(weight * 100))% weight")
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
             }
 
@@ -332,14 +334,14 @@ struct ComponentBreakdownRow: View {
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
                     Rectangle()
-                        .fill(Color.gray.opacity(0.2))
+                        .fill(SupportTheme.textSecondary.opacity(0.2))
                         .frame(height: 8)
-                        .cornerRadius(4)
+                        .cornerRadius(SupportTheme.controlRadius)
 
                     Rectangle()
                         .fill(colorForValue(value))
                         .frame(width: geometry.size.width * CGFloat(value) / 100.0, height: 8)
-                        .cornerRadius(4)
+                        .cornerRadius(SupportTheme.controlRadius)
                 }
             }
             .frame(height: 8)
@@ -347,7 +349,7 @@ struct ComponentBreakdownRow: View {
             HStack {
                 Text("+\(String(format: "%.1f", contribution)) pts")
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
 
                 Spacer()
             }
@@ -360,9 +362,9 @@ struct ComponentBreakdownRow: View {
         case 0..<40:
             return .red
         case 40..<70:
-            return .yellow
+            return SupportTheme.Celebration.gold
         default:
-            return .green
+            return SupportTheme.accent
         }
     }
 }

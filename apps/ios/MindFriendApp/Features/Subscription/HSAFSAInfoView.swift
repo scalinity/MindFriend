@@ -26,55 +26,60 @@ struct HSAFSAInfoView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: SupportTheme.Spacing.l) {
                     // Header
-                    VStack(spacing: 12) {
+                    VStack(spacing: SupportTheme.Spacing.s) {
                         Image(systemName: "heart.text.square.fill")
                             .font(.system(size: 60))
-                            .foregroundStyle(.blue)
+                            .foregroundStyle(SupportTheme.accent)
 
                         Text("HSA/FSA Eligible")
                             .font(.title2)
+                            .accessibilityAddTraits(.isHeader)
                             .fontWeight(.semibold)
 
                         Text("Use your health savings account for MindFriend Premium")
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                     .multilineTextAlignment(.center)
 
                     // About Section
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack(spacing: 8) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
+                        HStack(spacing: SupportTheme.Spacing.xs) {
                             Image(systemName: "info.circle.fill")
-                                .foregroundStyle(.blue)
+                                .foregroundStyle(SupportTheme.accent)
                                 .frame(width: 24)
 
                             Text("About HSA/FSA Eligibility")
                                 .font(.headline)
+                                .accessibilityAddTraits(.isHeader)
                         }
 
-                        Text("MindFriend Premium is recognized by the IRS as an eligible mental health and wellness expense under Health Savings Accounts (HSA) and Flexible Spending Accounts (FSA). This means you can use pre-tax healthcare funds to cover your subscription.")
-                            .font(.body)
-                            .foregroundStyle(.secondary)
-                            .lineSpacing(1.2)
+                        Text(
+                            "MindFriend Premium is recognized by the IRS as an eligible mental health and wellness expense under Health Savings Accounts (HSA) and Flexible Spending Accounts (FSA). This means you can use pre-tax healthcare funds to cover your subscription."
+                        )
+                        .font(.body)
+                        .foregroundStyle(SupportTheme.textSecondary)
+                        .lineSpacing(1.2)
                     }
                     .padding()
-                    .background(Color.blue.opacity(0.05))
-                    .cornerRadius(12)
+                    .background(SupportTheme.surface)
+                    .cornerRadius(SupportTheme.controlRadius)
 
                     // How It Works Section
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack(spacing: 8) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
+                        HStack(spacing: SupportTheme.Spacing.xs) {
                             Image(systemName: "checklist")
-                                .foregroundStyle(.green)
+                                .foregroundStyle(SupportTheme.accent)
                                 .frame(width: 24)
 
                             Text("How It Works")
                                 .font(.headline)
+                                .accessibilityAddTraits(.isHeader)
                         }
 
-                        VStack(alignment: .leading, spacing: 12) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                             StepRow(
                                 number: 1,
                                 title: "Subscribe to Premium",
@@ -101,57 +106,58 @@ struct HSAFSAInfoView: View {
                         }
                     }
                     .padding()
-                    .background(Color.green.opacity(0.05))
-                    .cornerRadius(12)
+                    .background(SupportTheme.surface)
+                    .cornerRadius(SupportTheme.controlRadius)
 
                     // Receipt Section
                     if hasActiveSubscription {
-                        VStack(alignment: .leading, spacing: 12) {
-                            HStack(spacing: 8) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
+                            HStack(spacing: SupportTheme.Spacing.xs) {
                                 Image(systemName: "receipt.fill")
-                                    .foregroundStyle(.orange)
+                                    .foregroundStyle(SupportTheme.accent)
                                     .frame(width: 24)
 
                                 Text("Your Receipt")
                                     .font(.headline)
+                                    .accessibilityAddTraits(.isHeader)
                             }
 
                             if let url = generatedReceiptURL {
-                                HStack(spacing: 12) {
+                                HStack(spacing: SupportTheme.Spacing.s) {
                                     Image(systemName: "checkmark.circle.fill")
-                                        .foregroundStyle(.green)
+                                        .foregroundStyle(SupportTheme.accent)
 
-                                    VStack(alignment: .leading, spacing: 2) {
+                                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                                         Text("Receipt Generated")
                                             .font(.subheadline)
                                             .fontWeight(.semibold)
 
                                         Text("Ready to submit")
                                             .font(.caption)
-                                            .foregroundStyle(.secondary)
+                                            .foregroundStyle(SupportTheme.textSecondary)
                                     }
 
                                     Spacer()
                                 }
                                 .padding()
-                                .background(Color.green.opacity(0.1))
-                                .cornerRadius(8)
+                                .background(SupportTheme.surface)
+                                .cornerRadius(SupportTheme.controlRadius)
 
                                 ShareLink(
                                     item: url,
                                     subject: Text("MindFriend Premium Receipt"),
                                     message: Text("Here's my MindFriend Premium receipt for HSA/FSA reimbursement"),
                                     label: {
-                                        HStack(spacing: 8) {
+                                        HStack(spacing: SupportTheme.Spacing.xs) {
                                             Image(systemName: "square.and.arrow.up")
                                             Text("Share Receipt")
                                                 .fontWeight(.semibold)
                                         }
                                         .frame(maxWidth: .infinity)
                                         .padding()
-                                        .background(Color.accentColor)
-                                        .foregroundStyle(.white)
-                                        .cornerRadius(8)
+                                        .background(SupportTheme.accent)
+                                        .foregroundStyle(SupportTheme.onAccent)
+                                        .cornerRadius(SupportTheme.controlRadius)
                                     }
                                 )
                                 .accessibilityLabel("Share receipt button")
@@ -159,10 +165,10 @@ struct HSAFSAInfoView: View {
                                 Button {
                                     generateReceipt()
                                 } label: {
-                                    HStack(spacing: 8) {
+                                    HStack(spacing: SupportTheme.Spacing.xs) {
                                         if isGeneratingReceipt {
                                             ProgressView()
-                                                .tint(.white)
+                                                .tint(SupportTheme.textPrimary)
                                         } else {
                                             Image(systemName: "doc.badge.gearshape")
                                             Text("Generate Receipt")
@@ -171,22 +177,22 @@ struct HSAFSAInfoView: View {
                                     }
                                     .frame(maxWidth: .infinity)
                                     .padding()
-                                    .background(Color.orange)
-                                    .foregroundStyle(.white)
-                                    .cornerRadius(8)
+                                    .background(SupportTheme.accent)
+                                    .foregroundStyle(SupportTheme.onAccent)
+                                    .cornerRadius(SupportTheme.controlRadius)
                                 }
                                 .disabled(isGeneratingReceipt)
                                 .accessibilityLabel("Generate receipt button")
                             }
                         }
                         .padding()
-                        .background(Color.orange.opacity(0.05))
-                        .cornerRadius(12)
+                        .background(SupportTheme.surface)
+                        .cornerRadius(SupportTheme.controlRadius)
                     } else {
-                        VStack(alignment: .leading, spacing: 12) {
-                            HStack(spacing: 8) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
+                            HStack(spacing: SupportTheme.Spacing.xs) {
                                 Image(systemName: "lock.fill")
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(SupportTheme.textSecondary)
                                     .frame(width: 24)
 
                                 Text("Active Subscription Required")
@@ -194,41 +200,49 @@ struct HSAFSAInfoView: View {
                                     .fontWeight(.semibold)
                             }
 
-                            Text("You need an active MindFriend Premium subscription to generate receipts. Subscribe to get started.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                            Text(
+                                "You need an active MindFriend Premium subscription to generate receipts. Subscribe to get started."
+                            )
+                            .font(.caption)
+                            .foregroundStyle(SupportTheme.textSecondary)
                         }
                         .padding()
-                        .background(Color.secondary.opacity(0.1))
-                        .cornerRadius(12)
+                        .background(SupportTheme.surface)
+                        .cornerRadius(SupportTheme.controlRadius)
                     }
 
                     // Disclaimers
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                         Text("Important Notes")
                             .font(.headline)
+                            .accessibilityAddTraits(.isHeader)
 
-                        VStack(alignment: .leading, spacing: 6) {
-                            DiscaimerText("MindFriend's HSA/FSA eligibility is based on current IRS guidance. Individual plan eligibility varies.")
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
+                            DiscaimerText(
+                                "MindFriend's HSA/FSA eligibility is based on current IRS guidance. Individual plan eligibility varies."
+                            )
 
-                            DiscaimerText("Consult with your HSA/FSA plan administrator before submitting. They have final discretion on approval.")
+                            DiscaimerText(
+                                "Consult with your HSA/FSA plan administrator before submitting. They have final discretion on approval."
+                            )
 
-                            DiscaimerText("This receipt is provided for informational purposes and does not guarantee reimbursement.")
+                            DiscaimerText(
+                                "This receipt is provided for informational purposes and does not guarantee reimbursement."
+                            )
 
-                            DiscaimerText("We're not tax advisors. Consult a qualified tax professional for personalized advice.")
+                            DiscaimerText(
+                                "We're not tax advisors. Consult a qualified tax professional for personalized advice.")
                         }
                     }
-                    .padding()
-                    .background(Color(.secondarySystemBackground))
-                    .cornerRadius(12)
+                    .supportCard()
 
                     // Error
                     if showError, let error = error {
-                        HStack(spacing: 8) {
+                        HStack(spacing: SupportTheme.Spacing.xs) {
                             Image(systemName: "xmark.circle.fill")
                                 .foregroundStyle(.red)
 
-                            VStack(alignment: .leading, spacing: 2) {
+                            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                                 Text("Error")
                                     .font(.subheadline)
                                     .fontWeight(.semibold)
@@ -241,13 +255,15 @@ struct HSAFSAInfoView: View {
                         }
                         .padding()
                         .background(Color.red.opacity(0.1))
-                        .cornerRadius(8)
+                        .cornerRadius(SupportTheme.controlRadius)
                     }
 
                     Spacer(minLength: 20)
                 }
                 .padding()
             }
+            .supportScreen()
+            .foregroundStyle(SupportTheme.textPrimary)
             .navigationTitle("HSA/FSA Eligibility")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -256,19 +272,20 @@ struct HSAFSAInfoView: View {
                         dismiss()
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                     .accessibilityLabel("Close button")
                 }
             }
             .task {
-                            do {
-                                try await billingService.loadHSARecord()
-                            } catch {
-                                Log.billing.error("Failed to load HSA record", error: error)
-                            }
-                        }
-                    }    }
+                do {
+                    try await billingService.loadHSARecord()
+                } catch {
+                    Log.billing.error("Failed to load HSA record", error: error)
+                }
+            }
+        }
+    }
 
     private func generateReceipt() {
         isGeneratingReceipt = true
@@ -306,23 +323,24 @@ private struct StepRow: View {
     let description: String
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: SupportTheme.Spacing.s) {
             Text("\(number)")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
                 .fontWeight(.semibold)
-                .foregroundStyle(.white)
+                .foregroundStyle(SupportTheme.onAccent)
                 .frame(width: 32, height: 32)
-                .background(Color.green)
-                .cornerRadius(16)
+                .background(SupportTheme.accent)
+                .cornerRadius(SupportTheme.controlRadius)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text(title)
                     .font(.subheadline)
                     .fontWeight(.semibold)
 
                 Text(description)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
 
             Spacer()
@@ -340,15 +358,15 @@ private struct DiscaimerText: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .top, spacing: SupportTheme.Spacing.xs) {
             Image(systemName: "circle.fill")
                 .font(.caption)
-                .foregroundStyle(.secondary)
-                .padding(.top, 2)
+                .foregroundStyle(SupportTheme.textSecondary)
+                .padding(.top, SupportTheme.Spacing.xxs)
 
             Text(text)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .lineSpacing(1.1)
         }
     }

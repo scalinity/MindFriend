@@ -3,12 +3,12 @@ import SwiftUI
 /// A banner that displays privacy-first messaging to build user trust
 struct PrivacyBanner: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Label("Your Privacy Matters", systemImage: "lock.shield.fill")
                 .font(.headline)
-                .foregroundColor(.green)
+                .foregroundColor(SupportTheme.accent)
 
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                 PrivacyPoint(icon: "lock.fill", text: "Encrypted in transit and at rest")
                 PrivacyPoint(icon: "eye.slash.fill", text: "We never sell your personal information")
                 PrivacyPoint(icon: "arrow.down.doc.fill", text: "Export your data anytime")
@@ -16,10 +16,12 @@ struct PrivacyBanner: View {
             }
         }
         .padding()
-        .background(Color.green.opacity(0.1))
-        .cornerRadius(12)
+        .background(SupportTheme.surface)
+        .cornerRadius(SupportTheme.controlRadius)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Your Privacy Matters. Encrypted in transit and at rest. We never sell your personal information. Export your data anytime. Delete your account and data permanently.")
+        .accessibilityLabel(
+            "Your Privacy Matters. Encrypted in transit and at rest. We never sell your personal information. Export your data anytime. Delete your account and data permanently."
+        )
     }
 }
 
@@ -29,10 +31,10 @@ private struct PrivacyPoint: View {
     let text: String
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: SupportTheme.Spacing.xs) {
             Image(systemName: icon)
                 .font(.caption)
-                .foregroundColor(.green)
+                .foregroundColor(SupportTheme.accent)
                 .frame(width: 20)
             Text(text)
                 .font(.caption)

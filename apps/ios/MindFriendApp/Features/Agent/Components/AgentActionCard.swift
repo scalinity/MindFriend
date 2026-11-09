@@ -10,7 +10,7 @@ struct AgentActionCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             // Header
             HStack {
                 Image(systemName: action.actionType.iconName)
@@ -18,24 +18,24 @@ struct AgentActionCard: View {
 
                 Text(action.actionType.displayName)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
 
                 Spacer()
 
                 Text(timeAgo)
                     .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
 
             // Content
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text(action.content.title)
                     .font(.subheadline)
                     .fontWeight(.medium)
 
                 Text(action.content.body)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .lineLimit(2)
             }
 
@@ -46,15 +46,17 @@ struct AgentActionCard: View {
                 Spacer()
 
                 if action.effectivenessScore == nil && action.status.isTerminal {
-                    HStack(spacing: 8) {
+                    HStack(spacing: SupportTheme.Spacing.xs) {
                         Button {
                             onHelpful?(true)
                         } label: {
                             Image(systemName: "hand.thumbsup")
                                 .font(.caption)
                         }
-                        .buttonStyle(.bordered)
-                        .tint(.green)
+                        .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                        .accessibilityLabel("Helpful")
+                        .buttonStyle(.supportSecondary)
+                        .tint(SupportTheme.accent)
 
                         Button {
                             onHelpful?(false)
@@ -62,35 +64,35 @@ struct AgentActionCard: View {
                             Image(systemName: "hand.thumbsdown")
                                 .font(.caption)
                         }
-                        .buttonStyle(.bordered)
-                        .tint(.orange)
+                        .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                        .accessibilityLabel("Not helpful")
+                        .buttonStyle(.supportSecondary)
+                        .tint(SupportTheme.accent)
                     }
                 } else if let score = action.effectivenessScore {
-                    HStack(spacing: 4) {
+                    HStack(spacing: SupportTheme.Spacing.xxs) {
                         Image(systemName: score > 0.5 ? "hand.thumbsup.fill" : "hand.thumbsdown.fill")
-                            .foregroundStyle(score > 0.5 ? .green : .orange)
+                            .foregroundStyle(score > 0.5 ? SupportTheme.accent : SupportTheme.accent)
                         Text(score > 0.5 ? "Helpful" : "Not helpful")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                 }
             }
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .supportCard()
     }
 
     private var typeColor: Color {
         switch action.actionType {
-        case .checkIn: return .blue
-        case .suggestExercise: return .green
-        case .morningBriefing: return .orange
-        case .encouragement: return .yellow
+        case .checkIn: return SupportTheme.accent
+        case .suggestExercise: return SupportTheme.accent
+        case .morningBriefing: return SupportTheme.accent
+        case .encouragement: return SupportTheme.Celebration.gold
         case .streakReminder: return .red
-        case .moodPrompt: return .purple
-        case .contentRecommendation: return .cyan
-        case .concernAlert: return .pink
+        case .moodPrompt: return SupportTheme.accent
+        case .contentRecommendation: return SupportTheme.accent
+        case .concernAlert: return SupportTheme.accent
         }
     }
 
@@ -107,8 +109,8 @@ struct StatusPill: View {
     var body: some View {
         Text(status.displayName)
             .font(.caption2)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
+            .padding(.horizontal, SupportTheme.Spacing.xs)
+            .padding(.vertical, SupportTheme.Spacing.xxs)
             .background(color.opacity(0.2))
             .foregroundStyle(color)
             .clipShape(Capsule())
@@ -116,18 +118,18 @@ struct StatusPill: View {
 
     private var color: Color {
         switch status {
-        case .planned, .scheduled: return .blue
-        case .delivered: return .orange
-        case .opened: return .yellow
-        case .responded: return .green
-        case .dismissed: return .gray
+        case .planned, .scheduled: return SupportTheme.accent
+        case .delivered: return SupportTheme.accent
+        case .opened: return SupportTheme.Celebration.gold
+        case .responded: return SupportTheme.accent
+        case .dismissed: return SupportTheme.textSecondary
         case .cancelled: return .red
         }
     }
 }
 
 #Preview {
-    VStack(spacing: 16) {
+    VStack(spacing: SupportTheme.Spacing.m) {
         AgentActionCard(
             action: AgentAction(
                 id: UUID(),
@@ -165,7 +167,7 @@ struct StatusPill: View {
                 deliveredAt: Date(),
                 content: ActionContent(
                     title: "You're doing great!",
-                    body: "Your 7-day streak is amazing. Keep up the good work!",
+                    body: "You made time for yourself this week. Here is a moment to reflect.",
                     quickActions: nil,
                     deepLink: nil,
                     metadata: nil

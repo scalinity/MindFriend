@@ -8,16 +8,21 @@ struct CertificatesListView: View {
 
     @State private var certificates: [ProgramCertificate] = []
     @State private var isLoading = true
+    @State private var loadError: String?
 
     var body: some View {
         Group {
             if isLoading {
                 ProgressView()
+            } else if let loadError {
+                SupportUnavailableState(title: "Certificates couldn’t load", message: loadError, actionTitle: "Try again") {
+                    Task { await loadCertificates() }
+                }
             } else if certificates.isEmpty {
                 EmptyCertificatesView()
             } else {
                 ScrollView {
-                    LazyVStack(spacing: 16) {
+                    LazyVStack(spacing: SupportTheme.Spacing.m) {
                         ForEach(certificates) { certificate in
                             NavigationLink {
                                 CertificateDetailView(certificate: certificate)
@@ -27,10 +32,14 @@ struct CertificatesListView: View {
                             .buttonStyle(.plain)
                         }
                     }
-                    .padding()
+                    .padding(SupportTheme.Spacing.m)
+                    .frame(maxWidth: SupportTheme.readableWidth)
+                    .frame(maxWidth: .infinity)
                 }
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .supportScreen()
         .navigationTitle("My Certificates")
         .task { await loadCertificates() }
     }
@@ -41,8 +50,10 @@ struct CertificatesListView: View {
 
         do {
             certificates = try await container.supabaseDataService.getCertificates()
+            loadError = nil
         } catch {
-            appState.showError(.apiError(error.localizedDescription))
+            // Shown in place on this page; a failure here is not a reason to interrupt with an alert.
+            loadError = error.localizedDescription
         }
     }
 }
@@ -53,47 +64,40 @@ struct CertificateCard: View {
     let certificate: ProgramCertificate
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                // Program icon
-                ZStack {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill((certificate.program?.category.color ?? .blue).gradient)
-                        .frame(width: 44, height: 44)
-
-                    Image(systemName: certificate.program?.category.icon ?? "checkmark.seal.fill")
-                        .foregroundStyle(.white)
-                }
-                .accessibilityHidden(true)
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
+            HStack(spacing: SupportTheme.Spacing.s) {
+                Image(systemName: certificate.program?.category.icon ?? "checkmark.seal.fill")
+                    .font(.title3)
+                    .foregroundStyle(SupportTheme.Celebration.gold)
+                    .frame(width: SupportTheme.minimumTarget, height: SupportTheme.minimumTarget)
+                    .background(SupportTheme.elevated, in: RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
+                    .accessibilityHidden(true)
 
                 VStack(alignment: .leading) {
                     Text(certificate.program?.title ?? "Program")
                         .font(.headline)
+                        .foregroundStyle(SupportTheme.textPrimary)
 
                     Text(certificate.issuedAt.formatted(date: .abbreviated, time: .omitted))
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
 
                 Spacer()
 
                 Image(systemName: "chevron.right")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .accessibilityHidden(true)
             }
 
-            // Stats
-            HStack(spacing: 16) {
+            HStack(spacing: SupportTheme.Spacing.m) {
                 StatBadge(label: "Days", value: "\(certificate.completionStats.daysCompleted)")
-                StatBadge(label: "Best Streak", value: "\(certificate.completionStats.streakBest)")
-                StatBadge(label: "Skips Used", value: "\(certificate.completionStats.skipsUsed)")
+                StatBadge(label: "Skips used", value: "\(certificate.completionStats.skipsUsed)")
             }
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .supportCard()
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Certificate for \(certificate.program?.title ?? "Program"), completed on \(certificate.issuedAt.formatted(date: .abbreviated, time: .omitted)). \(certificate.completionStats.daysCompleted) days completed, best streak \(certificate.completionStats.streakBest), \(certificate.completionStats.skipsUsed) skips used")
+        .accessibilityLabel("Certificate for \(certificate.program?.title ?? "Program"), completed on \(certificate.issuedAt.formatted(date: .abbreviated, time: .omitted)). \(certificate.completionStats.daysCompleted) days completed, \(certificate.completionStats.skipsUsed) skips used")
         .accessibilityHint("Double tap to view certificate details")
     }
 }
@@ -106,9 +110,10 @@ struct StatBadge: View {
         VStack(spacing: 2) {
             Text(value)
                 .font(.headline)
+                .foregroundStyle(SupportTheme.textPrimary)
             Text(label)
                 .font(.caption2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .combine)
@@ -128,38 +133,32 @@ struct CertificateDetailView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 24) {
-                // Certificate visual
+            VStack(spacing: SupportTheme.Spacing.l) {
                 CertificateVisual(certificate: certificate)
 
-                // Stats
-                VStack(spacing: 16) {
-                    Text("Completion Stats")
+                VStack(spacing: SupportTheme.Spacing.m) {
+                    Text("Completion")
                         .font(.headline)
+                        .foregroundStyle(SupportTheme.textPrimary)
+                        .accessibilityAddTraits(.isHeader)
 
-                    HStack(spacing: 24) {
+                    HStack(spacing: SupportTheme.Spacing.l) {
                         StatColumn(
                             icon: "calendar",
                             value: "\(certificate.completionStats.daysCompleted)",
-                            label: "Days Completed"
-                        )
-
-                        StatColumn(
-                            icon: "flame.fill",
-                            value: "\(certificate.completionStats.streakBest)",
-                            label: "Best Streak"
+                            label: "Days completed"
                         )
 
                         StatColumn(
                             icon: "arrow.right.circle",
                             value: "\(certificate.completionStats.skipsUsed)",
-                            label: "Skips Used"
+                            label: "Skips used"
                         )
                     }
                 }
+                .supportCard()
 
-                // Share buttons
-                VStack(spacing: 12) {
+                VStack(spacing: SupportTheme.Spacing.s) {
                     Button {
                         Task { await shareToCircle() }
                     } label: {
@@ -169,20 +168,23 @@ struct CertificateDetailView: View {
                         )
                         .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.supportSecondary)
                     .disabled(certificate.sharedToCircle)
 
                     Button {
                         shareExternally()
                     } label: {
-                        Label("Share Certificate", systemImage: "square.and.arrow.up")
+                        Label("Share certificate", systemImage: "square.and.arrow.up")
                             .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.supportPrimary)
                 }
             }
-            .padding()
+            .padding(SupportTheme.Spacing.m)
+            .frame(maxWidth: SupportTheme.readableWidth)
+            .frame(maxWidth: .infinity)
         }
+        .supportScreen()
         .navigationTitle("Certificate")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -191,7 +193,7 @@ struct CertificateDetailView: View {
         do {
             try await container.supabaseDataService.shareCertificateToCircle(certificateId: certificate.id)
             appState.showCelebration(
-                title: "Shared!",
+                title: "Shared",
                 subtitle: "Shared to your circle",
                 icon: "checkmark.circle.fill"
             )
@@ -201,7 +203,7 @@ struct CertificateDetailView: View {
     }
 
     private func shareExternally() {
-        let text = "I completed the \(certificate.program?.title ?? "wellness program") on MindFriend! Certificate #\(certificate.certificateNumber)"
+        let text = "I completed the \(certificate.program?.title ?? "wellness program") on MindFriend. Certificate #\(certificate.certificateNumber)"
 
         let activityVC = UIActivityViewController(
             activityItems: [text],
@@ -226,19 +228,20 @@ struct StatColumn: View {
     let label: String
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: SupportTheme.Spacing.xs) {
             Image(systemName: icon)
                 .font(.title2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .accessibilityHidden(true)
 
             Text(value)
                 .font(.title)
                 .fontWeight(.bold)
+                .foregroundStyle(SupportTheme.textPrimary)
 
             Text(label)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
@@ -253,56 +256,43 @@ struct CertificateVisual: View {
     let certificate: ProgramCertificate
 
     var body: some View {
-        VStack(spacing: 16) {
-            // Border decoration
-            RoundedRectangle(cornerRadius: 16)
-                .strokeBorder(
-                    LinearGradient(
-                        colors: [.yellow, .orange, .yellow],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    lineWidth: 4
-                )
-                .background(
-                    RoundedRectangle(cornerRadius: 16)
-                        .fill(Color(.systemBackground))
-                )
-                .overlay {
-                    VStack(spacing: 16) {
-                        // Seal
-                        Image(systemName: "checkmark.seal.fill")
-                            .font(.system(size: 50))
-                            .foregroundStyle(.yellow.gradient)
-                            .accessibilityHidden(true)
+        VStack(spacing: SupportTheme.Spacing.m) {
+            Image(systemName: "checkmark.seal.fill")
+                .font(.system(size: 50))
+                .foregroundStyle(SupportTheme.Celebration.gold)
+                .accessibilityHidden(true)
 
-                        Text("Certificate of Completion")
-                            .font(.caption)
-                            .textCase(.uppercase)
-                            .tracking(2)
-                            .foregroundStyle(.secondary)
+            Text("Certificate of completion")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(SupportTheme.textSecondary)
 
-                        Text(certificate.program?.title ?? "Wellness Program")
-                            .font(.title2)
-                            .fontWeight(.bold)
-                            .multilineTextAlignment(.center)
+            Text(certificate.program?.title ?? "Wellness Program")
+                .font(.title2)
+                .fontWeight(.bold)
+                .foregroundStyle(SupportTheme.textPrimary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
 
-                        Text("Completed \(certificate.issuedAt.formatted(date: .long, time: .omitted))")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+            Text("Completed \(certificate.issuedAt.formatted(date: .long, time: .omitted))")
+                .font(.subheadline)
+                .foregroundStyle(SupportTheme.textSecondary)
 
-                        Divider()
-                            .padding(.horizontal, 40)
+            Divider()
+                .overlay(SupportTheme.separator)
+                .padding(.horizontal, SupportTheme.Spacing.xl)
 
-                        Text("Certificate #\(certificate.certificateNumber)")
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
-                            .fontDesign(.monospaced)
-                    }
-                    .padding(24)
-                }
-                .frame(height: 300)
+            Text("Certificate #\(certificate.certificateNumber)")
+                .font(.caption)
+                .foregroundStyle(SupportTheme.textSecondary)
+                .fontDesign(.monospaced)
         }
+        .padding(SupportTheme.Spacing.l)
+        .frame(maxWidth: .infinity)
+        .background(SupportTheme.surface, in: RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
+        .overlay(
+            RoundedRectangle(cornerRadius: SupportTheme.cardRadius)
+                .strokeBorder(SupportTheme.Celebration.gold, lineWidth: 3)
+        )
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Certificate of Completion for \(certificate.program?.title ?? "Wellness Program"). Completed \(certificate.issuedAt.formatted(date: .long, time: .omitted)). Certificate number \(certificate.certificateNumber)")
     }
@@ -312,21 +302,22 @@ struct CertificateVisual: View {
 
 struct EmptyCertificatesView: View {
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             Image(systemName: "medal")
                 .font(.system(size: 48))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .accessibilityHidden(true)
 
-            Text("No Certificates Yet")
+            Text("No certificates yet")
                 .font(.headline)
+                .foregroundStyle(SupportTheme.textPrimary)
 
-            Text("Complete a program to earn your first certificate!")
+            Text("Complete a program to earn your first certificate.")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .multilineTextAlignment(.center)
         }
-        .padding()
+        .padding(SupportTheme.Spacing.m)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("No certificates yet. Complete a program to earn your first certificate.")
     }

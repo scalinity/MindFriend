@@ -9,29 +9,36 @@ import SwiftUI
 
 /// A heat map calendar showing mood data for the year
 struct YearlyHeatMapCard: View {
-    let moodsByDate: [String: Int] // date string (yyyy-MM-dd) to mood score
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let moodsByDate: [String: Int]  // date string (yyyy-MM-dd) to mood score
     let year: Int
 
     @State private var selectedMonth: Int? = nil
 
     private let calendar = Calendar.current
-    private let monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                              "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    private let monthNames = [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    ]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
             // Header
             HStack {
                 Text("Yearly Heat Map")
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
                 Spacer()
                 Text(String(year))
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
 
             // Month grid - 4 columns x 3 rows
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4), spacing: 12) {
+            LazyVGrid(
+                columns: Array(repeating: GridItem(.flexible(), spacing: SupportTheme.Spacing.xs), count: 4),
+                spacing: SupportTheme.Spacing.s
+            ) {
                 ForEach(0..<12, id: \.self) { monthIndex in
                     MonthMiniHeatMap(
                         month: monthIndex + 1,
@@ -41,7 +48,7 @@ struct YearlyHeatMapCard: View {
                         isSelected: selectedMonth == monthIndex
                     )
                     .onTapGesture {
-                        withAnimation(.easeInOut(duration: 0.2)) {
+                        withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : (.easeInOut(duration: 0.2))) {
                             if selectedMonth == monthIndex {
                                 selectedMonth = nil
                             } else {
@@ -53,15 +60,15 @@ struct YearlyHeatMapCard: View {
             }
 
             // Legend
-            HStack(spacing: 16) {
+            HStack(spacing: SupportTheme.Spacing.m) {
                 Spacer()
-                HeatMapLegendItem(color: .green.opacity(0.8), label: "Great")
-                HeatMapLegendItem(color: .yellow.opacity(0.8), label: "Good")
-                HeatMapLegendItem(color: .orange.opacity(0.8), label: "Low")
-                HeatMapLegendItem(color: Color(.systemGray5), label: "No data")
+                HeatMapLegendItem(color: SupportTheme.accent.opacity(0.85), label: "Great")
+                HeatMapLegendItem(color: SupportTheme.accent.opacity(0.4), label: "Good")
+                HeatMapLegendItem(color: SupportTheme.Celebration.gold.opacity(0.85), label: "Low")
+                HeatMapLegendItem(color: SupportTheme.field, label: "No data")
                 Spacer()
             }
-            .padding(.top, 4)
+            .padding(.top, SupportTheme.Spacing.xxs)
 
             // Selected month detail
             if let monthIndex = selectedMonth {
@@ -71,13 +78,11 @@ struct YearlyHeatMapCard: View {
                     moodsByDate: moodsByDate,
                     monthName: monthNames[monthIndex]
                 )
-                .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                .transition(.opacity)
             }
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .shadow(color: .black.opacity(0.05), radius: 8, y: 2)
+        .supportCard()
+        .shadow(color: SupportTheme.canvas.opacity(0.05), radius: 8, y: 2)
     }
 }
 
@@ -93,29 +98,33 @@ private struct MonthMiniHeatMap: View {
     private let calendar = Calendar.current
 
     var body: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: SupportTheme.Spacing.xxs) {
             // Mini grid for month (simplified - just show ~5 weeks)
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 1), count: 7), spacing: 1) {
+            LazyVGrid(
+                columns: Array(repeating: GridItem(.flexible(), spacing: SupportTheme.Spacing.xxs), count: 7),
+                spacing: SupportTheme.Spacing.xxs
+            ) {
                 ForEach(Array(daysInMonth.enumerated()), id: \.offset) { _, day in
                     Rectangle()
                         .fill(colorForDay(day))
                         .frame(height: 4)
-                        .clipShape(RoundedRectangle(cornerRadius: 1))
+                        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
                 }
             }
 
             Text(monthName)
                 .font(.system(size: 10, weight: isSelected ? .semibold : .regular))
-                .foregroundStyle(isSelected ? .primary : .secondary)
+                .foregroundStyle(isSelected ? SupportTheme.textPrimary : SupportTheme.textSecondary)
         }
-        .padding(6)
-        .background(isSelected ? Color.blue.opacity(0.1) : Color.clear)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .padding(SupportTheme.Spacing.xs)
+        .background(isSelected ? SupportTheme.accent.opacity(0.1) : Color.clear)
+        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
     }
 
     private var daysInMonth: [Int] {
         guard let date = calendar.date(from: DateComponents(year: year, month: month, day: 1)),
-              let range = calendar.range(of: .day, in: .month, for: date) else {
+            let range = calendar.range(of: .day, in: .month, for: date)
+        else {
             return Array(1...28)
         }
 
@@ -139,7 +148,7 @@ private struct MonthMiniHeatMap: View {
 
         let dateString = String(format: "%04d-%02d-%02d", year, month, day)
         guard let mood = moodsByDate[dateString] else {
-            return Color(.systemGray5)
+            return SupportTheme.field
         }
 
         return moodColor(for: mood)
@@ -147,10 +156,10 @@ private struct MonthMiniHeatMap: View {
 
     private func moodColor(for score: Int) -> Color {
         switch score {
-        case 1...2: return .orange.opacity(0.8)
-        case 3: return .yellow.opacity(0.8)
-        case 4...5: return .green.opacity(0.8)
-        default: return Color(.systemGray5)
+        case 1...2: return SupportTheme.Celebration.gold.opacity(0.85)
+        case 3: return SupportTheme.accent.opacity(0.4)
+        case 4...5: return SupportTheme.accent.opacity(0.85)
+        default: return SupportTheme.field
         }
     }
 }
@@ -167,7 +176,7 @@ private struct MonthDetailView: View {
     private let weekdaySymbols = ["S", "M", "T", "W", "T", "F", "S"]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("\(monthName) \(String(year))")
                 .font(.subheadline.weight(.semibold))
 
@@ -176,13 +185,16 @@ private struct MonthDetailView: View {
                 ForEach(weekdaySymbols, id: \.self) { symbol in
                     Text(symbol)
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                         .frame(maxWidth: .infinity)
                 }
             }
 
             // Day grid
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 7), spacing: 4) {
+            LazyVGrid(
+                columns: Array(repeating: GridItem(.flexible(), spacing: SupportTheme.Spacing.xxs), count: 7),
+                spacing: SupportTheme.Spacing.xxs
+            ) {
                 ForEach(Array(daysInMonth.enumerated()), id: \.offset) { _, day in
                     if day > 0 {
                         DayCell(day: day, mood: moodForDay(day))
@@ -198,9 +210,10 @@ private struct MonthDetailView: View {
                 VStack(alignment: .leading) {
                     Text("\(daysWithData)")
                         .font(.title3.weight(.semibold))
+                        .accessibilityAddTraits(.isHeader)
                     Text("days tracked")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
 
                 Spacer()
@@ -209,23 +222,23 @@ private struct MonthDetailView: View {
                     VStack(alignment: .trailing) {
                         Text(String(format: "%.1f", avg))
                             .font(.title3.weight(.semibold))
+                            .accessibilityAddTraits(.isHeader)
                             .foregroundStyle(moodColor(for: Int(avg.rounded())))
                         Text("avg mood")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                 }
             }
-            .padding(.top, 8)
+            .padding(.top, SupportTheme.Spacing.xs)
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .supportCard()
     }
 
     private var daysInMonth: [Int] {
         guard let date = calendar.date(from: DateComponents(year: year, month: month, day: 1)),
-              let range = calendar.range(of: .day, in: .month, for: date) else {
+            let range = calendar.range(of: .day, in: .month, for: date)
+        else {
             return Array(1...28)
         }
 
@@ -245,7 +258,8 @@ private struct MonthDetailView: View {
 
     private var daysWithData: Int {
         guard let date = calendar.date(from: DateComponents(year: year, month: month, day: 1)),
-              let range = calendar.range(of: .day, in: .month, for: date) else {
+            let range = calendar.range(of: .day, in: .month, for: date)
+        else {
             return 0
         }
 
@@ -257,7 +271,8 @@ private struct MonthDetailView: View {
 
     private var averageMood: Double? {
         guard let date = calendar.date(from: DateComponents(year: year, month: month, day: 1)),
-              let range = calendar.range(of: .day, in: .month, for: date) else {
+            let range = calendar.range(of: .day, in: .month, for: date)
+        else {
             return nil
         }
 
@@ -272,10 +287,10 @@ private struct MonthDetailView: View {
 
     private func moodColor(for score: Int) -> Color {
         switch score {
-        case 1...2: return .orange
-        case 3: return .yellow
-        case 4...5: return .green
-        default: return .secondary
+        case 1...2: return SupportTheme.Celebration.gold
+        case 3: return SupportTheme.accent.opacity(0.6)
+        case 4...5: return SupportTheme.accent
+        default: return SupportTheme.textSecondary
         }
     }
 }
@@ -288,26 +303,26 @@ private struct DayCell: View {
 
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 4)
+            RoundedRectangle(cornerRadius: SupportTheme.cardRadius)
                 .fill(backgroundColor)
                 .frame(height: 28)
 
             Text("\(day)")
                 .font(.caption2)
-                .foregroundStyle(mood != nil ? .white : .secondary)
+                .foregroundStyle(mood != nil ? SupportTheme.textPrimary : SupportTheme.textSecondary)
         }
     }
 
     private var backgroundColor: Color {
         guard let mood = mood else {
-            return Color(.systemGray6)
+            return SupportTheme.field
         }
 
         switch mood {
-        case 1...2: return .orange.opacity(0.8)
-        case 3: return .yellow.opacity(0.8)
-        case 4...5: return .green.opacity(0.8)
-        default: return Color(.systemGray6)
+        case 1...2: return SupportTheme.Celebration.gold.opacity(0.85)
+        case 3: return SupportTheme.accent.opacity(0.4)
+        case 4...5: return SupportTheme.accent.opacity(0.85)
+        default: return SupportTheme.field
         }
     }
 }
@@ -319,13 +334,13 @@ private struct HeatMapLegendItem: View {
     let label: String
 
     var body: some View {
-        HStack(spacing: 4) {
-            RoundedRectangle(cornerRadius: 2)
+        HStack(spacing: SupportTheme.Spacing.xxs) {
+            RoundedRectangle(cornerRadius: SupportTheme.cardRadius)
                 .fill(color)
                 .frame(width: 12, height: 12)
             Text(label)
                 .font(.caption2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
     }
 }
@@ -340,7 +355,7 @@ private struct HeatMapLegendItem: View {
         )
         .padding()
     }
-    .background(Color(.systemGroupedBackground))
+    .background(SupportTheme.canvas)
 }
 
 private enum PreviewData {
@@ -352,7 +367,7 @@ private enum PreviewData {
         for month in 1...12 {
             for day in 1...28 {
                 // Random mood with some patterns
-                if Int.random(in: 0...10) > 3 { // 70% chance of data
+                if Int.random(in: 0...10) > 3 {  // 70% chance of data
                     let mood = Int.random(in: 2...5)
                     moods[String(format: "2026-%02d-%02d", month, day)] = mood
                 }

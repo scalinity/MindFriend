@@ -29,11 +29,13 @@ struct LanguageSettingsView: View {
                         Spacer()
                     }
                 }
+                .listRowBackground(SupportTheme.surface)
             } else if let error = errorMessage {
                 Section {
                     Text(error)
                         .foregroundColor(.red)
                 }
+                .listRowBackground(SupportTheme.surface)
             } else {
                 Section {
                     ForEach(availableLanguages) { language in
@@ -49,14 +51,19 @@ struct LanguageSettingsView: View {
                         .disabled(isSaving)
                     }
                 }
+                .listRowBackground(SupportTheme.surface)
 
                 Section {
                     Text("Some content may not be available in all languages. We're always adding more!")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(SupportTheme.textSecondary)
                 }
+
+                .listRowBackground(SupportTheme.surface)
             }
         }
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle("App Language")
         .task {
             await loadLanguages()
@@ -88,14 +95,14 @@ struct LanguageSettingsView: View {
 
         // Store the name before async call
         let languageName = language.nativeName
-        
+
         isSaving = true
         do {
             let languageChanged = try await localization.setLanguage(language.code)
-            
+
             await MainActor.run {
                 isSaving = false
-                
+
                 if languageChanged {
                     // Show restart prompt
                     selectedLanguageName = languageName
@@ -119,19 +126,19 @@ struct LanguageRow: View {
     var body: some View {
         Button(action: onSelect) {
             HStack {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     Text(language.nativeName)
                         .font(.body)
-                        .foregroundColor(.primary)
+                        .foregroundColor(SupportTheme.textPrimary)
 
                     if language.translationCoverage < 100 {
                         Text("\(Int(language.translationCoverage))% translated")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(SupportTheme.textSecondary)
                     } else {
                         Text("100% translated")
                             .font(.caption)
-                            .foregroundColor(.green)
+                            .foregroundColor(SupportTheme.accent)
                     }
                 }
 
@@ -139,7 +146,7 @@ struct LanguageRow: View {
 
                 if isSelected {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(.blue)
+                        .foregroundColor(SupportTheme.accent)
                 }
             }
             .contentShape(Rectangle())

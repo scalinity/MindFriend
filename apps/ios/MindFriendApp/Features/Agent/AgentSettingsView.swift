@@ -11,10 +11,12 @@ struct AgentSettingsView: View {
                 // Enable/Disable Toggle
                 Section {
                     Toggle("Enable Wellness Agent", isOn: $viewModel.isEnabled)
-                        .tint(.green)
+                        .tint(SupportTheme.accent)
                 } footer: {
                     Text("When enabled, the agent will monitor your patterns and send proactive check-ins.")
                 }
+
+                .listRowBackground(SupportTheme.surface)
 
                 if viewModel.isEnabled {
                     // Autonomy Level
@@ -25,7 +27,7 @@ struct AgentSettingsView: View {
                                     Text(level.displayName)
                                     Text(level.description)
                                         .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                        .foregroundStyle(SupportTheme.textSecondary)
                                 }
                                 .tag(level)
                             }
@@ -36,6 +38,8 @@ struct AgentSettingsView: View {
                     } footer: {
                         Text("Max \(viewModel.autonomyLevel.maxDailyActions) actions per day at this level")
                     }
+
+                    .listRowBackground(SupportTheme.surface)
 
                     // Quiet Hours
                     Section {
@@ -56,22 +60,26 @@ struct AgentSettingsView: View {
                         Text("The agent won't send notifications during quiet hours.")
                     }
 
+                    .listRowBackground(SupportTheme.surface)
+
                     // Enabled Signals
                     Section {
-                        ForEach(SignalType.allCases) { signalType in
-                            Toggle(isOn: Binding(
-                                get: { viewModel.enabledSignals.contains(signalType.rawValue) },
-                                set: { enabled in
-                                    if enabled {
-                                        viewModel.enabledSignals.insert(signalType.rawValue)
-                                    } else {
-                                        viewModel.enabledSignals.remove(signalType.rawValue)
+                        ForEach(SignalType.allCases.filter { $0 != .streakRisk }) { signalType in
+                            Toggle(
+                                isOn: Binding(
+                                    get: { viewModel.enabledSignals.contains(signalType.rawValue) },
+                                    set: { enabled in
+                                        if enabled {
+                                            viewModel.enabledSignals.insert(signalType.rawValue)
+                                        } else {
+                                            viewModel.enabledSignals.remove(signalType.rawValue)
+                                        }
                                     }
-                                }
-                            )) {
+                                )
+                            ) {
                                 HStack {
                                     Image(systemName: signalType.iconName)
-                                        .foregroundStyle(signalType.color)
+                                        .foregroundStyle(SupportTheme.accent)
                                         .frame(width: 24)
 
                                     Text(signalType.displayName)
@@ -84,32 +92,40 @@ struct AgentSettingsView: View {
                         Text("Choose which patterns the agent should monitor.")
                     }
 
+                    .listRowBackground(SupportTheme.surface)
+
                     // Notification Channels
                     Section {
-                        Toggle("Push Notifications", isOn: Binding(
-                            get: { viewModel.preferredChannels.contains("push") },
-                            set: { enabled in
-                                if enabled {
-                                    viewModel.preferredChannels.insert("push")
-                                } else {
-                                    viewModel.preferredChannels.remove("push")
+                        Toggle(
+                            "Push Notifications",
+                            isOn: Binding(
+                                get: { viewModel.preferredChannels.contains("push") },
+                                set: { enabled in
+                                    if enabled {
+                                        viewModel.preferredChannels.insert("push")
+                                    } else {
+                                        viewModel.preferredChannels.remove("push")
+                                    }
                                 }
-                            }
-                        ))
+                            ))
 
-                        Toggle("In-App Messages", isOn: Binding(
-                            get: { viewModel.preferredChannels.contains("in_app") },
-                            set: { enabled in
-                                if enabled {
-                                    viewModel.preferredChannels.insert("in_app")
-                                } else {
-                                    viewModel.preferredChannels.remove("in_app")
+                        Toggle(
+                            "In-App Messages",
+                            isOn: Binding(
+                                get: { viewModel.preferredChannels.contains("in_app") },
+                                set: { enabled in
+                                    if enabled {
+                                        viewModel.preferredChannels.insert("in_app")
+                                    } else {
+                                        viewModel.preferredChannels.remove("in_app")
+                                    }
                                 }
-                            }
-                        ))
+                            ))
                     } header: {
                         Text("Notification Channels")
                     }
+
+                    .listRowBackground(SupportTheme.surface)
 
                     // Additional Settings
                     Section {
@@ -119,8 +135,12 @@ struct AgentSettingsView: View {
                     } footer: {
                         Text("Show why the agent took each action.")
                     }
+
+                    .listRowBackground(SupportTheme.surface)
                 }
             }
+            .supportScreen()
+            .foregroundStyle(SupportTheme.textPrimary)
             .navigationTitle("Agent Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -150,7 +170,11 @@ struct AgentSettingsView: View {
                     ProgressView()
                 }
             }
-            .alert("Error", isPresented: Binding(get: { viewModel.errorMessage != nil }, set: { if !$0 { viewModel.errorMessage = nil } })) {
+            .alert(
+                "Error",
+                isPresented: Binding(
+                    get: { viewModel.errorMessage != nil }, set: { if !$0 { viewModel.errorMessage = nil } })
+            ) {
                 Button("OK") {
                     viewModel.errorMessage = nil
                 }

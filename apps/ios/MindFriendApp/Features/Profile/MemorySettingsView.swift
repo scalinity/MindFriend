@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct MemorySettingsView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var container: DependencyContainer
 
@@ -27,6 +28,8 @@ struct MemorySettingsView: View {
                 memoriesList
             }
         }
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle("AI Memory")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -49,7 +52,9 @@ struct MemorySettingsView: View {
                 clearAllMemories()
             }
         } message: {
-            Text("This will permanently delete all memories MindFriend has learned about you. This action cannot be undone.")
+            Text(
+                "This will permanently delete all memories MindFriend has learned about you. This action cannot be undone."
+            )
         }
         .confirmationDialog("Clear \(selectedType?.displayName ?? "") Memories", isPresented: $showDeleteTypeConfirm) {
             Button("Clear All \(selectedType?.displayName ?? "")", role: .destructive) {
@@ -77,50 +82,62 @@ struct MemorySettingsView: View {
     }
 
     private var emptyStateView: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             Image(systemName: "brain.head.profile")
                 .font(.system(size: 60))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .accessibilityHidden(true)
 
             Text("No Memories Yet")
                 .font(.title2)
+                .accessibilityAddTraits(.isHeader)
                 .fontWeight(.semibold)
 
-            Text("As you chat with MindFriend, I'll remember important details about you to provide more personalized support.")
-                .font(.body)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
+            Text(
+                "As you chat with MindFriend, I'll remember important details about you to provide more personalized support."
+            )
+            .font(.body)
+            .foregroundStyle(SupportTheme.textSecondary)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, SupportTheme.Spacing.xl)
         }
         .padding()
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("No memories yet. As you chat with MindFriend, important details will be remembered to provide more personalized support.")
+        .accessibilityLabel(
+            "No memories yet. As you chat with MindFriend, important details will be remembered to provide more personalized support."
+        )
     }
 
     private var memoriesList: some View {
         List {
             // Info section
             Section {
-                HStack(spacing: 12) {
+                HStack(spacing: SupportTheme.Spacing.s) {
                     Image(systemName: "info.circle.fill")
-                        .foregroundStyle(.blue)
-                    Text("MindFriend automatically remembers details from your conversations to provide more personalized support.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.accent)
+                    Text(
+                        "MindFriend automatically remembers details from your conversations to provide more personalized support."
+                    )
+                    .font(.subheadline)
+                    .foregroundStyle(SupportTheme.textSecondary)
                 }
             }
+
+            .listRowBackground(SupportTheme.surface)
 
             // Grouped memories
             ForEach(MemoryType.allCases, id: \.self) { type in
                 if let typeMemories = groupedMemories[type], !typeMemories.isEmpty {
                     Section {
                         ForEach(typeMemories) { memory in
-                            MemoryRow(memory: memory, onEdit: {
-                                memoryToEdit = memory
-                            }, onDelete: {
-                                deleteMemory(memory)
-                            })
+                            MemoryRow(
+                                memory: memory,
+                                onEdit: {
+                                    memoryToEdit = memory
+                                },
+                                onDelete: {
+                                    deleteMemory(memory)
+                                })
                         }
                     } header: {
                         HStack {
@@ -136,6 +153,7 @@ struct MemorySettingsView: View {
                     } footer: {
                         Text(type.description)
                     }
+                    .listRowBackground(SupportTheme.surface)
                 }
             }
         }
@@ -152,9 +170,11 @@ struct MemorySettingsView: View {
             // Check for cancellation before updating state
             try Task.checkCancellation()
             memories = fetchedMemories
-            Analytics.shared.track(.memorySettingsViewed, properties: [
-                "memory_count": memories.count
-            ])
+            Analytics.shared.track(
+                .memorySettingsViewed,
+                properties: [
+                    "memory_count": memories.count
+                ])
         } catch is CancellationError {
             // Task was cancelled, don't show error
             return
@@ -169,12 +189,14 @@ struct MemorySettingsView: View {
             isDeleting = true
             do {
                 try await container.supabaseDataService.deleteMemory(id: memory.id)
-                withAnimation {
+                withAnimation(reduceMotion ? nil : .default) {
                     memories.removeAll { $0.id == memory.id }
                 }
-                Analytics.shared.track(.memoryDeleted, properties: [
-                    "memory_type": memory.fragmentType.rawValue
-                ])
+                Analytics.shared.track(
+                    .memoryDeleted,
+                    properties: [
+                        "memory_type": memory.fragmentType.rawValue
+                    ])
             } catch {
                 appState.showError(.apiError(error.localizedDescription))
             }
@@ -187,7 +209,7 @@ struct MemorySettingsView: View {
             isDeleting = true
             do {
                 try await container.supabaseDataService.deleteAllMemories()
-                withAnimation {
+                withAnimation(reduceMotion ? nil : .default) {
                     memories = []
                 }
                 Analytics.shared.track(.allMemoriesDeleted)
@@ -203,12 +225,14 @@ struct MemorySettingsView: View {
             isDeleting = true
             do {
                 try await container.supabaseDataService.deleteMemories(type: type)
-                withAnimation {
+                withAnimation(reduceMotion ? nil : .default) {
                     memories.removeAll { $0.fragmentType == type }
                 }
-                Analytics.shared.track(.memoriesDeletedByType, properties: [
-                    "memory_type": type.rawValue
-                ])
+                Analytics.shared.track(
+                    .memoriesDeletedByType,
+                    properties: [
+                        "memory_type": type.rawValue
+                    ])
             } catch {
                 appState.showError(.apiError(error.localizedDescription))
             }
@@ -222,7 +246,7 @@ struct MemorySettingsView: View {
                 try await container.supabaseDataService.updateMemory(id: memory.id, key: key, value: value)
                 // Update local state with the new values
                 if let index = memories.firstIndex(where: { $0.id == memory.id }) {
-                    withAnimation {
+                    withAnimation(reduceMotion ? nil : .default) {
                         memories[index] = MemoryFragment(
                             id: memory.id,
                             fragmentType: memory.fragmentType,
@@ -260,26 +284,26 @@ struct MemoryRow: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
+        HStack(alignment: .top, spacing: SupportTheme.Spacing.s) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text(memory.displayContent)
                     .font(.body)
 
-                HStack(spacing: 8) {
+                HStack(spacing: SupportTheme.Spacing.xs) {
                     Text("Learned \(memory.extractedAt, style: .relative) ago")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
 
                     if memory.confidence < 0.7 {
                         Text("Low confidence")
                             .font(.caption)
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(SupportTheme.accent)
                     }
 
                     if let expiresAt = memory.expiresAt {
                         Text("Expires \(expiresAt, style: .relative)")
                             .font(.caption)
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(SupportTheme.accent)
                     }
                 }
             }
@@ -293,7 +317,7 @@ struct MemoryRow: View {
                     .font(.caption)
             }
             .buttonStyle(.borderless)
-            .tint(.blue)
+            .tint(SupportTheme.accent)
             .accessibilityLabel("Edit memory")
             .accessibilityHint("Double tap to edit this memory")
 
@@ -307,7 +331,7 @@ struct MemoryRow: View {
             .accessibilityLabel("Delete memory")
             .accessibilityHint("Double tap to delete this memory")
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, SupportTheme.Spacing.xxs)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityDescription)
         .accessibilityAction(named: "Edit") {

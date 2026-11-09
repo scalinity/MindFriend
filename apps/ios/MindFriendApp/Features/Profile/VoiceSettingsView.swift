@@ -18,9 +18,10 @@ struct VoiceSettingsView: View {
                 } footer: {
                     if !voiceService.isPremium {
                         Text("Upgrade to Premium to unlock all 5 voices.")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                 }
+                .listRowBackground(SupportTheme.surface)
 
                 Section("Usage This Month") {
                     HStack {
@@ -28,11 +29,11 @@ struct VoiceSettingsView: View {
                         Spacer()
                         if voiceService.isPremium {
                             Text("Premium access")
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                         } else {
                             let used = 3.0 - voiceService.minutesRemaining
                             Text("\(String(format: "%.1f", max(0, used))) / 3 min")
-                                .foregroundStyle(used >= 2.4 ? .red : .secondary)
+                                .foregroundStyle(used >= 2.4 ? .red : SupportTheme.textSecondary)
                         }
                     }
 
@@ -42,16 +43,18 @@ struct VoiceSettingsView: View {
                         } label: {
                             HStack {
                                 Image(systemName: "star.fill")
-                                    .foregroundStyle(.yellow)
+                                    .foregroundStyle(SupportTheme.Celebration.gold)
                                 Text("Explore Premium voice")
                                 Spacer()
                                 Image(systemName: "chevron.right")
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(SupportTheme.textSecondary)
                             }
                         }
                     }
                 }
+
+                .listRowBackground(SupportTheme.surface)
 
                 Section("Privacy") {
                     NavigationLink {
@@ -61,17 +64,25 @@ struct VoiceSettingsView: View {
                     }
                 }
 
+                .listRowBackground(SupportTheme.surface)
+
                 Section("About Voices") {
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                         Text("Voice Personalities")
                             .font(.subheadline.weight(.semibold))
-                        Text("Each voice has a unique personality suited for different needs. Ara is warm and conversational, Rex is professional, Sal is calm and balanced, Eve is energetic, and Leo is authoritative.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        Text(
+                            "Each voice has a unique personality suited for different needs. Ara is warm and conversational, Rex is professional, Sal is calm and balanced, Eve is energetic, and Leo is authoritative."
+                        )
+                        .font(.caption)
+                        .foregroundStyle(SupportTheme.textSecondary)
                     }
-                    .padding(.vertical, 4)
+                    .padding(.vertical, SupportTheme.Spacing.xxs)
                 }
+
+                .listRowBackground(SupportTheme.surface)
             }
+            .supportScreen()
+            .foregroundStyle(SupportTheme.textPrimary)
             .navigationTitle("Voice Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -95,30 +106,31 @@ struct VoiceSettingsView: View {
         Button {
             selectVoice(voice)
         } label: {
-            HStack(spacing: 12) {
+            HStack(spacing: SupportTheme.Spacing.s) {
                 Circle()
                     .fill(voiceColor(voice))
                     .frame(width: 40, height: 40)
                     .overlay {
                         Text(voice.displayName.prefix(1))
                             .font(.headline)
-                            .foregroundStyle(.white)
+                            .accessibilityAddTraits(.isHeader)
+                            .foregroundStyle(SupportTheme.textPrimary)
                     }
 
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 6) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
+                    HStack(spacing: SupportTheme.Spacing.xs) {
                         Text(voice.displayName)
                             .font(.body.weight(.medium))
-                            .foregroundStyle(.primary)
+                            .foregroundStyle(SupportTheme.textPrimary)
 
                         Text("(\(voice.gender))")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
 
                     Text(voice.description)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
 
                 Spacer()
@@ -126,11 +138,11 @@ struct VoiceSettingsView: View {
                 if isSelected {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.title3)
-                        .foregroundStyle(Color.accentColor)
+                        .foregroundStyle(SupportTheme.accent)
                 } else if !isAvailable {
                     Image(systemName: "lock.fill")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
             }
             .contentShape(Rectangle())
@@ -141,11 +153,11 @@ struct VoiceSettingsView: View {
 
     private func voiceColor(_ voice: GrokVoice) -> Color {
         switch voice {
-        case .ara: return .pink
-        case .rex: return .blue
-        case .sal: return .purple
-        case .eve: return .orange
-        case .leo: return .green
+        case .ara: return SupportTheme.accent
+        case .rex: return SupportTheme.accent
+        case .sal: return SupportTheme.accent
+        case .eve: return SupportTheme.accent
+        case .leo: return SupportTheme.accent
         }
     }
 
@@ -164,47 +176,55 @@ struct VoiceSettingsView: View {
 struct VoicePrivacyInfoView: View {
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.l) {
                 Text("Voice Data Privacy")
                     .font(.title2.bold())
+                    .accessibilityAddTraits(.isHeader)
 
                 Text("MindFriend takes your privacy seriously. Here's how we handle voice data:")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
 
-                VStack(spacing: 16) {
+                VStack(spacing: SupportTheme.Spacing.m) {
                     PrivacyInfoCard(
                         icon: "server.rack",
                         title: "Secure Processing",
-                        description: "Live audio goes through MindFriend’s relay to the configured AI provider over encrypted connections. Review the privacy policy for processor and retention details."
+                        description:
+                            "Live audio goes through MindFriend’s relay to the configured AI provider over encrypted connections. Review the privacy policy for processor and retention details."
                     )
 
                     PrivacyInfoCard(
                         icon: "text.bubble",
                         title: "Transcription Privacy",
-                        description: "Live captions are marked while partial. Completed turns are saved to your conversation after confirmation; a failed save remains visible for retry."
+                        description:
+                            "Live captions are marked while partial. Completed turns are saved to your conversation after confirmation; a failed save remains visible for retry."
                     )
 
                     PrivacyInfoCard(
                         icon: "trash",
                         title: "Live Audio",
-                        description: "MindFriend does not create a saved recording of this call. Your conversation keeps the confirmed text transcript."
+                        description:
+                            "MindFriend does not create a saved recording of this call. Your conversation keeps the confirmed text transcript."
                     )
 
                     PrivacyInfoCard(
                         icon: "shield.checkered",
                         title: "Support Options",
-                        description: "You can stop voice or switch to text. Voice is not an emergency service; crisis resources remain available from the app."
+                        description:
+                            "You can stop voice or switch to text. Voice is not an emergency service; crisis resources remain available from the app."
                     )
 
                     PrivacyInfoCard(
                         icon: "lock.fill",
                         title: "Encrypted Connections",
-                        description: "The relay keeps provider API keys on the server. Your app uses its signed-in account to connect."
+                        description:
+                            "The relay keeps provider API keys on the server. Your app uses its signed-in account to connect."
                     )
                 }
             }
             .padding()
         }
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle("Voice Privacy")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -216,25 +236,25 @@ struct PrivacyInfoCard: View {
     let description: String
 
     var body: some View {
-        HStack(alignment: .top, spacing: 14) {
+        HStack(alignment: .top, spacing: SupportTheme.Spacing.m) {
             Image(systemName: icon)
                 .font(.title2)
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(SupportTheme.accent)
                 .frame(width: 32)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text(title)
                     .font(.subheadline.weight(.semibold))
 
                 Text(description)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.tertiarySystemBackground))
-        .cornerRadius(12)
+        .background(SupportTheme.surface)
+        .cornerRadius(SupportTheme.controlRadius)
     }
 }

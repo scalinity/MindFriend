@@ -10,32 +10,33 @@ import SwiftUI
 /// Compact card for home screen linking to sleep dashboard
 struct SleepHomeCard: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             HStack {
                 Image(systemName: "moon.zzz.fill")
                     .font(.title2)
-                    .foregroundColor(.indigo)
+                    .foregroundColor(SupportTheme.accent)
 
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     Text("Sleep Tracking")
                         .font(.headline)
-                        .foregroundColor(.primary)
+                        .accessibilityAddTraits(.isHeader)
+                        .foregroundColor(SupportTheme.textPrimary)
 
                     Text("Track your sleep quality")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(SupportTheme.textSecondary)
                 }
 
                 Spacer()
 
                 Image(systemName: "chevron.right")
                     .font(.body)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(SupportTheme.textSecondary)
             }
         }
         .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(12)
+        .background(SupportTheme.field)
+        .cornerRadius(SupportTheme.controlRadius)
     }
 }
 

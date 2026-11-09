@@ -2,6 +2,7 @@ import SwiftUI
 
 /// Morning check-in modal for rating sleep quality and adding notes
 struct MorningCheckInView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var dependencies: DependencyContainer
     @StateObject private var viewModel: MorningCheckInViewModel
@@ -15,7 +16,7 @@ struct MorningCheckInView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: SupportTheme.Spacing.l) {
                     // Header
                     headerSection
 
@@ -36,6 +37,8 @@ struct MorningCheckInView: View {
                 }
                 .padding()
             }
+            .supportScreen()
+            .foregroundStyle(SupportTheme.textPrimary)
             .navigationTitle("Morning Check-In")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -53,54 +56,57 @@ struct MorningCheckInView: View {
 
     @ViewBuilder
     private var headerSection: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: SupportTheme.Spacing.s) {
             Image(systemName: "sun.horizon.fill")
                 .font(.system(size: 50))
-                .foregroundColor(.orange)
+                .foregroundColor(SupportTheme.accent)
 
             Text("Good Morning!")
                 .font(.title2)
+                .accessibilityAddTraits(.isHeader)
                 .fontWeight(.semibold)
 
             Text("How did you sleep last night?")
                 .font(.subheadline)
-                .foregroundColor(.secondary)
+                .foregroundColor(SupportTheme.textSecondary)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 20)
+        .padding(.vertical, SupportTheme.Spacing.l)
     }
 
     // MARK: - Duration
 
     @ViewBuilder
     private var durationSection: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: SupportTheme.Spacing.xs) {
             Text("Sleep Duration")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             HStack {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     Text(viewModel.entry.durationFormatted)
                         .font(.title)
+                        .accessibilityAddTraits(.isHeader)
                         .fontWeight(.bold)
 
                     if let score = viewModel.entry.sleepScore {
                         Text("Score: \(score)/100")
                             .font(.subheadline)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(SupportTheme.textSecondary)
                     }
                 }
 
                 Spacer()
 
-                if let _ = viewModel.entry.scoreBreakdown {
+                if viewModel.entry.scoreBreakdown != nil {
                     SleepScoreRing(score: viewModel.entry.sleepScore ?? 0, size: 80)
                 }
             }
             .padding()
-            .background(Color(.systemGray6))
-            .cornerRadius(12)
+            .background(SupportTheme.field)
+            .cornerRadius(SupportTheme.controlRadius)
         }
     }
 
@@ -108,40 +114,44 @@ struct MorningCheckInView: View {
 
     @ViewBuilder
     private var ratingSection: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: SupportTheme.Spacing.s) {
             Text("Rate Your Sleep")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            HStack(spacing: 16) {
+            HStack(spacing: SupportTheme.Spacing.m) {
                 ForEach(1...5, id: \.self) { rating in
                     Button {
-                        withAnimation(.spring(response: 0.3)) {
+                        withAnimation(reduceMotion ? nil : (.spring(response: 0.3))) {
                             viewModel.rating = rating
                         }
                     } label: {
                         Image(systemName: rating <= viewModel.rating ? "star.fill" : "star")
                             .font(.title)
-                            .foregroundColor(rating <= viewModel.rating ? .yellow : .gray)
+                            .foregroundColor(
+                                rating <= viewModel.rating ? SupportTheme.Celebration.gold : SupportTheme.textSecondary)
                     }
+                    .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                    .accessibilityLabel("Rate \(rating) out of 5")
                 }
             }
             .frame(maxWidth: .infinity)
             .padding()
-            .background(Color(.systemGray6))
-            .cornerRadius(12)
+            .background(SupportTheme.field)
+            .cornerRadius(SupportTheme.controlRadius)
 
             // Rating labels
             HStack {
                 Text("Poor")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(SupportTheme.textSecondary)
 
                 Spacer()
 
                 Text("Excellent")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(SupportTheme.textSecondary)
             }
             .padding(.horizontal)
         }
@@ -151,26 +161,27 @@ struct MorningCheckInView: View {
 
     @ViewBuilder
     private var dreamNotesSection: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: SupportTheme.Spacing.xs) {
             Text("Dream Notes (Optional)")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             TextEditor(text: $viewModel.dreamNotes)
                 .frame(height: 100)
-                .padding(8)
-                .background(Color(.systemGray6))
-                .cornerRadius(8)
+                .padding(SupportTheme.Spacing.xs)
+                .background(SupportTheme.field)
+                .cornerRadius(SupportTheme.controlRadius)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(Color(.systemGray4), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: SupportTheme.cardRadius)
+                        .stroke(SupportTheme.field, lineWidth: 1)
                 )
                 .overlay(alignment: .topLeading) {
                     if viewModel.dreamNotes.isEmpty {
                         Text("Anything memorable from your dreams?")
-                            .foregroundColor(.secondary)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 16)
+                            .foregroundColor(SupportTheme.textSecondary)
+                            .padding(.horizontal, SupportTheme.Spacing.s)
+                            .padding(.vertical, SupportTheme.Spacing.m)
                             .allowsHitTesting(false)
                     }
                 }
@@ -181,26 +192,27 @@ struct MorningCheckInView: View {
 
     @ViewBuilder
     private var notesSection: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: SupportTheme.Spacing.xs) {
             Text("Additional Notes (Optional)")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             TextEditor(text: $viewModel.notes)
                 .frame(height: 80)
-                .padding(8)
-                .background(Color(.systemGray6))
-                .cornerRadius(8)
+                .padding(SupportTheme.Spacing.xs)
+                .background(SupportTheme.field)
+                .cornerRadius(SupportTheme.controlRadius)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(Color(.systemGray4), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: SupportTheme.cardRadius)
+                        .stroke(SupportTheme.field, lineWidth: 1)
                 )
                 .overlay(alignment: .topLeading) {
                     if viewModel.notes.isEmpty {
                         Text("Any factors that affected your sleep?")
-                            .foregroundColor(.secondary)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 16)
+                            .foregroundColor(SupportTheme.textSecondary)
+                            .padding(.horizontal, SupportTheme.Spacing.s)
+                            .padding(.vertical, SupportTheme.Spacing.m)
                             .allowsHitTesting(false)
                     }
                 }
@@ -219,19 +231,19 @@ struct MorningCheckInView: View {
         } label: {
             if viewModel.isSaving {
                 ProgressView()
-                    .tint(.white)
+                    .tint(SupportTheme.textPrimary)
                     .frame(maxWidth: .infinity)
                     .padding()
-                    .background(Color.accentColor.opacity(0.6))
-                    .cornerRadius(12)
+                    .background(SupportTheme.surface)
+                    .cornerRadius(SupportTheme.controlRadius)
             } else {
                 Text("Save Check-In")
                     .fontWeight(.semibold)
-                    .foregroundColor(.white)
+                    .foregroundColor(SupportTheme.onAccent)
                     .frame(maxWidth: .infinity)
                     .padding()
-                    .background(viewModel.canSave ? Color.accentColor : Color.gray)
-                    .cornerRadius(12)
+                    .background(viewModel.canSave ? SupportTheme.accent : SupportTheme.textSecondary)
+                    .cornerRadius(SupportTheme.controlRadius)
             }
         }
         .disabled(!viewModel.canSave || viewModel.isSaving)

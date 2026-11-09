@@ -9,7 +9,7 @@ struct BadgesView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 24) {
+            VStack(spacing: SupportTheme.Spacing.l) {
                 if isLoading {
                     ProgressView()
                         .frame(maxWidth: .infinity, minHeight: 200)
@@ -25,8 +25,10 @@ struct BadgesView: View {
             }
             .padding()
         }
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle("Badges")
-        .background(Color(.systemGroupedBackground))
+        .background(SupportTheme.canvas)
         .task {
             await loadBadges()
         }
@@ -39,7 +41,7 @@ struct BadgesView: View {
         do {
             try await container.achievementService.loadBadges()
             try await container.achievementService.loadUserBadgeProgress()
-            earnedBadges = container.achievementService.earnedBadges
+            earnedBadges = container.achievementService.earnedBadges.filter { $0.badge.category != .streaks }
         } catch {
             // Silently fail - show empty state
         }
@@ -53,45 +55,43 @@ struct BadgeStatsCard: View {
 
     var body: some View {
         HStack {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text("\(badgeCount)")
                     .font(.system(size: 48, weight: .bold, design: .rounded))
-                    .foregroundStyle(.yellow)
+                    .foregroundStyle(SupportTheme.Celebration.gold)
 
                 Text(badgeCount == 1 ? "Badge Earned" : "Badges Earned")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
 
             Spacer()
 
             Image(systemName: "medal.fill")
                 .font(.system(size: 48))
-                .foregroundStyle(.yellow)
+                .foregroundStyle(SupportTheme.Celebration.gold)
         }
-        .padding()
-        .background(Color(.secondarySystemGroupedBackground))
-        .cornerRadius(16)
+        .supportCard()
     }
 }
 
 // MARK: - Badges Grid
 
 struct BadgesGrid: View {
+    @Environment(\.dynamicTypeSize) private var typeSize
     let badges: [UserBadgeProgress]
 
-    private let columns = [
-        GridItem(.flexible()),
-        GridItem(.flexible()),
-        GridItem(.flexible())
-    ]
+    private var columns: [GridItem] {
+        Array(repeating: GridItem(.flexible()), count: typeSize.isAccessibilitySize ? 1 : 3)
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("Your Collection")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
-            LazyVGrid(columns: columns, spacing: 16) {
+            LazyVGrid(columns: columns, spacing: SupportTheme.Spacing.m) {
                 ForEach(badges) { badgeProgress in
                     BadgeCard(badgeProgress: badgeProgress)
                 }
@@ -106,38 +106,38 @@ struct BadgeCard: View {
     let badgeProgress: UserBadgeProgress
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: SupportTheme.Spacing.xs) {
             ZStack {
                 Circle()
-                    .fill(Color.yellow.opacity(0.2))
+                    .fill(SupportTheme.Celebration.gold.opacity(0.2))
                     .frame(width: 60, height: 60)
 
                 // Use SF Symbol based on badge category
                 Image(systemName: iconForBadge(badgeProgress.badge))
                     .font(.system(size: 26))
-                    .foregroundStyle(.yellow)
+                    .foregroundStyle(SupportTheme.Celebration.gold)
             }
 
             Text(badgeProgress.badge.name)
                 .font(.caption)
                 .fontWeight(.medium)
                 .multilineTextAlignment(.center)
-                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
 
             if let earnedAt = badgeProgress.earnedAt {
                 Text(earnedAt, style: .date)
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 8)
+        .padding(.vertical, SupportTheme.Spacing.xs)
     }
 
     private func iconForBadge(_ badge: AchievementBadge) -> String {
         switch badge.category {
         case .gettingStarted: return "star.fill"
-        case .streaks: return "flame.fill"
+        case .streaks: return "leaf.fill"
         case .quests: return "checkmark.seal.fill"
         case .exercises: return "figure.mind.and.body"
         case .meditation: return "brain.head.profile"
@@ -154,23 +154,24 @@ struct BadgeCard: View {
 
 struct EmptyBadgesCard: View {
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             Image(systemName: "medal")
                 .font(.system(size: 48))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
 
             Text("No Badges Yet")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
-            Text("Complete quests, maintain streaks, and explore exercises to earn badges.")
+            Text("Complete quests and explore exercises to earn badges.")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .multilineTextAlignment(.center)
         }
-        .padding(32)
+        .padding(SupportTheme.Spacing.xl)
         .frame(maxWidth: .infinity)
-        .background(Color(.secondarySystemGroupedBackground))
-        .cornerRadius(16)
+        .background(SupportTheme.surface)
+        .cornerRadius(SupportTheme.controlRadius)
     }
 }
 

@@ -5,6 +5,7 @@ import SwiftUI
 
 /// Prominent emergency button for the home screen
 struct SOSButton: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let onTap: () -> Void
 
     @State private var pulseScale: CGFloat = 1.0
@@ -16,38 +17,30 @@ struct SOSButton: View {
                 // Pulsing outer ring
                 Circle()
                     .stroke(
-                        LinearGradient(
-                            colors: [.red.opacity(0.6), .orange.opacity(0.4)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
+                        SupportTheme.surface,
                         lineWidth: 3
                     )
                     .frame(width: 76, height: 76)
-                    .scaleEffect(pulseScale)
+                    .scaleEffect(reduceMotion ? 1 : (pulseScale))
                     .opacity(pulseOpacity)
 
                 // Main button
                 Circle()
                     .fill(
-                        LinearGradient(
-                            colors: [Color(red: 0.9, green: 0.2, blue: 0.2), Color(red: 0.7, green: 0.1, blue: 0.1)],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
+                        SupportTheme.surface
                     )
                     .frame(width: 70, height: 70)
                     .shadow(color: .red.opacity(0.4), radius: 8, x: 0, y: 4)
 
                 // Content
-                VStack(spacing: 2) {
+                VStack(spacing: SupportTheme.Spacing.xxs) {
                     Image(systemName: "heart.fill")
                         .font(.system(size: 20))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(SupportTheme.textPrimary)
 
                     Text("SOS")
                         .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(SupportTheme.textPrimary)
                 }
             }
         }
@@ -62,8 +55,10 @@ struct SOSButton: View {
     private func startPulseAnimation() {
         // Use SwiftUI's built-in repeating animation (no Timer needed)
         withAnimation(
-            .easeOut(duration: 1.5)
-            .repeatForever(autoreverses: false)
+            reduceMotion
+                ? .easeInOut(duration: 0.2)
+                : (.easeOut(duration: 1.5)
+                    .repeatForever(autoreverses: false))
         ) {
             pulseScale = 1.15
             pulseOpacity = 0.0
@@ -79,15 +74,15 @@ struct CompactSOSButton: View {
 
     var body: some View {
         Button(action: onTap) {
-            HStack(spacing: 4) {
+            HStack(spacing: SupportTheme.Spacing.xxs) {
                 Image(systemName: "heart.fill")
                     .font(.system(size: 12))
                 Text("SOS")
                     .font(.system(size: 12, weight: .bold))
             }
-            .foregroundStyle(.white)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
+            .foregroundStyle(SupportTheme.textPrimary)
+            .padding(.horizontal, SupportTheme.Spacing.s)
+            .padding(.vertical, SupportTheme.Spacing.xs)
             .background(
                 Capsule()
                     .fill(Color.red)
@@ -100,11 +95,11 @@ struct CompactSOSButton: View {
 }
 
 #Preview("SOS Button") {
-    VStack(spacing: 40) {
-        SOSButton { }
+    VStack(spacing: SupportTheme.Spacing.xl) {
+        SOSButton {}
 
-        CompactSOSButton { }
+        CompactSOSButton {}
     }
     .padding()
-    .background(Color(uiColor: .systemGroupedBackground))
+    .background(SupportTheme.canvas)
 }

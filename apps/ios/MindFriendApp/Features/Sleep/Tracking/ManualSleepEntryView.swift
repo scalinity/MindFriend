@@ -30,26 +30,29 @@ struct ManualSleepEntryView: View {
                         displayedComponents: [.date, .hourAndMinute]
                     )
                 }
+                .listRowBackground(SupportTheme.surface)
 
                 Section("Sleep Quality") {
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                         Text("How well did you sleep?")
                             .font(.subheadline)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(SupportTheme.textSecondary)
 
-                        HStack(spacing: 16) {
+                        HStack(spacing: SupportTheme.Spacing.m) {
                             ForEach(1...5, id: \.self) { rating in
                                 Button {
                                     quality = rating
                                 } label: {
-                                    VStack(spacing: 4) {
+                                    VStack(spacing: SupportTheme.Spacing.xxs) {
                                         Image(systemName: rating <= quality ? "star.fill" : "star")
                                             .font(.title2)
-                                            .foregroundColor(rating <= quality ? .yellow : .gray)
+                                            .foregroundColor(
+                                                rating <= quality
+                                                    ? SupportTheme.Celebration.gold : SupportTheme.textSecondary)
 
                                         Text(qualityLabel(rating))
                                             .font(.caption2)
-                                            .foregroundColor(.secondary)
+                                            .foregroundColor(SupportTheme.textSecondary)
                                     }
                                 }
                                 .buttonStyle(.plain)
@@ -57,18 +60,23 @@ struct ManualSleepEntryView: View {
                         }
                         .frame(maxWidth: .infinity)
                     }
-                    .padding(.vertical, 8)
+                    .padding(.vertical, SupportTheme.Spacing.xs)
                 }
+
+                .listRowBackground(SupportTheme.surface)
 
                 Section("Duration") {
                     HStack {
                         Image(systemName: "clock.fill")
-                            .foregroundColor(.blue)
+                            .foregroundColor(SupportTheme.accent)
 
                         Text(durationFormatted)
                             .font(.headline)
+                            .accessibilityAddTraits(.isHeader)
                     }
                 }
+
+                .listRowBackground(SupportTheme.surface)
 
                 Section("Notes (Optional)") {
                     TextEditor(text: $notes)
@@ -79,7 +87,11 @@ struct ManualSleepEntryView: View {
                             }
                         }
                 }
+
+                .listRowBackground(SupportTheme.surface)
             }
+            .supportScreen()
+            .foregroundStyle(SupportTheme.textPrimary)
             .navigationTitle("Log Sleep")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -96,10 +108,13 @@ struct ManualSleepEntryView: View {
                     .disabled(isSaving || !isValidEntry)
                 }
             }
-            .alert("Error", isPresented: Binding(
-                get: { errorMessage != nil },
-                set: { if !$0 { errorMessage = nil } }
-            )) {
+            .alert(
+                "Error",
+                isPresented: Binding(
+                    get: { errorMessage != nil },
+                    set: { if !$0 { errorMessage = nil } }
+                )
+            ) {
                 Button("OK") { errorMessage = nil }
             } message: {
                 Text(errorMessage ?? "")
@@ -117,7 +132,7 @@ struct ManualSleepEntryView: View {
     }
 
     private var isValidEntry: Bool {
-        sleepEnd > sleepStart && sleepEnd.timeIntervalSince(sleepStart) >= 1800 // At least 30 min
+        sleepEnd > sleepStart && sleepEnd.timeIntervalSince(sleepStart) >= 1800  // At least 30 min
     }
 
     private func qualityLabel(_ rating: Int) -> String {
@@ -145,7 +160,7 @@ struct ManualSleepEntryView: View {
 
             // Fetch goals for score calculation
             let goals = try await container.sleepTrackingService.fetchGoals()
-            
+
             // Calculate duration
             let durationMinutes = Int(sleepEnd.timeIntervalSince(sleepStart) / 60)
             let date = Calendar.current.startOfDay(for: sleepEnd)
@@ -159,7 +174,7 @@ struct ManualSleepEntryView: View {
                 bedtime: sleepStart,
                 wakeTime: sleepEnd,
                 timeInBedMinutes: durationMinutes,
-                timeAsleepMinutes: durationMinutes, // For manual, assume all time was asleep
+                timeAsleepMinutes: durationMinutes,  // For manual, assume all time was asleep
                 deepSleepMinutes: nil,
                 remSleepMinutes: nil,
                 lightSleepMinutes: nil,
@@ -172,7 +187,7 @@ struct ManualSleepEntryView: View {
                 userRating: quality,
                 dreamNotes: nil,
                 notes: notes.isEmpty ? nil : notes,
-                sleepScore: nil, // Will be calculated by service
+                sleepScore: nil,  // Will be calculated by service
                 scoreBreakdown: nil,
                 createdAt: Date(),
                 updatedAt: Date()

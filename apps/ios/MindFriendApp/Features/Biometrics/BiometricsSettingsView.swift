@@ -42,30 +42,34 @@ struct BiometricsSettingsView: View {
                 Section {
                     HStack {
                         Image(systemName: "heart.fill")
-                            .foregroundStyle(.pink)
-                        VStack(alignment: .leading, spacing: 2) {
+                            .foregroundStyle(SupportTheme.accent)
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                             Text("Apple Health")
                             Text("via HealthKit")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                         }
                         Spacer()
                         if healthKit.hasCompletedPermissionRequest {
                             Text(healthKit.syncPaused ? "Sync paused" : "Setup complete")
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                         } else {
                             Text(healthKit.isHealthKitAvailable ? "Choose data" : "Unavailable")
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                         }
                     }
 
                     if healthKit.isHealthKitAvailable {
-                        Button(healthKit.syncPaused ? "Reconnect Apple Health" : "Choose Health data") { showHealthChoices = true }
+                        Button(healthKit.syncPaused ? "Reconnect Apple Health" : "Choose Health data") {
+                            showHealthChoices = true
+                        }
                     }
                     if let failure = healthKit.connectionError {
-                        Text("Sync is paused on this device, but your account could not be updated: \(failure.localizedDescription)")
-                            .font(.caption)
-                            .foregroundStyle(.orange)
+                        Text(
+                            "Sync is paused on this device, but your account could not be updated: \(failure.localizedDescription)"
+                        )
+                        .font(.caption)
+                        .foregroundStyle(SupportTheme.accent)
                     }
                     if let lastSync = healthKit.lastSyncDate {
                         LabeledContent("Last Synced") {
@@ -75,21 +79,26 @@ struct BiometricsSettingsView: View {
                 } header: {
                     Text("HealthKit Connection")
                 } footer: {
-                    Text("MindFriend requests read-only access. Apple keeps your choices private; setup completion does not mean any data was shared. Disconnecting only pauses syncing in MindFriend; it does not change Apple Health permissions.")
+                    Text(
+                        "MindFriend requests read-only access. Apple keeps your choices private; setup completion does not mean any data was shared. Disconnecting only pauses syncing in MindFriend; it does not change Apple Health permissions."
+                    )
                 }
+                .listRowBackground(SupportTheme.surface)
 
                 Section {
                     LabeledContent("Source", value: HealthQueryOutcome.sourceName)
                     if let outcome = healthKit.lastQueryOutcome {
                         LabeledContent("Period") {
-                            Text("\(outcome.interval.start.formatted(date: .abbreviated, time: .omitted)) – \(outcome.interval.end.formatted(date: .abbreviated, time: .omitted))")
+                            Text(
+                                "\(outcome.interval.start.formatted(date: .abbreviated, time: .omitted)) – \(outcome.interval.end.formatted(date: .abbreviated, time: .omitted))"
+                            )
                         }
                         LabeledContent("Status", value: outcome.statusText)
                         LabeledContent("Checked") {
                             Text(outcome.checkedAt.formatted(date: .abbreviated, time: .shortened))
                         }
                         if let failure = outcome.failureDescription {
-                            Text(failure).font(.caption).foregroundStyle(.secondary)
+                            Text(failure).font(.caption).foregroundStyle(SupportTheme.textSecondary)
                         }
                     } else {
                         LabeledContent("Status", value: "Not checked yet")
@@ -97,20 +106,24 @@ struct BiometricsSettingsView: View {
                 } header: {
                     Text("Latest Health check")
                 } footer: {
-                    Text("“No recent data available” means Apple Health returned nothing for that period. It does not tell us whether access was changed, and nothing blank is uploaded.")
+                    Text(
+                        "“No recent data available” means Apple Health returned nothing for that period. It does not tell us whether access was changed, and nothing blank is uploaded."
+                    )
                 }
+
+                .listRowBackground(SupportTheme.surface)
 
                 Section {
                     ForEach(HealthKitDataType.allCases, id: \.self) { type in
                         HStack {
                             Image(systemName: type.icon)
-                                .foregroundStyle(.pink)
+                                .foregroundStyle(SupportTheme.accent)
                                 .frame(width: 24)
                             Text(type.displayName)
                             Spacer()
                             Text(healthKit.hasCompletedPermissionRequest ? "Requested" : "Optional")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                         }
                     }
                 } header: {
@@ -118,6 +131,8 @@ struct BiometricsSettingsView: View {
                 } footer: {
                     Text("You can manage HealthKit permissions in Settings > Privacy & Security > Health.")
                 }
+
+                .listRowBackground(SupportTheme.surface)
 
                 Section {
                     Picker("Sync Frequency", selection: $syncFrequency) {
@@ -130,14 +145,20 @@ struct BiometricsSettingsView: View {
                     Text("Sync Settings")
                 }
 
+                .listRowBackground(SupportTheme.surface)
+
                 Section {
                     Toggle("Biometric Insights", isOn: $enableInsights)
                     Toggle("Health Alerts", isOn: $enableAlerts)
                 } header: {
                     Text("Features")
                 } footer: {
-                    Text("Insights analyze patterns between your health data and mood. Alerts notify you when metrics deviate from your baseline.")
+                    Text(
+                        "Insights analyze patterns between your health data and mood. Alerts notify you when metrics deviate from your baseline."
+                    )
                 }
+
+                .listRowBackground(SupportTheme.surface)
 
                 Section {
                     Button("Sync Now") {
@@ -154,7 +175,9 @@ struct BiometricsSettingsView: View {
                     }
                 }
 
-                if let settingsError { Section { Text(settingsError).foregroundStyle(.secondary) } }
+                .listRowBackground(SupportTheme.surface)
+
+                if let settingsError { Section { Text(settingsError).foregroundStyle(SupportTheme.textSecondary) } }
 
                 if healthKit.isSyncEnabled {
                     Section {
@@ -162,13 +185,16 @@ struct BiometricsSettingsView: View {
                             showDisconnectAlert = true
                         }
                     }
+                    .listRowBackground(SupportTheme.surface)
                 }
             }
-            .navigationTitle("Apple Health & HealthKit")
+            .supportScreen()
+            .foregroundStyle(SupportTheme.textPrimary)
+            .navigationTitle("Apple Health")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") {
+                    Button(supportEmbedded ? "Save" : "Done") {
                         saveAndDismiss()
                     }
                     .disabled(isSaving)
@@ -184,7 +210,9 @@ struct BiometricsSettingsView: View {
                     disconnect()
                 }
             } message: {
-                Text("This stops syncing your Health data to MindFriend on this account. It does not change Apple Health permissions or delete data already synced. You can reconnect at any time.")
+                Text(
+                    "This stops syncing your Health data to MindFriend on this account. It does not change Apple Health permissions or delete data already synced. You can reconnect at any time."
+                )
             }
         }
     }
@@ -195,7 +223,8 @@ struct BiometricsSettingsView: View {
 
         guard let owner = currentOwner else { return }
         do {
-            let response: [HealthKitConnection] = try await supabase
+            let response: [HealthKitConnection] =
+                try await supabase
                 .from("healthkit_connections")
                 .select()
                 .eq("user_id", value: owner.userId)
@@ -212,19 +241,25 @@ struct BiometricsSettingsView: View {
                 syncFrequency = conn.syncFrequencyHours
             }
         } catch {
-            if currentOwner == owner { settingsError = "Couldn’t load your Health settings. Try reopening this screen." }
+            if currentOwner == owner {
+                settingsError = "Couldn’t load your Health settings. Try reopening this screen."
+            }
         }
     }
 
     private var currentOwner: OfflineOwnerProof? {
         guard let id = appState.currentUser?.id, container.supabaseAuthService.userId == id,
-              container.supabaseClient.auth.currentSession?.user.id == id else { return nil }
+            container.supabaseClient.auth.currentSession?.user.id == id
+        else { return nil }
         return OfflineOwnerProof(userId: id, epoch: appState.accountEpoch)
     }
 
     private func saveAndDismiss() {
         guard !isSaving else { return }
-        guard let owner = loadedOwner, currentOwner == owner, connection != nil else { dismiss(); return }
+        guard let owner = loadedOwner, currentOwner == owner, connection != nil else {
+            dismiss()
+            return
+        }
         isSaving = true
         Task {
             defer { isSaving = false }
@@ -235,16 +270,21 @@ struct BiometricsSettingsView: View {
                     syncFrequencyHours: syncFrequency,
                     updatedAt: Date().ISO8601Format()
                 )
-                let updated: [HealthKitConnection] = try await supabase
+                let updated: [HealthKitConnection] =
+                    try await supabase
                     .from("healthkit_connections")
                     .update(payload)
                     .eq("user_id", value: owner.userId)
                     .select()
                     .execute()
                     .value
-                guard currentOwner == owner else { dismiss(); return }
+                guard currentOwner == owner else {
+                    dismiss()
+                    return
+                }
                 guard !updated.isEmpty else {
-                    settingsError = "This account no longer has a Health connection. Reopen Health settings to reconnect."
+                    settingsError =
+                        "This account no longer has a Health connection. Reopen Health settings to reconnect."
                     return
                 }
                 dismiss()

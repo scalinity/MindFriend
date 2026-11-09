@@ -3,7 +3,7 @@
 
 import SwiftUI
 
-/// Full-screen celebration for program completion with certificate display
+/// Full-screen celebration for program completion with certificate display, on the shared reward kit.
 struct ProgramCertificateCelebrationView: View {
     let programName: String
     let certificateNumber: String
@@ -12,16 +12,8 @@ struct ProgramCertificateCelebrationView: View {
     let onShareToCircle: (() async -> Void)?
     let onShareExternally: (() -> Void)?
 
-    @State private var showConfetti = false
-    @State private var showCertificate = false
-    @State private var showContent = false
-    @State private var showStats = false
-    @State private var showButtons = false
     @State private var isSharing = false
     @State private var hasSharedToCircle = false
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    private let goldColor = Color(red: 0.85, green: 0.65, blue: 0.13)
 
     struct CompletionStats {
         let daysCompleted: Int
@@ -32,226 +24,132 @@ struct ProgramCertificateCelebrationView: View {
 
     var body: some View {
         ZStack {
-            // Background
-            LinearGradient(
-                colors: [Color(red: 0.1, green: 0.1, blue: 0.15), .black],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
+            SupportTheme.canvas.ignoresSafeArea()
+            CelebrationParticles().ignoresSafeArea()
 
-            // Gold accent gradient at top
-            LinearGradient(
-                colors: [goldColor.opacity(0.3), .clear],
-                startPoint: .top,
-                endPoint: .center
-            )
-            .ignoresSafeArea()
-            .opacity(showContent ? 1 : 0)
+            ScrollView {
+                VStack(spacing: SupportTheme.Spacing.l) {
+                    CelebrationEmblem(.symbol("checkmark.seal.fill"), tint: SupportTheme.Celebration.gold, diameter: 112)
 
-            // Confetti particles
-            if showConfetti {
-                CertificateConfettiParticles()
-            }
-
-            // Main content
-            VStack(spacing: 20) {
-                Spacer()
-
-                // "PROGRAM COMPLETE!" title
-                Text("PROGRAM COMPLETE!")
-                    .font(.title2)
-                    .fontWeight(.black)
-                    .foregroundStyle(goldColor)
-                    .tracking(2)
-                    .opacity(showContent ? 1 : 0)
-                    .offset(y: showContent ? 0 : 20)
-
-                // Certificate
-                if showCertificate {
-                    CertificateUnfurlEffect(
-                        programName: programName,
-                        certificateNumber: certificateNumber,
-                        completionDate: Date()
-                    )
-                    .frame(height: 280)
-                }
-
-                // Stats row
-                HStack(spacing: 24) {
-                    CelebrationStatBadge(
-                        icon: "calendar.badge.checkmark",
-                        value: "\(completionStats.daysCompleted)",
-                        label: "Days"
-                    )
-
-                    CelebrationStatBadge(
-                        icon: "flame.fill",
-                        value: "\(completionStats.longestStreak)",
-                        label: "Best Streak"
-                    )
-
-                    CelebrationStatBadge(
-                        icon: "arrow.triangle.2.circlepath",
-                        value: "\(completionStats.skipsUsed)",
-                        label: "Skips Used"
-                    )
-                }
-                .opacity(showStats ? 1 : 0)
-                .offset(y: showStats ? 0 : 20)
-                .padding(.top, 16)
-
-                Spacer()
-
-                // Action buttons
-                VStack(spacing: 12) {
-                    // Share to Circle
-                    if onShareToCircle != nil {
-                        Button {
-                            Task { await shareToCircle() }
-                        } label: {
-                            HStack(spacing: 8) {
-                                Image(systemName: "person.2.fill")
-                                Text(hasSharedToCircle ? "Shared to Circle" : "Share with Circle")
-                            }
-                            .font(.headline)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 14)
-                            .background(hasSharedToCircle ? .green : goldColor)
-                            .foregroundStyle(.white)
-                            .cornerRadius(14)
-                        }
-                        .disabled(hasSharedToCircle || isSharing)
+                    VStack(spacing: SupportTheme.Spacing.s) {
+                        Text("Program complete")
+                            .font(.largeTitle.bold())
+                            .foregroundStyle(SupportTheme.textPrimary)
+                            .accessibilityAddTraits(.isHeader)
+                        Text("You finished \(programName).")
+                            .font(.body)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, SupportTheme.Spacing.xl)
+                    .celebrationReveal(delay: 0.2)
 
-                    // Share externally
-                    if onShareExternally != nil {
-                        Button {
-                            onShareExternally?()
-                        } label: {
-                            HStack(spacing: 8) {
-                                Image(systemName: "square.and.arrow.up")
-                                Text("Share Externally")
-                            }
-                            .font(.subheadline.weight(.medium))
-                            .foregroundStyle(.white.opacity(0.9))
-                        }
+                    certificateCard
+                        .celebrationReveal(delay: 0.3)
+
+                    HStack(spacing: SupportTheme.Spacing.l) {
+                        CelebrationStatBadge(icon: "calendar.badge.checkmark", value: "\(completionStats.daysCompleted)", label: "Days")
+                        CelebrationStatBadge(icon: "arrow.triangle.2.circlepath", value: "\(completionStats.skipsUsed)", label: "Skips used")
                     }
+                    .celebrationReveal(delay: 0.35)
 
-                    // Continue button
-                    Button {
-                        dismiss()
-                    } label: {
-                        Text("Continue")
+                    VStack(spacing: SupportTheme.Spacing.s) {
+                        Button("Continue") { onDismiss() }
+                            .buttonStyle(.supportPrimary)
+                        if onShareToCircle != nil {
+                            Button {
+                                Task { await shareToCircle() }
+                            } label: {
+                                Label(hasSharedToCircle ? "Shared with your circle" : "Share with your circle",
+                                      systemImage: hasSharedToCircle ? "checkmark" : "person.2")
+                            }
+                            .buttonStyle(.supportSecondary)
+                            .disabled(hasSharedToCircle || isSharing)
+                        }
+                        if let onShareExternally {
+                            Button {
+                                onShareExternally()
+                            } label: {
+                                Label("Share elsewhere", systemImage: "square.and.arrow.up")
+                            }
                             .font(.subheadline)
-                            .foregroundStyle(.white.opacity(0.6))
+                            .frame(minHeight: SupportTheme.minimumTarget)
+                        }
                     }
-                    .padding(.top, 8)
+                    .padding(.horizontal, SupportTheme.Spacing.l)
+                    .padding(.bottom, SupportTheme.Spacing.l)
+                    .celebrationReveal(delay: 0.45)
                 }
-                .padding(.horizontal, 24)
-                .padding(.bottom, 40)
-                .opacity(showButtons ? 1 : 0)
-                .offset(y: showButtons ? 0 : 30)
+                .padding(.top, SupportTheme.Spacing.xl)
+                .frame(maxWidth: SupportTheme.readableWidth)
+                .frame(maxWidth: .infinity)
             }
         }
-        .onAppear {
-            if reduceMotion {
-                showConfetti = true
-                showCertificate = true
-                showContent = true
-                showStats = true
-                showButtons = true
-                HapticManager.celebrationSuccess()
-            } else {
-                startAnimation()
-            }
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Program complete! \(programName). Certificate number \(certificateNumber)")
+        .onAppear { HapticManager.celebrationSuccess() }
         .accessibilityAddTraits(.isModal)
     }
 
-    private func dismiss() {
-        withAnimation(.easeIn(duration: 0.2)) {
-            showContent = false
-            showCertificate = false
+    private var certificateCard: some View {
+        VStack(spacing: SupportTheme.Spacing.xs) {
+            Text("Certificate of completion")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(SupportTheme.textSecondary)
+            Text(programName)
+                .font(.title3.bold())
+                .foregroundStyle(SupportTheme.textPrimary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("Completed \(Date().formatted(date: .long, time: .omitted))")
+                .font(.subheadline)
+                .foregroundStyle(SupportTheme.textSecondary)
+            Text("Certificate #\(certificateNumber)")
+                .font(.caption)
+                .fontDesign(.monospaced)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-            onDismiss()
-        }
+        .padding(SupportTheme.Spacing.l)
+        .frame(maxWidth: .infinity)
+        .background(SupportTheme.surface, in: RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
+        .overlay(
+            RoundedRectangle(cornerRadius: SupportTheme.cardRadius)
+                .strokeBorder(SupportTheme.Celebration.gold, lineWidth: 3)
+        )
+        .padding(.horizontal, SupportTheme.Spacing.l)
+        .accessibilityElement(children: .combine)
     }
 
     private func shareToCircle() async {
         guard let share = onShareToCircle else { return }
         isSharing = true
         await share()
-        withAnimation {
-            hasSharedToCircle = true
-        }
+        hasSharedToCircle = true
         isSharing = false
     }
-
-    private func startAnimation() {
-        // Confetti starts immediately
-        showConfetti = true
-
-        // Title fades in
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-            withAnimation(.easeOut(duration: 0.4)) {
-                showContent = true
-            }
-        }
-
-        // Certificate unfurls
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            showCertificate = true
-        }
-
-        // Stats appear
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            withAnimation(.easeOut(duration: 0.4)) {
-                showStats = true
-            }
-        }
-
-        // Buttons appear
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-            withAnimation(.easeOut(duration: 0.4)) {
-                showButtons = true
-            }
-            HapticManager.celebrationSuccess()
-        }
-    }
 }
-
-// MARK: - Stat Badge
 
 private struct CelebrationStatBadge: View {
     let icon: String
     let value: String
     let label: String
 
-    private let goldColor = Color(red: 0.85, green: 0.65, blue: 0.13)
-
     var body: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: SupportTheme.Spacing.xxs) {
             Image(systemName: icon)
                 .font(.title3)
-                .foregroundStyle(goldColor)
-
+                .foregroundStyle(SupportTheme.Celebration.gold)
+                .accessibilityHidden(true)
             Text(value)
-                .font(.title3.bold())
-                .foregroundStyle(.white)
-
+                .font(.title2.bold())
+                .foregroundStyle(SupportTheme.textPrimary)
             Text(label)
                 .font(.caption)
-                .foregroundStyle(.white.opacity(0.6))
+                .foregroundStyle(SupportTheme.textSecondary)
         }
-        .frame(minWidth: 70)
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(label): \(value)")
     }
 }
-
-// MARK: - Preview
 
 #Preview("Certificate Celebration") {
     ProgramCertificateCelebrationView(

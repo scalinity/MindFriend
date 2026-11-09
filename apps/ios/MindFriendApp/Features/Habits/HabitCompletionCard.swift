@@ -5,6 +5,7 @@ import UIKit
 
 /// A card component displaying a habit with quick-complete functionality
 struct HabitCompletionCard: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let habit: Habit
     let streakInfo: HabitStreakInfo
     let onComplete: () async -> Void
@@ -25,45 +26,38 @@ struct HabitCompletionCard: View {
 
     private var categoryColor: Color {
         switch habit.category {
-        case .breathing: return .cyan
-        case .meditation: return .purple
-        case .journaling: return .orange
-        case .movement: return .green
-        case .custom: return .blue
+        case .breathing: return SupportTheme.accent
+        case .meditation: return SupportTheme.accent
+        case .journaling: return SupportTheme.accent
+        case .movement: return SupportTheme.accent
+        case .custom: return SupportTheme.accent
         }
     }
 
     var body: some View {
         Button(action: onTap) {
-            VStack(spacing: 12) {
+            VStack(spacing: SupportTheme.Spacing.s) {
                 HStack(alignment: .top) {
                     // Category emoji + name
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack(spacing: 6) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
+                        HStack(spacing: SupportTheme.Spacing.xs) {
                             Text(categoryEmoji)
                                 .font(.title2)
+                                .accessibilityAddTraits(.isHeader)
                             Text(habit.name)
                                 .font(.headline)
-                                .foregroundStyle(.primary)
+                                .accessibilityAddTraits(.isHeader)
+                                .foregroundStyle(SupportTheme.textPrimary)
                         }
 
                         Text("After \(habit.anchor)")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
+                            .foregroundStyle(SupportTheme.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
 
                     Spacer()
 
-                    // Streak indicator
-                    if streakInfo.currentStreak > 0 {
-                        HStack(spacing: 4) {
-                            Text("🔥")
-                            Text("\(streakInfo.currentStreak)")
-                                .font(.title3.bold())
-                                .foregroundStyle(.orange)
-                        }
-                    }
                 }
 
                 // Completion button
@@ -72,7 +66,9 @@ struct HabitCompletionCard: View {
                     Task {
                         isCompleting = true
                         await onComplete()
-                        withAnimation(.spring(response: 0.4, dampingFraction: 0.6)) {
+                        withAnimation(
+                            reduceMotion ? .easeInOut(duration: 0.2) : (.spring(response: 0.4, dampingFraction: 0.6))
+                        ) {
                             showCompletedAnimation = true
                         }
                         // Haptic feedback
@@ -81,34 +77,32 @@ struct HabitCompletionCard: View {
                         isCompleting = false
                     }
                 } label: {
-                    HStack(spacing: 8) {
+                    HStack(spacing: SupportTheme.Spacing.xs) {
                         if isCompleting {
                             ProgressView()
                                 .scaleEffect(0.8)
-                                .tint(.white)
+                                .tint(SupportTheme.textPrimary)
                         } else {
                             Image(systemName: streakInfo.isCompletedToday ? "checkmark.circle.fill" : "circle")
                                 .font(.body.weight(.semibold))
-                                .scaleEffect(showCompletedAnimation ? 1.2 : 1.0)
+                                .scaleEffect(reduceMotion ? 1 : (showCompletedAnimation ? 1.2 : 1.0))
                         }
                         Text(streakInfo.isCompletedToday ? "Completed" : "Mark Complete")
                             .font(.subheadline.weight(.medium))
                     }
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .background(streakInfo.isCompletedToday ? Color.green : categoryColor)
-                    .foregroundStyle(.white)
-                    .cornerRadius(10)
+                    .padding(.vertical, SupportTheme.Spacing.s)
+                    .background(streakInfo.isCompletedToday ? SupportTheme.accent : categoryColor)
+                    .foregroundStyle(SupportTheme.onAccent)
+                    .cornerRadius(SupportTheme.controlRadius)
                 }
                 .disabled(isCompleting || streakInfo.isCompletedToday)
                 .buttonStyle(.plain)
             }
-            .padding()
-            .background(Color(uiColor: .secondarySystemBackground))
-            .cornerRadius(16)
+            .supportCard()
             .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(streakInfo.isCompletedToday ? Color.green.opacity(0.3) : Color.clear, lineWidth: 2)
+                RoundedRectangle(cornerRadius: SupportTheme.cardRadius)
+                    .stroke(streakInfo.isCompletedToday ? SupportTheme.accent.opacity(0.3) : Color.clear, lineWidth: 2)
             )
         }
         .buttonStyle(.plain)
@@ -136,27 +130,23 @@ struct CompactHabitCard: View {
     }
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: SupportTheme.Spacing.s) {
             // Category indicator
             Text(categoryEmoji)
                 .font(.title3)
+                .accessibilityAddTraits(.isHeader)
 
             // Habit info
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text(habit.name)
                     .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
+                    .foregroundStyle(SupportTheme.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
 
-                if streakInfo.currentStreak > 0 {
-                    HStack(spacing: 2) {
-                        Text("🔥")
-                            .font(.caption2)
-                        Text("\(streakInfo.currentStreak) day streak")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
+                Text(streakInfo.isCompletedToday ? "Completed today" : "Ready when you are")
+                    .font(.caption)
+                    .foregroundStyle(SupportTheme.textSecondary)
+
             }
 
             Spacer()
@@ -179,18 +169,21 @@ struct CompactHabitCard: View {
                     } else {
                         Image(systemName: streakInfo.isCompletedToday ? "checkmark.circle.fill" : "circle")
                             .font(.title2)
-                            .foregroundStyle(streakInfo.isCompletedToday ? .green : .secondary)
+                            .foregroundStyle(
+                                streakInfo.isCompletedToday ? SupportTheme.accent : SupportTheme.textSecondary)
                     }
                 }
                 .frame(width: 32, height: 32)
             }
+            .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+            .accessibilityLabel(streakInfo.isCompletedToday ? "Completed today" : "Mark Complete")
             .disabled(isCompleting || streakInfo.isCompletedToday)
             .buttonStyle(.plain)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(Color(uiColor: .tertiarySystemBackground))
-        .cornerRadius(12)
+        .padding(.horizontal, SupportTheme.Spacing.s)
+        .padding(.vertical, SupportTheme.Spacing.s)
+        .background(SupportTheme.surface)
+        .cornerRadius(SupportTheme.controlRadius)
     }
 }
 
@@ -218,7 +211,7 @@ struct TodaysHabitsHomeCard: View {
         Button {
             showHabitLibrary = true
         } label: {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                 // Header
                 HStack {
                     Label("Today's Habits", systemImage: "repeat.circle.fill")
@@ -229,12 +222,12 @@ struct TodaysHabitsHomeCard: View {
                     if totalCount > 0 {
                         Text("\(completedCount)/\(totalCount)")
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
 
                     Image(systemName: "chevron.right")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
 
                 if isLoading {
@@ -243,36 +236,37 @@ struct TodaysHabitsHomeCard: View {
                         ProgressView()
                         Spacer()
                     }
-                    .padding(.vertical, 20)
+                    .padding(.vertical, SupportTheme.Spacing.l)
                 } else if habits.isEmpty {
                     // Empty state
                     HStack {
-                        VStack(alignment: .leading, spacing: 4) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                             Text("Build healthy habits")
                                 .font(.subheadline)
-                                .foregroundStyle(.primary)
+                                .foregroundStyle(SupportTheme.textPrimary)
                             Text("Start with small, consistent actions")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                         }
                         Spacer()
                         Image(systemName: "plus.circle.fill")
                             .font(.title2)
-                            .foregroundStyle(Color.accentColor)
+                            .foregroundStyle(SupportTheme.accent)
                     }
                 } else {
                     // Show up to 3 habits
-                    VStack(spacing: 8) {
+                    VStack(spacing: SupportTheme.Spacing.xs) {
                         ForEach(habits.prefix(3)) { habit in
                             CompactHabitCard(
                                 habit: habit,
-                                streakInfo: streakInfoMap[habit.id] ?? HabitStreakInfo(
-                                    currentStreak: 0,
-                                    longestStreak: 0,
-                                    lastCompletionDate: nil,
-                                    isCompletedToday: false,
-                                    willResetNextDay: false
-                                ),
+                                streakInfo: streakInfoMap[habit.id]
+                                    ?? HabitStreakInfo(
+                                        currentStreak: 0,
+                                        longestStreak: 0,
+                                        lastCompletionDate: nil,
+                                        isCompletedToday: false,
+                                        willResetNextDay: false
+                                    ),
                                 onComplete: {
                                     await completeHabit(habit)
                                 }
@@ -282,16 +276,14 @@ struct TodaysHabitsHomeCard: View {
                         if habits.count > 3 {
                             Text("View all \(habits.count) habits")
                                 .font(.caption)
-                                .foregroundStyle(Color.accentColor)
+                                .foregroundStyle(SupportTheme.accent)
                         }
                     }
                 }
             }
         }
         .buttonStyle(.plain)
-        .padding()
-        .background(Color(uiColor: .secondarySystemBackground))
-        .cornerRadius(16)
+        .supportCard()
         .task {
             await loadHabits()
         }
@@ -302,7 +294,7 @@ struct TodaysHabitsHomeCard: View {
             }
         }
         .alert("Couldn't Mark Complete", isPresented: $showCompletionError) {
-            Button("OK", role: .cancel) { }
+            Button("OK", role: .cancel) {}
         } message: {
             Text(completionErrorMessage)
         }
@@ -323,7 +315,7 @@ struct TodaysHabitsHomeCard: View {
             }
         } catch {
             #if DEBUG
-            print("[TodaysHabitsHomeCard] loadHabits failed: \(error)")
+                print("[TodaysHabitsHomeCard] loadHabits failed: \(error)")
             #endif
             habits = []
         }
@@ -349,7 +341,7 @@ struct TodaysHabitsHomeCard: View {
             // appearing to do nothing. Duplicate-completion is still treated
             // as a soft refresh since the habit is already complete today.
             #if DEBUG
-            print("[HabitsSummaryCard] completeHabit failed: \(error)")
+                print("[HabitsSummaryCard] completeHabit failed: \(error)")
             #endif
             if case HabitServiceError.duplicateCompletion = error {
                 if let info = try? await container.habitService.getCurrentStreak(for: habit) {
@@ -388,7 +380,7 @@ struct TodaysHabitsHomeCard: View {
         willResetNextDay: false
     )
 
-    return VStack(spacing: 16) {
+    return VStack(spacing: SupportTheme.Spacing.m) {
         HabitCompletionCard(
             habit: habit,
             streakInfo: streakInfo,

@@ -5,6 +5,7 @@ import SwiftUI
 
 /// Animated breathing exercise with expanding/contracting circle
 struct SOSBreathingView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject var container: DependencyContainer
 
     var sosCoordinator: SOSCoordinator {
@@ -39,17 +40,19 @@ struct SOSBreathingView: View {
     var body: some View {
         VStack(spacing: 0) {
             // Header
-            VStack(spacing: 8) {
+            VStack(spacing: SupportTheme.Spacing.xs) {
                 Text("You're safe")
                     .font(.title)
+                    .accessibilityAddTraits(.isHeader)
                     .fontWeight(.bold)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(SupportTheme.textPrimary)
 
                 Text("Let's breathe together")
                     .font(.title3)
-                    .foregroundStyle(.white.opacity(0.8))
+                    .accessibilityAddTraits(.isHeader)
+                    .foregroundStyle(SupportTheme.textPrimary.opacity(0.8))
             }
-            .padding(.top, 40)
+            .padding(.top, SupportTheme.Spacing.xl)
 
             Spacer()
 
@@ -58,46 +61,40 @@ struct SOSBreathingView: View {
                 // Outer glow
                 Circle()
                     .fill(
-                        RadialGradient(
-                            colors: [.cyan.opacity(0.3), .clear],
-                            center: .center,
-                            startRadius: 0,
-                            endRadius: 180
-                        )
+                        SupportTheme.surface
                     )
                     .frame(width: 360, height: 360)
-                    .scaleEffect(circleScale * 1.2)
+                    .scaleEffect(reduceMotion ? 1 : (circleScale * 1.2))
 
                 // Main circle
                 Circle()
                     .fill(
-                        RadialGradient(
-                            colors: [.cyan.opacity(0.6), .blue.opacity(0.3)],
-                            center: .center,
-                            startRadius: 0,
-                            endRadius: 150
-                        )
+                        SupportTheme.surface
                     )
                     .frame(width: 300, height: 300)
-                    .scaleEffect(circleScale)
+                    .scaleEffect(reduceMotion ? 1 : (circleScale))
+                    .opacity(reduceMotion ? (circleScale >= 1 ? 1 : 0.55) : 1)
 
                 // Border
                 Circle()
-                    .stroke(Color.white.opacity(0.5), lineWidth: 2)
+                    .stroke(SupportTheme.textPrimary.opacity(0.5), lineWidth: 2)
                     .frame(width: 300, height: 300)
-                    .scaleEffect(circleScale)
+                    .scaleEffect(reduceMotion ? 1 : (circleScale))
+                    .opacity(reduceMotion ? (circleScale >= 1 ? 1 : 0.55) : 1)
 
                 // Instruction text
-                VStack(spacing: 12) {
+                VStack(spacing: SupportTheme.Spacing.s) {
                     Text(currentPhase.instruction)
                         .font(.title)
+                        .accessibilityAddTraits(.isHeader)
                         .fontWeight(.semibold)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(SupportTheme.textPrimary)
                         .accessibilityLabel("Breathing instruction: \(currentPhase.instruction)")
 
                     Text("\(max(1, Int(ceil(currentPhase.duration * (1 - phaseProgress))))) sec")
                         .font(.title2)
-                        .foregroundStyle(.white.opacity(0.8))
+                        .accessibilityAddTraits(.isHeader)
+                        .foregroundStyle(SupportTheme.textPrimary.opacity(0.8))
                         .monospacedDigit()
                 }
             }
@@ -107,12 +104,14 @@ struct SOSBreathingView: View {
             Spacer()
 
             // Progress
-            VStack(spacing: 16) {
+            VStack(spacing: SupportTheme.Spacing.m) {
                 // Cycle indicators
-                HStack(spacing: 8) {
+                HStack(spacing: SupportTheme.Spacing.xs) {
                     ForEach(0..<totalCycles, id: \.self) { index in
                         Circle()
-                            .fill(index < currentCycle ? Color.white : Color.white.opacity(0.3))
+                            .fill(
+                                index < currentCycle ? SupportTheme.textPrimary : SupportTheme.textPrimary.opacity(0.3)
+                            )
                             .frame(width: 10, height: 10)
                     }
                 }
@@ -120,7 +119,7 @@ struct SOSBreathingView: View {
 
                 Text("Cycle \(currentCycle + 1) of \(totalCycles)")
                     .font(.subheadline)
-                    .foregroundStyle(.white.opacity(0.7))
+                    .foregroundStyle(SupportTheme.textPrimary.opacity(0.7))
             }
 
             Spacer()
@@ -136,29 +135,22 @@ struct SOSBreathingView: View {
                 } label: {
                     Text("Skip to Help")
                         .font(.body)
-                        .foregroundStyle(.white.opacity(0.8))
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 12)
-                        .background(Color.white.opacity(0.2))
+                        .foregroundStyle(SupportTheme.textPrimary.opacity(0.8))
+                        .padding(.horizontal, SupportTheme.Spacing.l)
+                        .padding(.vertical, SupportTheme.Spacing.s)
+                        .background(SupportTheme.textPrimary.opacity(0.2))
                         .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
 
                 Spacer()
             }
-            .padding(.horizontal, 24)
-            .padding(.bottom, 40)
+            .padding(.horizontal, SupportTheme.Spacing.l)
+            .padding(.bottom, SupportTheme.Spacing.xl)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(
-            LinearGradient(
-                colors: [
-                    Color(red: 0.1, green: 0.2, blue: 0.4),
-                    Color(red: 0.15, green: 0.1, blue: 0.3)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
+            SupportTheme.surface
         )
         .onAppear {
             startBreathingCycles()
@@ -188,9 +180,11 @@ struct SOSBreathingView: View {
                         sosCoordinator.triggerHaptic(sosCoordinator.hapticForBreathingPhase(phase.name))
 
                         // Animate circle
-                        let targetScale: CGFloat = phase.name == "inhale" ? 1.0 : (phase.name == "exhale" ? 0.5 : circleScale)
+                        let targetScale: CGFloat =
+                            phase.name == "inhale" ? 1.0 : (phase.name == "exhale" ? 0.5 : circleScale)
 
-                        withAnimation(.easeInOut(duration: phase.duration)) {
+                        withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : (.easeInOut(duration: phase.duration)))
+                        {
                             circleScale = targetScale
                         }
                     }

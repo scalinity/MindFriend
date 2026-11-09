@@ -14,24 +14,25 @@ struct MedicationsListView: View {
                 if viewModel.isLoading {
                     ProgressView()
                 } else if viewModel.medications.isEmpty {
-                    VStack(spacing: 16) {
+                    VStack(spacing: SupportTheme.Spacing.m) {
                         Image(systemName: "pills")
                             .font(.system(size: 48))
-                            .foregroundColor(.gray)
+                            .foregroundColor(SupportTheme.textSecondary)
 
                         Text("No medications yet")
                             .font(.headline)
+                            .accessibilityAddTraits(.isHeader)
 
                         Text("Start tracking your medications to monitor adherence and mood correlation")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(SupportTheme.textSecondary)
                             .multilineTextAlignment(.center)
 
                         Button(action: { showAddMedication = true }) {
                             Label("Add Medication", systemImage: "plus")
                                 .frame(maxWidth: .infinity)
                         }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.supportPrimary)
                     }
                     .padding()
                 } else {
@@ -43,23 +44,27 @@ struct MedicationsListView: View {
                                     MedicationScheduleRow(item: item)
                                 }
                             }
+                            .listRowBackground(SupportTheme.surface)
                         }
 
                         // Adherence Section
                         Section("Adherence") {
-                            VStack(alignment: .leading, spacing: 8) {
+                            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                                 HStack {
                                     Text("This Month")
                                     Spacer()
                                     Text(String(format: "%.0f%%", viewModel.adherenceRate * 100))
                                         .font(.headline)
+                                        .accessibilityAddTraits(.isHeader)
                                 }
 
                                 ProgressView(value: viewModel.adherenceRate)
-                                    .tint(.green)
+                                    .tint(SupportTheme.accent)
                             }
-                            .padding(.vertical, 8)
+                            .padding(.vertical, SupportTheme.Spacing.xs)
                         }
+
+                        .listRowBackground(SupportTheme.surface)
 
                         // My Medications Section
                         Section("My Medications") {
@@ -68,22 +73,23 @@ struct MedicationsListView: View {
                                     HStack {
                                         Image(systemName: medication.icon.systemImage)
                                             .frame(width: 32, height: 32)
-                                            .background(Color.blue.opacity(0.1))
-                                            .cornerRadius(8)
+                                            .background(SupportTheme.surface)
+                                            .cornerRadius(SupportTheme.controlRadius)
 
-                                        VStack(alignment: .leading, spacing: 4) {
+                                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                                             Text(medication.name)
                                                 .font(.headline)
+                                                .accessibilityAddTraits(.isHeader)
 
                                             if let dosage = medication.dosage {
                                                 Text(dosage)
                                                     .font(.caption)
-                                                    .foregroundColor(.secondary)
+                                                    .foregroundColor(SupportTheme.textSecondary)
                                             }
 
                                             Text(medication.frequency.description)
                                                 .font(.caption)
-                                                .foregroundColor(.secondary)
+                                                .foregroundColor(SupportTheme.textSecondary)
                                         }
 
                                         Spacer()
@@ -91,9 +97,13 @@ struct MedicationsListView: View {
                                 }
                             }
                         }
+
+                        .listRowBackground(SupportTheme.surface)
                     }
                 }
             }
+            .supportScreen()
+            .foregroundStyle(SupportTheme.textPrimary)
             .navigationTitle("Medications")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -106,7 +116,10 @@ struct MedicationsListView: View {
             .sheet(isPresented: $showAddMedication) {
                 AddMedicationView(isPresented: $showAddMedication)
             }
-            .alert(isPresented: Binding(get: { !viewModel.errorMessage.isEmpty }, set: { if !$0 { viewModel.errorMessage = "" } })) {
+            .alert(
+                isPresented: Binding(
+                    get: { !viewModel.errorMessage.isEmpty }, set: { if !$0 { viewModel.errorMessage = "" } })
+            ) {
                 Alert(
                     title: Text("Error"),
                     message: Text(viewModel.errorMessage),
@@ -127,13 +140,14 @@ struct MedicationScheduleRow: View {
 
     var body: some View {
         HStack {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text(item.scheduledAt.formatted(date: .omitted, time: .shortened))
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
 
                 Text(item.medication.name)
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(SupportTheme.textSecondary)
             }
 
             Spacer()
@@ -155,10 +169,10 @@ struct MedicationScheduleRow: View {
 
     private var statusColor: Color {
         switch item.status {
-        case .taken: return .green
+        case .taken: return SupportTheme.accent
         case .skipped: return .red
-        case .late: return .orange
-        case .pending: return .gray
+        case .late: return SupportTheme.accent
+        case .pending: return SupportTheme.textSecondary
         }
     }
 }

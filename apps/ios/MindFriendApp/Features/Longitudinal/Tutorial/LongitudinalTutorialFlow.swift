@@ -10,6 +10,7 @@ import SwiftUI
 
 /// Main container for the Longitudinal tutorial walkthrough
 struct LongitudinalTutorialFlow: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject var container: DependencyContainer
 
     let onComplete: () -> Void
@@ -26,9 +27,9 @@ struct LongitudinalTutorialFlow: View {
         VStack(spacing: 0) {
             ProgressView(value: currentStep.progress)
                 .progressViewStyle(.linear)
-                .tint(.teal)
+                .tint(SupportTheme.accent)
                 .padding(.horizontal)
-                .padding(.top, 60)
+                .padding(.top, SupportTheme.Spacing.xl)
 
             Group {
                 switch currentStep {
@@ -40,18 +41,15 @@ struct LongitudinalTutorialFlow: View {
                     LongitudinalYearStep(onComplete: completeTutorial)
                 }
             }
-            .transition(.asymmetric(
-                insertion: .move(edge: .trailing).combined(with: .opacity),
-                removal: .move(edge: .leading).combined(with: .opacity)
-            ))
+            .transition(.opacity)
         }
-        .background(Color(.systemBackground))
-        .animation(.easeInOut(duration: 0.3), value: currentStep)
+        .background(SupportTheme.canvas)
+        .animation(reduceMotion ? .easeInOut(duration: 0.2) : (.easeInOut(duration: 0.3)), value: currentStep)
     }
 
     private func advanceStep() {
         if let nextStep = TutorialStep(rawValue: currentStep.rawValue + 1) {
-            withAnimation { currentStep = nextStep }
+            withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .default) { currentStep = nextStep }
         }
     }
 

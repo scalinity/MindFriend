@@ -66,9 +66,11 @@ struct CoachSettingsView: View {
                     if viewModel.settings.isEnabled {
                         Text("The coaching feature helps you recognize and reframe thinking patterns in real-time.")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(SupportTheme.textSecondary)
                     }
                 }
+
+                .listRowBackground(SupportTheme.surface)
 
                 // Sensitivity Level section
                 if viewModel.settings.isEnabled {
@@ -91,35 +93,44 @@ struct CoachSettingsView: View {
                             }
                         }
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(SupportTheme.textSecondary)
                     }
+                    .listRowBackground(SupportTheme.surface)
 
                     // Silent Hours section
                     Section(header: Text("Silent Hours")) {
                         HStack {
                             Text("From:")
                             Spacer()
-                            DatePicker("Start time", selection: Binding(
-                                get: { viewModel.settings.silentHoursStart ?? Date() },
-                                set: { viewModel.settings.silentHoursStart = $0 }
-                            ), displayedComponents: .hourAndMinute)
-                                .labelsHidden()
+                            DatePicker(
+                                "Start time",
+                                selection: Binding(
+                                    get: { viewModel.settings.silentHoursStart ?? Date() },
+                                    set: { viewModel.settings.silentHoursStart = $0 }
+                                ), displayedComponents: .hourAndMinute
+                            )
+                            .labelsHidden()
                         }
 
                         HStack {
                             Text("To:")
                             Spacer()
-                            DatePicker("End time", selection: Binding(
-                                get: { viewModel.settings.silentHoursEnd ?? Date() },
-                                set: { viewModel.settings.silentHoursEnd = $0 }
-                            ), displayedComponents: .hourAndMinute)
-                                .labelsHidden()
+                            DatePicker(
+                                "End time",
+                                selection: Binding(
+                                    get: { viewModel.settings.silentHoursEnd ?? Date() },
+                                    set: { viewModel.settings.silentHoursEnd = $0 }
+                                ), displayedComponents: .hourAndMinute
+                            )
+                            .labelsHidden()
                         }
 
                         Text("No coaching suggestions will appear during these hours.")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(SupportTheme.textSecondary)
                     }
+
+                    .listRowBackground(SupportTheme.surface)
 
                     // Disabled Distortions section
                     Section(header: Text("Distortions to Ignore")) {
@@ -129,12 +140,14 @@ struct CoachSettingsView: View {
                                 Spacer()
                                 if viewModel.settings.disabledDistortions.count > 0 {
                                     Text("\(viewModel.settings.disabledDistortions.count) excluded")
-                                        .foregroundColor(.secondary)
+                                        .foregroundColor(SupportTheme.textSecondary)
                                         .font(.caption)
                                 }
                             }
                         }
                     }
+
+                    .listRowBackground(SupportTheme.surface)
 
                     // Show Patterns section
                     Section(header: Text("Learning & Insights")) {
@@ -143,10 +156,14 @@ struct CoachSettingsView: View {
 
                         Text("Track which thinking patterns you encounter most frequently and see trends over time.")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(SupportTheme.textSecondary)
                     }
+
+                    .listRowBackground(SupportTheme.surface)
                 }
             }
+            .supportScreen()
+            .foregroundStyle(SupportTheme.textPrimary)
             .navigationTitle("Thinking Coach Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -166,15 +183,21 @@ struct CoachSettingsView: View {
                     .disabled(viewModel.isLoading)
                 }
             }
-            .alert("Error", isPresented: Binding(get: { viewModel.errorMessage != nil }, set: { if !$0 { viewModel.errorMessage = nil } }), actions: {
-                Button("OK") {
-                    viewModel.errorMessage = nil
+            .alert(
+                "Error",
+                isPresented: Binding(
+                    get: { viewModel.errorMessage != nil }, set: { if !$0 { viewModel.errorMessage = nil } }),
+                actions: {
+                    Button("OK") {
+                        viewModel.errorMessage = nil
+                    }
+                },
+                message: {
+                    if let error = viewModel.errorMessage {
+                        Text(error)
+                    }
                 }
-            }, message: {
-                if let error = viewModel.errorMessage {
-                    Text(error)
-                }
-            })
+            )
             .onAppear {
                 Task {
                     await viewModel.loadSettings()
@@ -196,22 +219,23 @@ struct DisabledDistortionsView: View {
         List {
             ForEach(allDistortions, id: \.code) { distortion in
                 HStack {
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                         Text(distortion.name)
                             .font(.headline)
+                            .accessibilityAddTraits(.isHeader)
                         Text(distortion.shortDescription)
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(SupportTheme.textSecondary)
                     }
 
                     Spacer()
 
                     if settings.disabledDistortions.contains(distortion.code) {
                         Image(systemName: "checkmark.circle.fill")
-                            .foregroundColor(.accentColor)
+                            .foregroundColor(SupportTheme.accent)
                     } else {
                         Image(systemName: "circle")
-                            .foregroundColor(.secondary)
+                            .foregroundColor(SupportTheme.textSecondary)
                     }
                 }
                 .contentShape(Rectangle())
@@ -220,6 +244,8 @@ struct DisabledDistortionsView: View {
                 }
             }
         }
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle("Manage Patterns")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
@@ -290,8 +316,8 @@ class MockCoachService: CoachServiceProtocol {
         return CoachSettings(
             isEnabled: true,
             sensitivityLevel: .balanced,
-            silentHoursStart: Date(timeIntervalSince1970: 82800), // 11 PM
-            silentHoursEnd: Date(timeIntervalSince1970: 21600),   // 6 AM
+            silentHoursStart: Date(timeIntervalSince1970: 82800),  // 11 PM
+            silentHoursEnd: Date(timeIntervalSince1970: 21600),  // 6 AM
             disabledDistortions: [],
             showPatterns: true,
             timezone: TimeZone.current.identifier
@@ -302,7 +328,9 @@ class MockCoachService: CoachServiceProtocol {
         // Mock implementation
     }
 
-    func recordInteraction(encounterId: UUID?, distortionCode: String, action: CoachInteraction.Action, confidence: Double?) async throws {
+    func recordInteraction(
+        encounterId: UUID?, distortionCode: String, action: CoachInteraction.Action, confidence: Double?
+    ) async throws {
         // Mock implementation
     }
 

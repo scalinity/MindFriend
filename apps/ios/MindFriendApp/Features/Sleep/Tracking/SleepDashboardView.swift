@@ -1,7 +1,8 @@
 import SwiftUI
+
 #if DEBUG
-import HealthKit
-import Supabase
+    import HealthKit
+    import Supabase
 #endif
 
 /// Main sleep tracking dashboard showing recent sleep, trends, and quick actions
@@ -17,8 +18,10 @@ struct SleepDashboardView: View {
     private let syncSleep: (() async throws -> Void)?
     private let automaticSync: (() async throws -> Void)?
 
-    init(trackingReader: (any SleepTrackingReading)? = nil, syncSleep: (() async throws -> Void)? = nil,
-         automaticSync: (() async throws -> Void)? = nil, preferences: UserDefaults = .standard) {
+    init(
+        trackingReader: (any SleepTrackingReading)? = nil, syncSleep: (() async throws -> Void)? = nil,
+        automaticSync: (() async throws -> Void)? = nil, preferences: UserDefaults = .standard
+    ) {
         self.trackingReader = trackingReader
         self.syncSleep = syncSleep
         self.automaticSync = automaticSync
@@ -31,13 +34,16 @@ struct SleepDashboardView: View {
     var body: some View {
         SupportRootNavigation(embedded: supportEmbedded) {
             ScrollView {
-                VStack(spacing: 20) {
+                VStack(spacing: SupportTheme.Spacing.l) {
                     if let message = viewModel.syncErrorMessage {
-                        VStack(spacing: 8) {
-                            Text(message).foregroundStyle(.secondary)
+                        VStack(spacing: SupportTheme.Spacing.xs) {
+                            Text(message).foregroundStyle(SupportTheme.textSecondary)
                             Button("Try Sync Again") {
-                                Task { await viewModel.refresh(trackingService: dependencies.sleepTrackingService,
-                                    healthKitManager: dependencies.sleepHealthKitManager) }
+                                Task {
+                                    await viewModel.refresh(
+                                        trackingService: dependencies.sleepTrackingService,
+                                        healthKitManager: dependencies.sleepHealthKitManager)
+                                }
                             }
                         }
                         .accessibilityIdentifier("sleep.syncError")
@@ -72,6 +78,8 @@ struct SleepDashboardView: View {
                 }
                 .padding()
             }
+            .supportScreen()
+            .foregroundStyle(SupportTheme.textPrimary)
             .navigationTitle("Sleep Tracking")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -80,15 +88,20 @@ struct SleepDashboardView: View {
                     } label: {
                         Image(systemName: "gearshape")
                     }
+                    .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                    .accessibilityLabel("Settings")
                 }
             }
-            .sheet(isPresented: $viewModel.showMorningCheckIn, onDismiss: {
-                if let entry = viewModel.lastSleepEntry, entry.id == morningCheckInEntryID {
-                    viewModel.skipMorningCheckIn(for: entry)
+            .sheet(
+                isPresented: $viewModel.showMorningCheckIn,
+                onDismiss: {
+                    if let entry = viewModel.lastSleepEntry, entry.id == morningCheckInEntryID {
+                        viewModel.skipMorningCheckIn(for: entry)
+                    }
+                    morningCheckInEntryID = nil
+                    if isVisible, scenePhase == .active { Task { await syncConnectedSleep() } }
                 }
-                morningCheckInEntryID = nil
-                if isVisible, scenePhase == .active { Task { await syncConnectedSleep() } }
-            }) {
+            ) {
                 if let entry = viewModel.lastSleepEntry {
                     MorningCheckInView(entry: entry) { viewModel.skipMorningCheckIn(for: entry) }
                 }
@@ -113,10 +126,14 @@ struct SleepDashboardView: View {
                 }
             }
             .onAppear { isVisible = true }
-            .onDisappear { isVisible = false; viewModel.cancelRefresh() }
+            .onDisappear {
+                isVisible = false
+                viewModel.cancelRefresh()
+            }
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active, isVisible, !viewModel.showMorningCheckIn,
-                   !showManualEntry, !viewModel.showSettings, !viewModel.showWindDown {
+                    !showManualEntry, !viewModel.showSettings, !viewModel.showWindDown
+                {
                     Task { await syncConnectedSleep() }
                 }
             }
@@ -124,8 +141,11 @@ struct SleepDashboardView: View {
                 if isPresented { morningCheckInEntryID = viewModel.lastSleepEntry?.id }
             }
             .task(id: appState.currentUser?.id) {
-                if trackingReader == nil { viewModel.prepareForOwner(appState.currentUser?.id) }
-                else { viewModel.cancelRefresh() }
+                if trackingReader == nil {
+                    viewModel.prepareForOwner(appState.currentUser?.id)
+                } else {
+                    viewModel.cancelRefresh()
+                }
                 if trackingReader == nil || automaticSync != nil {
                     await syncConnectedSleep()
                 } else {
@@ -134,9 +154,11 @@ struct SleepDashboardView: View {
             }
             .refreshable {
                 if let syncSleep {
-                    await viewModel.refresh(trackingService: trackingReader ?? dependencies.sleepTrackingService, sync: syncSleep)
+                    await viewModel.refresh(
+                        trackingService: trackingReader ?? dependencies.sleepTrackingService, sync: syncSleep)
                 } else {
-                    await viewModel.refresh(trackingService: dependencies.sleepTrackingService,
+                    await viewModel.refresh(
+                        trackingService: dependencies.sleepTrackingService,
                         healthKitManager: dependencies.sleepHealthKitManager)
                 }
             }
@@ -145,16 +167,22 @@ struct SleepDashboardView: View {
 
     private func syncConnectedSleep() async {
         if let automaticSync {
-            await viewModel.refresh(trackingService: trackingReader ?? dependencies.sleepTrackingService, sync: automaticSync)
+            await viewModel.refresh(
+                trackingService: trackingReader ?? dependencies.sleepTrackingService, sync: automaticSync)
         } else if trackingReader == nil {
             let manager = dependencies.sleepHealthKitManager
-            await viewModel.refresh(trackingService: dependencies.sleepTrackingService, sync: {
-                await manager.updateAuthorizationStatus()
-                try Task.checkCancellation()
-                if manager.isAuthorized { _ = try await manager.syncRecentSleep() }
-            }, history: { started in
-                if manager.isAuthorized { try await manager.syncAvailableHistory(retryConflicts: false, onBatchStart: started) }
-            })
+            await viewModel.refresh(
+                trackingService: dependencies.sleepTrackingService,
+                sync: {
+                    await manager.updateAuthorizationStatus()
+                    try Task.checkCancellation()
+                    if manager.isAuthorized { _ = try await manager.syncRecentSleep() }
+                },
+                history: { started in
+                    if manager.isAuthorized {
+                        try await manager.syncAvailableHistory(retryConflicts: false, onBatchStart: started)
+                    }
+                })
         }
     }
 
@@ -162,35 +190,39 @@ struct SleepDashboardView: View {
 
     @ViewBuilder
     private func lastNightSection(_ entry: SleepEntry) -> some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             Text("Today's Sleep")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             Text("\(entry.wakeTime.formatted(date: .abbreviated, time: .omitted)) · \(entry.source.displayName)")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .accessibilityIdentifier("sleep.source")
 
-            HStack(spacing: 20) {
+            HStack(spacing: SupportTheme.Spacing.l) {
                 // Sleep Score Ring
                 if let score = entry.displayableScore {
                     SleepScoreRing(score: score, size: 120)
                 }
 
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                     Text(entry.durationFormatted)
                         .font(.title2)
+                        .accessibilityAddTraits(.isHeader)
                         .fontWeight(.semibold)
 
-                    Text(entry.displayableScore == nil ? "Score unavailable — missing measurements" : entry.qualityLabel)
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
+                    Text(
+                        entry.displayableScore == nil ? "Score unavailable — missing measurements" : entry.qualityLabel
+                    )
+                    .font(.subheadline)
+                    .foregroundColor(SupportTheme.textSecondary)
 
                     if entry.displayableScore != nil, let breakdown = entry.scoreBreakdown {
                         Text("Weakest: \(breakdown.primaryFactor)")
                             .font(.caption)
-                            .foregroundColor(.orange)
+                            .foregroundColor(SupportTheme.accent)
                     }
 
                     if entry.userRating == nil {
@@ -199,7 +231,7 @@ struct SleepDashboardView: View {
                         } label: {
                             Text("Rate Sleep")
                                 .font(.caption)
-                                .foregroundColor(.accentColor)
+                                .foregroundColor(SupportTheme.accent)
                         }
                     }
                 }
@@ -207,16 +239,18 @@ struct SleepDashboardView: View {
                 Spacer()
             }
             .padding()
-            .background(Color(.systemGray6))
-            .cornerRadius(12)
+            .background(SupportTheme.field)
+            .cornerRadius(SupportTheme.controlRadius)
 
             if let periods = entry.validatedRecordedPeriods {
                 DisclosureGroup("Recorded periods") {
                     ForEach(Array(periods.enumerated()), id: \.offset) { _, period in
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("\(period.start.formatted(date: .abbreviated, time: .shortened)) – \(period.end.formatted(date: .abbreviated, time: .shortened))")
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
+                            Text(
+                                "\(period.start.formatted(date: .abbreviated, time: .shortened)) – \(period.end.formatted(date: .abbreviated, time: .shortened))"
+                            )
                             let minutes = Int(period.asleepSeconds / 60)
-                            Text("\(minutes / 60)h \(minutes % 60)m asleep").foregroundStyle(.secondary)
+                            Text("\(minutes / 60)h \(minutes % 60)m asleep").foregroundStyle(SupportTheme.textSecondary)
                         }
                         .font(.caption)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -229,7 +263,7 @@ struct SleepDashboardView: View {
             if !entry.previousImportFeedback.isEmpty {
                 DisclosureGroup("Saved feedback from earlier imports") {
                     ForEach(entry.previousImportFeedback) { fragment in
-                        VStack(alignment: .leading, spacing: 4) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                             if let rating = fragment.userRating { Text("Rating: \(rating)/5") }
                             if let dreamNotes = fragment.dreamNotes { Text(dreamNotes) }
                             if let notes = fragment.notes { Text(notes) }
@@ -248,7 +282,7 @@ struct SleepDashboardView: View {
 
     @ViewBuilder
     private func scoreBreakdownView(_ breakdown: SleepScoreBreakdown) -> some View {
-        VStack(spacing: 8) {
+        VStack(spacing: SupportTheme.Spacing.xs) {
             scoreComponent("Duration", score: breakdown.duration, max: 25)
             scoreComponent("Efficiency", score: breakdown.efficiency, max: 25)
             scoreComponent("Timing", score: breakdown.timing, max: 20)
@@ -256,8 +290,8 @@ struct SleepDashboardView: View {
             scoreComponent("Restfulness", score: breakdown.restfulness, max: 10)
         }
         .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(12)
+        .background(SupportTheme.field)
+        .cornerRadius(SupportTheme.controlRadius)
     }
 
     @ViewBuilder
@@ -265,20 +299,20 @@ struct SleepDashboardView: View {
         HStack {
             Text(name)
                 .font(.caption)
-                .foregroundColor(.secondary)
+                .foregroundColor(SupportTheme.textSecondary)
                 .frame(width: 80, alignment: .leading)
 
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
                     Rectangle()
-                        .fill(Color(.systemGray4))
+                        .fill(SupportTheme.field)
                         .frame(height: 6)
-                        .cornerRadius(3)
+                        .cornerRadius(SupportTheme.controlRadius)
 
                     Rectangle()
                         .fill(scoreColor(Double(score) / Double(max)))
                         .frame(width: geometry.size.width * (Double(score) / Double(max)), height: 6)
-                        .cornerRadius(3)
+                        .cornerRadius(SupportTheme.controlRadius)
                 }
             }
             .frame(height: 6)
@@ -291,26 +325,27 @@ struct SleepDashboardView: View {
     }
 
     private func scoreColor(_ percentage: Double) -> Color {
-        if percentage >= 0.85 { return .green }
-        if percentage >= 0.7 { return .yellow }
-        return .orange
+        if percentage >= 0.85 { return SupportTheme.accent }
+        if percentage >= 0.7 { return SupportTheme.Celebration.gold }
+        return SupportTheme.accent
     }
 
     // MARK: - Weekly Trend Section
 
     @ViewBuilder
     private var weeklyTrendSection: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: SupportTheme.Spacing.s) {
             HStack {
                 Text("7-Day Trend")
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
 
                 Spacer()
 
                 if let avgScore = viewModel.weeklyAverageScore {
                     Text("\(avgScore) avg")
                         .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(SupportTheme.textSecondary)
                 }
             }
 
@@ -318,24 +353,25 @@ struct SleepDashboardView: View {
                 .frame(height: 150)
         }
         .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(12)
+        .background(SupportTheme.field)
+        .cornerRadius(SupportTheme.controlRadius)
     }
 
     // MARK: - Quick Actions
 
     @ViewBuilder
     private var quickActionsSection: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: SupportTheme.Spacing.s) {
             Text("Quick Actions")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            HStack(spacing: 12) {
+            HStack(spacing: SupportTheme.Spacing.s) {
                 quickActionButton(
                     title: "Wind Down",
                     icon: "moon.stars.fill",
-                    color: .purple
+                    color: SupportTheme.accent
                 ) {
                     viewModel.showWindDown = true
                 }
@@ -343,7 +379,7 @@ struct SleepDashboardView: View {
                 quickActionButton(
                     title: "Log Sleep",
                     icon: "bed.double.fill",
-                    color: .blue
+                    color: SupportTheme.accent
                 ) {
                     showManualEntry = true
                 }
@@ -351,7 +387,7 @@ struct SleepDashboardView: View {
                 quickActionButton(
                     title: "Goals",
                     icon: "target",
-                    color: .green
+                    color: SupportTheme.accent
                 ) {
                     viewModel.showSettings = true
                 }
@@ -367,20 +403,20 @@ struct SleepDashboardView: View {
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            VStack(spacing: 8) {
+            VStack(spacing: SupportTheme.Spacing.xs) {
                 Image(systemName: icon)
                     .font(.title2)
                     .foregroundColor(color)
 
                 Text(title)
                     .font(.caption)
-                    .foregroundColor(.primary)
+                    .foregroundColor(SupportTheme.textPrimary)
                     .multilineTextAlignment(.center)
             }
             .frame(maxWidth: .infinity, minHeight: 70)
             .padding()
-            .background(Color(.systemGray6))
-            .cornerRadius(12)
+            .background(SupportTheme.field)
+            .cornerRadius(SupportTheme.controlRadius)
         }
     }
 
@@ -388,10 +424,11 @@ struct SleepDashboardView: View {
 
     @ViewBuilder
     private var insightsSection: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: SupportTheme.Spacing.s) {
             HStack {
                 Text("Insights")
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
 
                 Spacer()
 
@@ -400,7 +437,7 @@ struct SleepDashboardView: View {
                 } label: {
                     Text("See All")
                         .font(.subheadline)
-                        .foregroundColor(.accentColor)
+                        .foregroundColor(SupportTheme.accent)
                 }
             }
 
@@ -412,20 +449,20 @@ struct SleepDashboardView: View {
 
     @ViewBuilder
     private func insightCard(_ insight: SleepInsight) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: SupportTheme.Spacing.s) {
             Image(systemName: insight.insightType.icon)
                 .font(.title2)
-                .foregroundColor(.accentColor)
+                .foregroundColor(SupportTheme.accent)
                 .frame(width: 40)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text(insight.insightData.title)
                     .font(.subheadline)
                     .fontWeight(.semibold)
 
                 Text(insight.insightData.message)
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(SupportTheme.textSecondary)
                     .lineLimit(2)
             }
 
@@ -433,29 +470,29 @@ struct SleepDashboardView: View {
 
             if !insight.viewed {
                 Circle()
-                    .fill(Color.accentColor)
+                    .fill(SupportTheme.accent)
                     .frame(width: 8, height: 8)
             }
         }
         .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(12)
+        .background(SupportTheme.field)
+        .cornerRadius(SupportTheme.controlRadius)
     }
 
     // MARK: - Empty State
 
     @ViewBuilder
     private var emptyStateSection: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             Image(systemName: "moon.zzz.fill")
                 .font(.system(size: 60))
-                .foregroundColor(.secondary)
+                .foregroundColor(SupportTheme.textSecondary)
 
             if let error = viewModel.errorMessage {
                 Text("Sleep Records Unavailable")
                     .font(.title3).fontWeight(.semibold)
                 Text(error)
-                    .font(.subheadline).foregroundStyle(.secondary)
+                    .font(.subheadline).foregroundStyle(SupportTheme.textSecondary)
                     .multilineTextAlignment(.center)
                 Button("Try Again") {
                     Task {
@@ -467,27 +504,30 @@ struct SleepDashboardView: View {
                 // HealthKit is connected but no sleep data found
                 Text("No Sleep Data Yet")
                     .font(.title3)
+                    .accessibilityAddTraits(.isHeader)
                     .fontWeight(.semibold)
 
-                Text("No sleep record is available for last night. Health may have no samples or read access may be off. Check access in Health, or log sleep manually.")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal)
+                Text(
+                    "No sleep record is available for last night. Health may have no samples or read access may be off. Check access in Health, or log sleep manually."
+                )
+                .font(.subheadline)
+                .foregroundColor(SupportTheme.textSecondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
 
                 Button {
                     showManualEntry = true
                 } label: {
                     Text("Log Sleep Manually")
                         .fontWeight(.semibold)
-                        .foregroundColor(.white)
+                        .foregroundColor(SupportTheme.onAccent)
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(Color.accentColor)
-                        .cornerRadius(12)
+                        .background(SupportTheme.accent)
+                        .cornerRadius(SupportTheme.controlRadius)
                 }
                 .padding(.horizontal)
-                
+
                 Button {
                     Task {
                         await viewModel.refresh(
@@ -498,17 +538,18 @@ struct SleepDashboardView: View {
                 } label: {
                     Text("Sync from HealthKit Again")
                         .font(.subheadline)
-                        .foregroundColor(.accentColor)
+                        .foregroundColor(SupportTheme.accent)
                 }
             } else {
                 // HealthKit not connected yet
                 Text("Start Tracking Your Sleep")
                     .font(.title3)
+                    .accessibilityAddTraits(.isHeader)
                     .fontWeight(.semibold)
 
                 Text("Connect HealthKit or manually log your sleep to get personalized insights")
                     .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(SupportTheme.textSecondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal)
 
@@ -522,24 +563,24 @@ struct SleepDashboardView: View {
                 } label: {
                     Text("Connect HealthKit")
                         .fontWeight(.semibold)
-                        .foregroundColor(.white)
+                        .foregroundColor(SupportTheme.onAccent)
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(Color.accentColor)
-                        .cornerRadius(12)
+                        .background(SupportTheme.accent)
+                        .cornerRadius(SupportTheme.controlRadius)
                 }
                 .padding(.horizontal)
-                
+
                 Button {
                     showManualEntry = true
                 } label: {
                     Text("Or Log Manually")
                         .font(.subheadline)
-                        .foregroundColor(.accentColor)
+                        .foregroundColor(SupportTheme.accent)
                 }
             }
         }
-        .padding(.vertical, 40)
+        .padding(.vertical, SupportTheme.Spacing.xl)
     }
 }
 
@@ -575,8 +616,10 @@ final class SleepDashboardViewModel: ObservableObject {
         return scores.reduce(0, +) / scores.count
     }
 
-    func loadData(trackingService: any SleepTrackingReading, healthKitManager: SleepHealthKitManager? = nil,
-                  preservingContent: Bool = false) async {
+    func loadData(
+        trackingService: any SleepTrackingReading, healthKitManager: SleepHealthKitManager? = nil,
+        preservingContent: Bool = false
+    ) async {
         guard !Task.isCancelled else { return }
         let requestID = UUID()
         loadID = requestID
@@ -602,7 +645,8 @@ final class SleepDashboardViewModel: ObservableObject {
             loadedOwnerID = userID
             // Fetch last 7 days
             let endDate = Date()
-            let startDate = Calendar.current.date(byAdding: .day, value: -6, to: Calendar.current.startOfDay(for: endDate))!
+            let startDate = Calendar.current.date(
+                byAdding: .day, value: -6, to: Calendar.current.startOfDay(for: endDate))!
             let entries = try await trackingService.fetchEntries(from: startDate, to: endDate)
 
             let loadedInsights = try await trackingService.fetchInsights()
@@ -613,8 +657,8 @@ final class SleepDashboardViewModel: ObservableObject {
             if preservingContent, showMorningCheckIn { return }
             let calculator = SleepScoreCalculator()
             weekEntries = entries.filter {
-                $0.userId == userID && calculator.isValidForScoring(entry: $0) &&
-                $0.wakeTime >= startDate && $0.wakeTime <= endDate
+                $0.userId == userID && calculator.isValidForScoring(entry: $0) && $0.wakeTime >= startDate
+                    && $0.wakeTime <= endDate
             }.sorted { $0.wakeTime > $1.wakeTime }
             lastSleepEntry = weekEntries.first {
                 Calendar.current.isDate($0.wakeTime, inSameDayAs: endDate)
@@ -625,8 +669,9 @@ final class SleepDashboardViewModel: ObservableObject {
 
             // Check if should show morning check-in
             if let last = lastSleepEntry,
-               last.userRating == nil,
-               shouldShowMorningCheckIn(for: last) {
+                last.userRating == nil,
+                shouldShowMorningCheckIn(for: last)
+            {
                 showMorningCheckIn = true
             }
         } catch {
@@ -643,14 +688,20 @@ final class SleepDashboardViewModel: ObservableObject {
     }
 
     func refresh(trackingService: SleepTrackingService, healthKitManager: SleepHealthKitManager) async {
-        await refresh(trackingService: trackingService, sync: { _ = try await healthKitManager.syncRecentSleep() },
+        await refresh(
+            trackingService: trackingService, sync: { _ = try await healthKitManager.syncRecentSleep() },
             history: { try await healthKitManager.syncAvailableHistory(onBatchStart: $0) })
     }
 
-    func refresh(trackingService: any SleepTrackingReading, sync: @escaping @MainActor () async throws -> Void,
-                 history: (@MainActor (@escaping @MainActor () -> Void) async throws -> Void)? = nil) async {
+    func refresh(
+        trackingService: any SleepTrackingReading, sync: @escaping @MainActor () async throws -> Void,
+        history: (@MainActor (@escaping @MainActor () -> Void) async throws -> Void)? = nil
+    ) async {
         guard !Task.isCancelled else { return }
-        if let refreshTask { await refreshTask.task.value; return }
+        if let refreshTask {
+            await refreshTask.task.value
+            return
+        }
         let id = UUID()
         isLoading = true
         // SwiftUI may cancel the pull action during a view update. Keep one screen-owned
@@ -677,7 +728,8 @@ final class SleepDashboardViewModel: ObservableObject {
                 if case SleepTrackingError.importDateConflict = failure {
                     self.syncErrorMessage = failure.localizedDescription
                 } else {
-                    self.syncErrorMessage = "Health sleep couldn't be synced. Saved records may be out of date. Try syncing again."
+                    self.syncErrorMessage =
+                        "Health sleep couldn't be synced. Saved records may be out of date. Try syncing again."
                 }
             }
             var historyAllowed = failure == nil
@@ -691,10 +743,12 @@ final class SleepDashboardViewModel: ObservableObject {
                             self.historyTask = nil
                         }
                     }
-                    do { try await history {
-                        guard self.historyTask?.id == historyID, !Task.isCancelled else { return }
-                        self.isImportingHistory = true
-                    } } catch {
+                    do {
+                        try await history {
+                            guard self.historyTask?.id == historyID, !Task.isCancelled else { return }
+                            self.isImportingHistory = true
+                        }
+                    } catch {
                         let activeOwner = try? await trackingService.currentUserID()
                         guard !Task.isCancelled, activeOwner == owner else { return }
                         if case SleepTrackingError.importDateConflict = error {
@@ -736,10 +790,12 @@ final class SleepDashboardViewModel: ObservableObject {
     }
 
     func requestHealthKitAuth(healthKitManager: SleepHealthKitManager, trackingService: SleepTrackingService) async {
-        await refresh(trackingService: trackingService, sync: {
-            try await healthKitManager.requestAuthorization()
-            _ = try await healthKitManager.syncRecentSleep()
-        }, history: { try await healthKitManager.syncAvailableHistory(onBatchStart: $0) })
+        await refresh(
+            trackingService: trackingService,
+            sync: {
+                try await healthKitManager.requestAuthorization()
+                _ = try await healthKitManager.syncRecentSleep()
+            }, history: { try await healthKitManager.syncAvailableHistory(onBatchStart: $0) })
     }
 
     private func shouldShowMorningCheckIn(for entry: SleepEntry) -> Bool {
@@ -756,85 +812,107 @@ final class SleepDashboardViewModel: ObservableObject {
 }
 
 #if DEBUG
-/// Synthetic data only; no HealthKit queries, authentication or wellness writes.
-@MainActor
-final class SleepDashboardUITestReader: SleepTrackingReading {
-    private let owner = UUID(uuidString: "11111111-1111-4111-8111-111111111111")!
-    private var failedOnce = false
-    private var syncCount = 0
-    func syncSleep() async throws {
-        let automatic = ProcessInfo.processInfo.arguments.contains("--sleep-auto-sync")
-        try await Task.sleep(for: .seconds(automatic ? 5 : 2))
-        syncCount += 1
-    }
-    func currentUserID() async throws -> UUID { owner }
-    func fetchLatestEntry() async throws -> SleepEntry? { nil }
-    func fetchInsights() async throws -> [SleepInsight] { [] }
-    func fetchEntries(from startDate: Date, to endDate: Date) async throws -> [SleepEntry] {
-        let automatic = ProcessInfo.processInfo.arguments.contains("--sleep-auto-sync")
-        let checkIn = ProcessInfo.processInfo.arguments.contains("--sleep-checkin-skip")
-        if ProcessInfo.processInfo.arguments.contains("--sleep-daily-periods") {
-            let day = Calendar.current.startOfDay(for: endDate)
-            let elapsed = endDate.timeIntervalSince(day)
-            let type = HKObjectType.categoryType(forIdentifier: .sleepAnalysis)!
-            let first = HKCategorySample(type: type, value: HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue,
-                start: day.addingTimeInterval(-7 * 3600), end: day)
-            let second = HKCategorySample(type: type, value: HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue,
-                start: max(day.addingTimeInterval(elapsed / 2), endDate.addingTimeInterval(-1800)), end: endDate)
-            var daily = SleepHealthKitManager.sleepEntry(from: [first, second], for: day, owner: owner)!
-            daily.userRating = 4
-            return try PostgrestClient.Configuration.jsonDecoder.decode([SleepEntry].self,
-                from: PostgrestClient.Configuration.jsonEncoder.encode([daily]))
+    /// Synthetic data only; no HealthKit queries, authentication or wellness writes.
+    @MainActor
+    final class SleepDashboardUITestReader: SleepTrackingReading {
+        private let owner = UUID(uuidString: "11111111-1111-4111-8111-111111111111")!
+        private var failedOnce = false
+        private var syncCount = 0
+        func syncSleep() async throws {
+            let automatic = ProcessInfo.processInfo.arguments.contains("--sleep-auto-sync")
+            try await Task.sleep(for: .seconds(automatic ? 5 : 2))
+            syncCount += 1
         }
-        let pullFixture = ProcessInfo.processInfo.arguments.contains("--sleep-pull-sync") || automatic
-        if pullFixture { try await Task.sleep(for: .milliseconds(200)) }
-        if !failedOnce && !pullFixture && !checkIn { failedOnce = true; throw URLError(.notConnectedToInternet) }
-        if ProcessInfo.processInfo.arguments.contains("--sleep-session-accuracy") || (pullFixture && syncCount > 0 && !checkIn) {
+        func currentUserID() async throws -> UUID { owner }
+        func fetchLatestEntry() async throws -> SleepEntry? { nil }
+        func fetchInsights() async throws -> [SleepInsight] { [] }
+        func fetchEntries(from startDate: Date, to endDate: Date) async throws -> [SleepEntry] {
+            let automatic = ProcessInfo.processInfo.arguments.contains("--sleep-auto-sync")
+            let checkIn = ProcessInfo.processInfo.arguments.contains("--sleep-checkin-skip")
+            if ProcessInfo.processInfo.arguments.contains("--sleep-daily-periods") {
+                let day = Calendar.current.startOfDay(for: endDate)
+                let elapsed = endDate.timeIntervalSince(day)
+                let type = HKObjectType.categoryType(forIdentifier: .sleepAnalysis)!
+                let first = HKCategorySample(
+                    type: type, value: HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue,
+                    start: day.addingTimeInterval(-7 * 3600), end: day)
+                let second = HKCategorySample(
+                    type: type, value: HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue,
+                    start: max(day.addingTimeInterval(elapsed / 2), endDate.addingTimeInterval(-1800)), end: endDate)
+                var daily = SleepHealthKitManager.sleepEntry(from: [first, second], for: day, owner: owner)!
+                daily.userRating = 4
+                return try PostgrestClient.Configuration.jsonDecoder.decode(
+                    [SleepEntry].self,
+                    from: PostgrestClient.Configuration.jsonEncoder.encode([daily]))
+            }
+            let pullFixture = ProcessInfo.processInfo.arguments.contains("--sleep-pull-sync") || automatic
+            if pullFixture { try await Task.sleep(for: .milliseconds(200)) }
+            if !failedOnce && !pullFixture && !checkIn {
+                failedOnce = true
+                throw URLError(.notConnectedToInternet)
+            }
+            if ProcessInfo.processInfo.arguments.contains("--sleep-session-accuracy")
+                || (pullFixture && syncCount > 0 && !checkIn)
+            {
+                let wake = endDate
+                let start = wake.addingTimeInterval(-Double(automatic && syncCount > 1 ? 1140 : 1080) * 60)
+                let type = HKObjectType.categoryType(forIdentifier: .sleepAnalysis)!
+                let samples = [
+                    HKCategorySample(
+                        type: type, value: HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue,
+                        start: start, end: wake)
+                ]
+                var full = SleepHealthKitManager.sleepEntry(
+                    from: samples, for: Calendar.current.startOfDay(for: wake), owner: owner)!
+                full.userRating = 4
+                var fragment = SleepHealthKitManager.sleepEntry(
+                    from: [
+                        HKCategorySample(
+                            type: type,
+                            value: HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue,
+                            start: wake.addingTimeInterval(-240 * 60), end: wake)
+                    ], for: wake, owner: owner)!
+                fragment.notes = "Synthetic earlier feedback"
+                // Exercise the same import construction, database coding and reconciliation used by a resync.
+                let encoder = PostgrestClient.Configuration.jsonEncoder
+                let records = try PostgrestClient.Configuration.jsonDecoder.decode(
+                    [SleepEntry].self, from: encoder.encode([fragment, full]))
+                return SleepEntry.withoutContainedHealthImports(records)
+            }
             let wake = endDate
-            let start = wake.addingTimeInterval(-Double(automatic && syncCount > 1 ? 1140 : 1080) * 60)
-            let type = HKObjectType.categoryType(forIdentifier: .sleepAnalysis)!
-            let samples = [HKCategorySample(type: type, value: HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue,
-                                            start: start, end: wake)]
-            var full = SleepHealthKitManager.sleepEntry(from: samples, for: Calendar.current.startOfDay(for: wake), owner: owner)!
-            full.userRating = 4
-            var fragment = SleepHealthKitManager.sleepEntry(from: [HKCategorySample(type: type,
-                value: HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue,
-                start: wake.addingTimeInterval(-240*60), end: wake)], for: wake, owner: owner)!
-            fragment.notes = "Synthetic earlier feedback"
-            // Exercise the same import construction, database coding and reconciliation used by a resync.
-            let encoder = PostgrestClient.Configuration.jsonEncoder
-            let records = try PostgrestClient.Configuration.jsonDecoder.decode([SleepEntry].self, from: encoder.encode([fragment, full]))
-            return SleepEntry.withoutContainedHealthImports(records)
+            var record: [String: Any] = [
+                "id": checkIn ? "22222222-2222-4222-8222-222222222222" : UUID().uuidString, "user_id": owner.uuidString,
+                "date": String(wake.ISO8601Format().prefix(10)), "source": "healthkit",
+                "bedtime": wake.addingTimeInterval(-8 * 3600).ISO8601Format(), "wake_time": wake.ISO8601Format(),
+                "time_in_bed_minutes": 480, "time_asleep_minutes": 450, "deep_sleep_minutes": 90,
+                "rem_sleep_minutes": 100, "light_sleep_minutes": 260, "awake_minutes": 30, "user_rating": 4,
+                "created_at": wake.ISO8601Format(), "updated_at": wake.ISO8601Format(),
+            ]
+            if checkIn { record["user_rating"] = NSNull() }
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            return [try decoder.decode(SleepEntry.self, from: JSONSerialization.data(withJSONObject: record))]
         }
-        let wake = endDate
-        var record: [String: Any] = ["id": checkIn ? "22222222-2222-4222-8222-222222222222" : UUID().uuidString, "user_id": owner.uuidString,
-            "date": String(wake.ISO8601Format().prefix(10)), "source": "healthkit",
-            "bedtime": wake.addingTimeInterval(-8 * 3600).ISO8601Format(), "wake_time": wake.ISO8601Format(),
-            "time_in_bed_minutes": 480, "time_asleep_minutes": 450, "deep_sleep_minutes": 90,
-            "rem_sleep_minutes": 100, "light_sleep_minutes": 260, "awake_minutes": 30, "user_rating": 4,
-            "created_at": wake.ISO8601Format(), "updated_at": wake.ISO8601Format()]
-        if checkIn { record["user_rating"] = NSNull() }
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        return [try decoder.decode(SleepEntry.self, from: JSONSerialization.data(withJSONObject: record))]
     }
-}
 
-struct SleepDashboardUITestView: View {
-    @State private var reader = SleepDashboardUITestReader()
-    private var automaticSync: (() async throws -> Void)? {
-        guard ProcessInfo.processInfo.arguments.contains("--sleep-auto-sync") else { return nil }
-        return { try await reader.syncSleep() }
+    struct SleepDashboardUITestView: View {
+        @State private var reader = SleepDashboardUITestReader()
+        private var automaticSync: (() async throws -> Void)? {
+            guard ProcessInfo.processInfo.arguments.contains("--sleep-auto-sync") else { return nil }
+            return { try await reader.syncSleep() }
+        }
+        private var preferences: UserDefaults {
+            let args = ProcessInfo.processInfo.arguments
+            guard let index = args.firstIndex(of: "--sleep-test-suite"), index + 1 < args.count else {
+                return .standard
+            }
+            return UserDefaults(suiteName: args[index + 1])!
+        }
+        var body: some View {
+            SleepDashboardView(
+                trackingReader: reader, syncSleep: { try await reader.syncSleep() },
+                automaticSync: automaticSync, preferences: preferences)
+        }
     }
-    private var preferences: UserDefaults {
-        let args = ProcessInfo.processInfo.arguments
-        guard let index = args.firstIndex(of: "--sleep-test-suite"), index + 1 < args.count else { return .standard }
-        return UserDefaults(suiteName: args[index + 1])!
-    }
-    var body: some View {
-        SleepDashboardView(trackingReader: reader, syncSleep: { try await reader.syncSleep() },
-            automaticSync: automaticSync, preferences: preferences)
-    }
-}
 
 #endif

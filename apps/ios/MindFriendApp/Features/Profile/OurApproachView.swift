@@ -8,34 +8,38 @@ struct OurApproachView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.l) {
                 // Header
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                     Text("Evidence-Based Wellness")
                         .font(.title)
+                        .accessibilityAddTraits(.isHeader)
                         .fontWeight(.bold)
 
                     Text("Every exercise in MindFriend is rooted in research-backed therapeutic approaches.")
-                        .foregroundColor(.secondary)
+                        .foregroundColor(SupportTheme.textSecondary)
                 }
 
                 // Review process
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                     Label("Professional Review", systemImage: "checkmark.seal.fill")
                         .font(.headline)
-                        .foregroundColor(.green)
+                        .foregroundColor(SupportTheme.accent)
 
-                    Text("Our exercises are reviewed by licensed mental health professionals to ensure they're safe, effective, and appropriate for self-guided use.")
-                        .font(.subheadline)
+                    Text(
+                        "Our exercises are reviewed by licensed mental health professionals to ensure they're safe, effective, and appropriate for self-guided use."
+                    )
+                    .font(.subheadline)
                 }
                 .padding()
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.green.opacity(0.1))
-                .cornerRadius(12)
+                .background(SupportTheme.surface)
+                .cornerRadius(SupportTheme.controlRadius)
 
                 // Methodologies section
                 Text("Therapeutic Approaches")
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
 
                 if isLoading {
                     ProgressView()
@@ -43,7 +47,7 @@ struct OurApproachView: View {
                         .padding()
                 } else if methodologies.isEmpty {
                     Text("Unable to load methodology information.")
-                        .foregroundColor(.secondary)
+                        .foregroundColor(SupportTheme.textSecondary)
                         .frame(maxWidth: .infinity)
                         .padding()
                 } else {
@@ -53,21 +57,25 @@ struct OurApproachView: View {
                 }
 
                 // Disclaimer
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                     Label("Important Note", systemImage: "info.circle.fill")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(SupportTheme.textSecondary)
 
-                    Text("MindFriend is not a replacement for professional mental health care. If you're experiencing a crisis or need clinical support, please contact a mental health professional.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                    Text(
+                        "MindFriend is not a replacement for professional mental health care. If you're experiencing a crisis or need clinical support, please contact a mental health professional."
+                    )
+                    .font(.caption)
+                    .foregroundColor(SupportTheme.textSecondary)
                 }
                 .padding()
-                .background(Color(.systemGray6))
-                .cornerRadius(8)
+                .background(SupportTheme.field)
+                .cornerRadius(SupportTheme.controlRadius)
             }
             .padding()
         }
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle("Our Approach")
         .task {
             await loadMethodologies()
@@ -96,31 +104,32 @@ private struct MethodologyCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             HStack {
                 Text(methodology.code)
                     .font(.headline)
-                    .foregroundColor(evidenceBasis?.color ?? .gray)
+                    .accessibilityAddTraits(.isHeader)
+                    .foregroundColor(SupportTheme.accent)
                 Text("•")
-                    .foregroundColor(.secondary)
+                    .foregroundColor(SupportTheme.textSecondary)
                 Text(methodology.name)
                     .font(.subheadline)
             }
             Text(methodology.description)
                 .font(.caption)
-                .foregroundColor(.secondary)
+                .foregroundColor(SupportTheme.textSecondary)
 
             if let source = methodology.source {
                 Text("Source: \(source)")
                     .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .italic()
             }
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.systemGray6))
-        .cornerRadius(8)
+        .background(SupportTheme.field)
+        .cornerRadius(SupportTheme.controlRadius)
     }
 }
 

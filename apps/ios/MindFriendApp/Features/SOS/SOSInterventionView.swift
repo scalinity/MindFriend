@@ -14,22 +14,15 @@ struct SOSInterventionView: View {
     private var sosCoordinator: SOSCoordinator {
         container.sosCoordinator
     }
-    
+
     // Track phase locally to ensure view updates
     @State private var currentPhase: SOSPhase = .ready
 
     var body: some View {
         ZStack {
             // Background gradient
-            LinearGradient(
-                colors: [
-                    Color(red: 0.1, green: 0.15, blue: 0.3),
-                    Color(red: 0.05, green: 0.08, blue: 0.15)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
+            SupportTheme.surface
+                .ignoresSafeArea()
 
             // Phase-based content
             phaseContent
@@ -55,14 +48,15 @@ struct SOSInterventionView: View {
         switch currentPhase {
         case .ready:
             // Starting state - show brief loading
-            VStack(spacing: 20) {
+            VStack(spacing: SupportTheme.Spacing.l) {
                 ProgressView()
                     .scaleEffect(1.5)
-                    .tint(.white)
+                    .tint(SupportTheme.textPrimary)
 
                 Text("Starting calming session...")
                     .font(.headline)
-                    .foregroundStyle(.white.opacity(0.8))
+                    .accessibilityAddTraits(.isHeader)
+                    .foregroundStyle(SupportTheme.textPrimary.opacity(0.8))
             }
 
         case .countdown(let remaining):
@@ -168,55 +162,53 @@ struct SOSInterventionView: View {
 // MARK: - Countdown View
 
 private struct CountdownView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let remaining: Int
     let onCancel: () -> Void
 
     var body: some View {
-        VStack(spacing: 40) {
+        VStack(spacing: SupportTheme.Spacing.xl) {
             Spacer()
 
             // Main countdown circle
             ZStack {
                 Circle()
-                    .stroke(Color.white.opacity(0.2), lineWidth: 8)
+                    .stroke(SupportTheme.textPrimary.opacity(0.2), lineWidth: 8)
                     .frame(width: 200, height: 200)
 
                 Circle()
                     .trim(from: 0, to: CGFloat(remaining) / 3.0)
                     .stroke(
-                        LinearGradient(
-                            colors: [.cyan, .blue],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
+                        SupportTheme.surface,
                         style: StrokeStyle(lineWidth: 8, lineCap: .round)
                     )
                     .frame(width: 200, height: 200)
                     .rotationEffect(.degrees(-90))
 
-                VStack(spacing: 8) {
+                VStack(spacing: SupportTheme.Spacing.xs) {
                     Text("\(remaining)")
                         .font(.system(size: 72, weight: .bold, design: .rounded))
-                        .foregroundStyle(.white)
-                        .contentTransition(.numericText())
-                        .animation(.easeInOut, value: remaining)
+                        .foregroundStyle(SupportTheme.textPrimary)
+                        .contentTransition(reduceMotion ? .opacity : .numericText())
+                        .animation(reduceMotion ? .easeInOut(duration: 0.2) : (.easeInOut), value: remaining)
 
                     Text("seconds")
                         .font(.subheadline)
-                        .foregroundStyle(.white.opacity(0.7))
+                        .foregroundStyle(SupportTheme.textPrimary.opacity(0.7))
                 }
             }
 
             // Message
-            VStack(spacing: 12) {
+            VStack(spacing: SupportTheme.Spacing.s) {
                 Text("Taking a moment")
                     .font(.title2)
+                    .accessibilityAddTraits(.isHeader)
                     .fontWeight(.semibold)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(SupportTheme.textPrimary)
 
                 Text("Your emergency contact will be notified\nunless you cancel.")
                     .font(.body)
-                    .foregroundStyle(.white.opacity(0.7))
+                    .foregroundStyle(SupportTheme.textPrimary.opacity(0.7))
                     .multilineTextAlignment(.center)
             }
 
@@ -228,17 +220,18 @@ private struct CountdownView: View {
             } label: {
                 Text("Cancel")
                     .font(.body.weight(.semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(SupportTheme.textPrimary)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(Color.white.opacity(0.2))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .padding(.vertical, SupportTheme.Spacing.m)
+                    .background(SupportTheme.textPrimary.opacity(0.2))
+                    .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
             }
-            .padding(.horizontal, 40)
-            .padding(.bottom, 40)
+            .padding(.horizontal, SupportTheme.Spacing.xl)
+            .padding(.bottom, SupportTheme.Spacing.xl)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Countdown: \(remaining) seconds. Your emergency contact will be notified unless you cancel.")
+        .accessibilityLabel(
+            "Countdown: \(remaining) seconds. Your emergency contact will be notified unless you cancel.")
     }
 }
 
@@ -249,33 +242,34 @@ private struct ErrorView: View {
     let onDismiss: () -> Void
 
     var body: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: SupportTheme.Spacing.l) {
             Spacer()
 
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 60))
-                .foregroundStyle(.orange)
+                .foregroundStyle(SupportTheme.accent)
 
             Text("Something went wrong")
                 .font(.title2)
+                .accessibilityAddTraits(.isHeader)
                 .fontWeight(.bold)
-                .foregroundStyle(.white)
+                .foregroundStyle(SupportTheme.textPrimary)
 
             Text(message)
                 .font(.body)
-                .foregroundStyle(.white.opacity(0.7))
+                .foregroundStyle(SupportTheme.textPrimary.opacity(0.7))
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 40)
+                .padding(.horizontal, SupportTheme.Spacing.xl)
 
             Spacer()
 
             // Crisis resources reminder
-            VStack(spacing: 8) {
+            VStack(spacing: SupportTheme.Spacing.xs) {
                 Text("If you need immediate support:")
                     .font(.subheadline)
-                    .foregroundStyle(.white.opacity(0.6))
+                    .foregroundStyle(SupportTheme.textPrimary.opacity(0.6))
 
-                HStack(spacing: 20) {
+                HStack(spacing: SupportTheme.Spacing.l) {
                     Button {
                         if let url = URL(string: "tel://988") {
                             UIApplication.shared.open(url)
@@ -283,10 +277,10 @@ private struct ErrorView: View {
                     } label: {
                         Label("Call 988", systemImage: "phone.fill")
                             .font(.body.weight(.medium))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 10)
-                            .background(Color.green.opacity(0.8))
+                            .foregroundStyle(SupportTheme.textPrimary)
+                            .padding(.horizontal, SupportTheme.Spacing.m)
+                            .padding(.vertical, SupportTheme.Spacing.s)
+                            .background(SupportTheme.surface)
                             .clipShape(Capsule())
                     }
 
@@ -297,10 +291,10 @@ private struct ErrorView: View {
                     } label: {
                         Label("Text 741741", systemImage: "message.fill")
                             .font(.body.weight(.medium))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 10)
-                            .background(Color.purple.opacity(0.8))
+                            .foregroundStyle(SupportTheme.textPrimary)
+                            .padding(.horizontal, SupportTheme.Spacing.m)
+                            .padding(.vertical, SupportTheme.Spacing.s)
+                            .background(SupportTheme.surface)
                             .clipShape(Capsule())
                     }
                 }
@@ -312,14 +306,14 @@ private struct ErrorView: View {
             } label: {
                 Text("Close")
                     .font(.body.weight(.semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(SupportTheme.textPrimary)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(Color.white.opacity(0.2))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .padding(.vertical, SupportTheme.Spacing.m)
+                    .background(SupportTheme.textPrimary.opacity(0.2))
+                    .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
             }
-            .padding(.horizontal, 40)
-            .padding(.bottom, 40)
+            .padding(.horizontal, SupportTheme.Spacing.xl)
+            .padding(.bottom, SupportTheme.Spacing.xl)
         }
     }
 }

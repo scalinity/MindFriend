@@ -26,6 +26,8 @@ struct BriefingSettingsView: View {
                 Text("Receive a personalized morning briefing with mood prediction, quest, and calendar events.")
             }
 
+            .listRowBackground(SupportTheme.surface)
+
             // Calendar Integration
             Section {
                 Toggle("Include Calendar Events", isOn: binding(\.includeCalendar))
@@ -44,15 +46,21 @@ struct BriefingSettingsView: View {
                 Text("Show upcoming events in your briefing.")
             }
 
+            .listRowBackground(SupportTheme.surface)
+
             // Phase 2: Notification Time
             Section {
                 Text("Notification delivery coming in Phase 2")
-                    .foregroundColor(.secondary)
+                    .foregroundColor(SupportTheme.textSecondary)
                     .font(.caption)
             } header: {
                 Text("Notifications")
             }
+
+            .listRowBackground(SupportTheme.surface)
         }
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle("Daily Briefing")
         .task {
             await viewModel.loadPreferences()
@@ -70,7 +78,7 @@ struct BriefingSettingsView: View {
                 switch calendarService.authorizationStatus {
                 case .authorized, .fullAccess:
                     Label("Authorized", systemImage: "checkmark.circle.fill")
-                        .foregroundColor(.green)
+                        .foregroundColor(SupportTheme.accent)
                 case .denied, .restricted:
                     Label("Denied", systemImage: "xmark.circle.fill")
                         .foregroundColor(.red)
@@ -78,7 +86,7 @@ struct BriefingSettingsView: View {
                     Button("Request Access") {
                         requestCalendarAccess()
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.supportSecondary)
                 @unknown default:
                     Text("Unknown")
                 }

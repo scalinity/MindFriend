@@ -10,6 +10,7 @@ import SwiftUI
 
 /// Main container for the Wellbeing Debt tutorial walkthrough
 struct WellbeingDebtTutorialFlow: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject var container: DependencyContainer
 
     let onComplete: () -> Void
@@ -32,9 +33,9 @@ struct WellbeingDebtTutorialFlow: View {
             // Progress bar
             ProgressView(value: currentStep.progress)
                 .progressViewStyle(.linear)
-                .tint(.blue)
+                .tint(SupportTheme.accent)
                 .padding(.horizontal)
-                .padding(.top, 60)
+                .padding(.top, SupportTheme.Spacing.xl)
 
             // Step content
             Group {
@@ -49,18 +50,15 @@ struct WellbeingDebtTutorialFlow: View {
                     DebtRecoveryStep(onComplete: completeTutorial)
                 }
             }
-            .transition(.asymmetric(
-                insertion: .move(edge: .trailing).combined(with: .opacity),
-                removal: .move(edge: .leading).combined(with: .opacity)
-            ))
+            .transition(.opacity)
         }
-        .background(Color(.systemBackground))
-        .animation(.easeInOut(duration: 0.3), value: currentStep)
+        .background(SupportTheme.canvas)
+        .animation(reduceMotion ? .easeInOut(duration: 0.2) : (.easeInOut(duration: 0.3)), value: currentStep)
     }
 
     private func advanceStep() {
         if let nextStep = TutorialStep(rawValue: currentStep.rawValue + 1) {
-            withAnimation {
+            withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .default) {
                 currentStep = nextStep
             }
         }
@@ -90,7 +88,7 @@ struct TutorialStepLayout<Content: View>: View {
 
     init(
         icon: String,
-        iconColor: Color = .blue,
+        iconColor: Color = SupportTheme.accent,
         headline: String,
         subheadline: String,
         primaryLabel: String = "Next",
@@ -109,7 +107,7 @@ struct TutorialStepLayout<Content: View>: View {
     }
 
     var body: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: SupportTheme.Spacing.l) {
             Spacer()
 
             // Icon
@@ -119,14 +117,15 @@ struct TutorialStepLayout<Content: View>: View {
                 .symbolRenderingMode(.hierarchical)
 
             // Headlines
-            VStack(spacing: 8) {
+            VStack(spacing: SupportTheme.Spacing.xs) {
                 Text(headline)
                     .font(.title.bold())
+                    .accessibilityAddTraits(.isHeader)
                     .multilineTextAlignment(.center)
 
                 Text(subheadline)
                     .font(.body)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal)
             }
@@ -138,27 +137,28 @@ struct TutorialStepLayout<Content: View>: View {
             Spacer()
 
             // Actions
-            VStack(spacing: 12) {
+            VStack(spacing: SupportTheme.Spacing.s) {
                 Button(action: primaryAction) {
                     Text(primaryLabel)
                         .font(.headline)
+                        .accessibilityAddTraits(.isHeader)
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(Color.blue)
-                        .foregroundStyle(.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .background(SupportTheme.accent)
+                        .foregroundStyle(SupportTheme.onAccent)
+                        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
                 }
 
                 if let skipAction = skipAction {
                     Button(action: skipAction) {
                         Text("Skip tutorial")
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                 }
             }
-            .padding(.horizontal, 24)
-            .padding(.bottom, 32)
+            .padding(.horizontal, SupportTheme.Spacing.l)
+            .padding(.bottom, SupportTheme.Spacing.xl)
         }
         .padding(.horizontal)
     }

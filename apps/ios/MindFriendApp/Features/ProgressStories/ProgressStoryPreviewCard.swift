@@ -38,7 +38,7 @@ struct ProgressStoryPreviewCard: View {
                 showDetailView = true
             }
         } label: {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                 // Header
                 HStack {
                     Label("Weekly Story", systemImage: "rectangle.stack.fill")
@@ -49,11 +49,11 @@ struct ProgressStoryPreviewCard: View {
                     if story != nil {
                         Text("View")
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
 
                         Image(systemName: "chevron.right")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                 }
 
@@ -64,7 +64,7 @@ struct ProgressStoryPreviewCard: View {
                         Spacer()
                     }
                     .frame(height: 60)
-                } else if let story = story, !story.cards.isEmpty {
+                } else if let story = story, !story.cards.filter { $0.cardType != .streak }.isEmpty {
                     // Card preview
                     storyPreview(story)
                 } else {
@@ -74,8 +74,8 @@ struct ProgressStoryPreviewCard: View {
             }
             .padding()
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(uiColor: .secondarySystemBackground))
-            .cornerRadius(16)
+            .background(SupportTheme.surface)
+            .cornerRadius(SupportTheme.controlRadius)
         }
         .buttonStyle(.plain)
         .disabled(story == nil)
@@ -101,22 +101,23 @@ struct ProgressStoryPreviewCard: View {
 
     @ViewBuilder
     private func storyPreview(_ story: WeeklyStory) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: SupportTheme.Spacing.xs) {
             // Mini card previews (first 3 cards)
-            ForEach(Array(story.cards.prefix(3).enumerated()), id: \.offset) { _, card in
+            ForEach(Array(story.cards.filter { $0.cardType != .streak }.prefix(3).enumerated()), id: \.offset) {
+                _, card in
                 miniCardPreview(card)
             }
 
             // More indicator if > 3 cards
-            if story.cards.count > 3 {
+            if story.cards.filter { $0.cardType != .streak }.count > 3 {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.gray.opacity(0.2))
+                    RoundedRectangle(cornerRadius: SupportTheme.cardRadius)
+                        .fill(SupportTheme.textSecondary.opacity(0.2))
                         .frame(width: 50, height: 80)
 
-                    Text("+\(story.cards.count - 3)")
+                    Text("+\(story.cards.filter { $0.cardType != .streak }.count - 3)")
                         .font(.caption.bold())
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
             }
         }
@@ -126,66 +127,62 @@ struct ProgressStoryPreviewCard: View {
     private func miniCardPreview(_ card: StoryCard) -> some View {
         ZStack {
             // Gradient background
-            LinearGradient(
-                gradient: Gradient(colors: card.variant.gradientColors),
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
+            SupportTheme.surface
 
-            VStack(spacing: 2) {
+            VStack(spacing: SupportTheme.Spacing.xxs) {
                 Image(systemName: card.cardType.iconName)
                     .font(.system(size: 16))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(SupportTheme.textPrimary)
 
                 if let stat = card.data.stat {
                     Text(stat)
                         .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(SupportTheme.textPrimary)
                 }
             }
         }
         .frame(width: 50, height: 80)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
     }
 
     // MARK: - No Story View
 
     @ViewBuilder
     private var noStoryView: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: SupportTheme.Spacing.xs) {
             if isGenerating {
                 ProgressView()
                     .scaleEffect(0.8)
                 Text("Generating your story...")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .multilineTextAlignment(.center)
             } else if let error = errorMessage {
                 Image(systemName: "exclamationmark.triangle")
                     .font(.title2)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(SupportTheme.accent)
                 Text(error)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .multilineTextAlignment(.center)
                 Button("Try Again") {
                     Task { await loadStory() }
                 }
                 .font(.caption)
-                .buttonStyle(.bordered)
+                .buttonStyle(.supportSecondary)
             } else {
                 Image(systemName: "sparkles")
                     .font(.title2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
 
                 Text("Your weekly story will appear here")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .multilineTextAlignment(.center)
             }
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 8)
+        .padding(.vertical, SupportTheme.Spacing.xs)
     }
 
     // MARK: - Load Story
@@ -256,7 +253,7 @@ struct ProgressStoryPreviewCard: View {
                 return
             } catch {
                 #if DEBUG
-                print("Failed to load/generate weekly story: \(error.localizedDescription)")
+                    print("Failed to load/generate weekly story: \(error.localizedDescription)")
                 #endif
                 ProgressStoryLoadCache.failedWeeks.insert(currentWeekStart)
             }

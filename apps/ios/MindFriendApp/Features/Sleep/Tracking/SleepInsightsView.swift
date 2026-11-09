@@ -7,7 +7,7 @@ struct SleepInsightsView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 20) {
+            VStack(spacing: SupportTheme.Spacing.l) {
                 if viewModel.isLoading {
                     ProgressView()
                         .padding()
@@ -21,6 +21,8 @@ struct SleepInsightsView: View {
             }
             .padding()
         }
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle("Sleep Insights")
         .task {
             await viewModel.loadInsights(trackingService: dependencies.sleepTrackingService)
@@ -32,64 +34,65 @@ struct SleepInsightsView: View {
 
     @ViewBuilder
     private func insightCard(_ insight: SleepInsight) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             HStack {
                 Image(systemName: insight.insightType.icon)
-                    .foregroundColor(.accentColor)
+                    .foregroundColor(SupportTheme.accent)
 
                 Text(insight.insightData.title)
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
 
                 Spacer()
 
                 if !insight.viewed {
                     Circle()
-                        .fill(Color.accentColor)
+                        .fill(SupportTheme.accent)
                         .frame(width: 8, height: 8)
                 }
             }
 
             Text(insight.insightData.message)
                 .font(.subheadline)
-                .foregroundColor(.secondary)
+                .foregroundColor(SupportTheme.textSecondary)
 
             if let recommendation = insight.insightData.recommendation {
                 HStack {
                     Image(systemName: "lightbulb.fill")
                         .font(.caption)
-                        .foregroundColor(.yellow)
+                        .foregroundColor(SupportTheme.Celebration.gold)
 
                     Text(recommendation)
                         .font(.caption)
-                        .foregroundColor(.primary)
+                        .foregroundColor(SupportTheme.textPrimary)
                 }
-                .padding(8)
+                .padding(SupportTheme.Spacing.xs)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.yellow.opacity(0.1))
-                .cornerRadius(8)
+                .background(SupportTheme.surface)
+                .cornerRadius(SupportTheme.controlRadius)
             }
 
             HStack {
                 if let trend = insight.insightData.trend, let trendIcon = insight.insightData.trendIcon {
                     Image(systemName: trendIcon)
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(SupportTheme.textSecondary)
 
                     Text(trend.capitalized)
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(SupportTheme.textSecondary)
                 }
 
                 Spacer()
 
                 Text(insight.generatedAt.formatted(date: .abbreviated, time: .omitted))
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(SupportTheme.textSecondary)
             }
         }
         .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(12)
+        .background(SupportTheme.field)
+        .cornerRadius(SupportTheme.controlRadius)
         .onAppear {
             if !insight.viewed {
                 viewModel.markViewed(insight, trackingService: dependencies.sleepTrackingService)
@@ -99,22 +102,23 @@ struct SleepInsightsView: View {
 
     @ViewBuilder
     private var emptyState: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             Image(systemName: "chart.line.uptrend.xyaxis")
                 .font(.system(size: 50))
-                .foregroundColor(.secondary)
+                .foregroundColor(SupportTheme.textSecondary)
 
             Text("No Insights Yet")
                 .font(.title3)
+                .accessibilityAddTraits(.isHeader)
                 .fontWeight(.semibold)
 
             Text("Track your sleep for at least 7 days to receive personalized insights")
                 .font(.subheadline)
-                .foregroundColor(.secondary)
+                .foregroundColor(SupportTheme.textSecondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
         }
-        .padding(.vertical, 60)
+        .padding(.vertical, SupportTheme.Spacing.xl)
     }
 }
 

@@ -10,7 +10,7 @@ struct LifeEventsView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 20) {
+            VStack(spacing: SupportTheme.Spacing.l) {
                 if viewModel.isLoading {
                     loadingView
                 } else if viewModel.events.isEmpty {
@@ -25,6 +25,8 @@ struct LifeEventsView: View {
             }
             .padding()
         }
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle("Life Events")
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
@@ -34,6 +36,8 @@ struct LifeEventsView: View {
                 } label: {
                     Image(systemName: "plus")
                 }
+                .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                .accessibilityLabel("Add")
             }
         }
         .sheet(isPresented: $showingAddSheet) {
@@ -49,7 +53,7 @@ struct LifeEventsView: View {
 
     private var filterSection: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
+            HStack(spacing: SupportTheme.Spacing.xs) {
                 LongitudinalFilterChip(
                     title: "All",
                     isSelected: selectedFilter == nil
@@ -98,11 +102,11 @@ struct LifeEventsView: View {
     // MARK: - Loading View
 
     private var loadingView: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             ProgressView()
             Text("Loading events...")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
         .frame(maxWidth: .infinity, minHeight: 300)
     }
@@ -110,24 +114,25 @@ struct LifeEventsView: View {
     // MARK: - Empty State
 
     private var emptyStateView: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             Image(systemName: "calendar.badge.plus")
                 .font(.system(size: 48))
-                .foregroundStyle(.blue)
+                .foregroundStyle(SupportTheme.accent)
             Text("Track Your Life Events")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
             Text("Log significant life events to understand how they impact your wellness journey.")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .multilineTextAlignment(.center)
             Button {
                 showingAddSheet = true
             } label: {
                 Text("Add Your First Event")
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.supportPrimary)
         }
-        .padding(32)
+        .padding(SupportTheme.Spacing.xl)
     }
 }
 
@@ -199,11 +204,11 @@ struct LifeEventTimelineItem: View {
     @State private var showingDeleteConfirmation = false
 
     var body: some View {
-        HStack(alignment: .top, spacing: 16) {
+        HStack(alignment: .top, spacing: SupportTheme.Spacing.m) {
             // Timeline line and dot
             VStack(spacing: 0) {
                 Rectangle()
-                    .fill(isFirst ? .clear : Color(.systemGray4))
+                    .fill(isFirst ? .clear : SupportTheme.field)
                     .frame(width: 2, height: 20)
 
                 Circle()
@@ -211,26 +216,27 @@ struct LifeEventTimelineItem: View {
                     .frame(width: 12, height: 12)
 
                 Rectangle()
-                    .fill(isLast ? .clear : Color(.systemGray4))
+                    .fill(isLast ? .clear : SupportTheme.field)
                     .frame(width: 2)
             }
             .frame(width: 12)
 
             // Event card
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                 HStack {
                     Image(systemName: event.eventType.icon)
                         .foregroundStyle(impactColor)
                     Text(event.eventType.displayName)
                         .font(.headline)
+                        .accessibilityAddTraits(.isHeader)
                     Spacer()
                     Text(event.formattedDate)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
 
                 if let impact = event.impactScore {
-                    HStack(spacing: 4) {
+                    HStack(spacing: SupportTheme.Spacing.xxs) {
                         Image(systemName: event.impactIcon)
                             .font(.caption)
                         Text(impactDescription(impact))
@@ -242,44 +248,43 @@ struct LifeEventTimelineItem: View {
                 if let notes = event.notes, !notes.isEmpty {
                     Text(notes)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                         .lineLimit(3)
                 }
 
                 // Metrics comparison
                 if let before = event.beforeMetrics,
-                   let after = event.afterMetrics {
-                    HStack(spacing: 16) {
+                    let after = event.afterMetrics
+                {
+                    HStack(spacing: SupportTheme.Spacing.m) {
                         MetricComparison(
                             label: "Mood",
                             before: before.avgMood,
                             after: after.avgMood
                         )
                         if let recovery = event.recoveryDays {
-                            VStack(alignment: .leading, spacing: 2) {
+                            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                                 Text("Recovery")
                                     .font(.caption2)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(SupportTheme.textSecondary)
                                 Text("\(recovery) days")
                                     .font(.caption)
                                     .fontWeight(.medium)
                             }
                         }
                     }
-                    .padding(.top, 4)
+                    .padding(.top, SupportTheme.Spacing.xxs)
                 }
 
                 if event.isOngoing {
                     Label("Ongoing", systemImage: "clock")
                         .font(.caption)
-                        .foregroundStyle(.orange)
-                        .padding(.top, 4)
+                        .foregroundStyle(SupportTheme.accent)
+                        .padding(.top, SupportTheme.Spacing.xxs)
                 }
             }
-            .padding()
-            .background(Color(.systemBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-            .shadow(color: .black.opacity(0.05), radius: 4, y: 2)
+            .supportCard()
+            .shadow(color: SupportTheme.canvas.opacity(0.05), radius: 4, y: 2)
             .contextMenu {
                 Button(role: .destructive) {
                     showingDeleteConfirmation = true
@@ -296,14 +301,14 @@ struct LifeEventTimelineItem: View {
                 Button("Cancel", role: .cancel) {}
             }
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, SupportTheme.Spacing.xs)
     }
 
     private var impactColor: Color {
-        guard let score = event.impactScore else { return .secondary }
-        if score > 0 { return .green }
+        guard let score = event.impactScore else { return SupportTheme.textSecondary }
+        if score > 0 { return SupportTheme.accent }
         if score < 0 { return .red }
-        return .secondary
+        return SupportTheme.textSecondary
     }
 
     private func impactDescription(_ score: Double) -> String {
@@ -335,6 +340,7 @@ struct AddLifeEventSheet: View {
                     }
                     .pickerStyle(.menu)
                 }
+                .listRowBackground(SupportTheme.surface)
 
                 Section("When") {
                     DatePicker(
@@ -345,11 +351,17 @@ struct AddLifeEventSheet: View {
                     )
                 }
 
+                .listRowBackground(SupportTheme.surface)
+
                 Section("Notes (Optional)") {
                     TextEditor(text: $notes)
                         .frame(minHeight: 100)
                 }
+
+                .listRowBackground(SupportTheme.surface)
             }
+            .supportScreen()
+            .foregroundStyle(SupportTheme.textPrimary)
             .navigationTitle("Log Life Event")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -388,21 +400,21 @@ struct MetricComparison: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
             Text(label)
                 .font(.caption2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
 
-            HStack(spacing: 4) {
+            HStack(spacing: SupportTheme.Spacing.xxs) {
                 Text(String(format: "%.1f", before))
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                 Image(systemName: delta >= 0 ? "arrow.right" : "arrow.right")
                     .font(.caption2)
                 Text(String(format: "%.1f", after))
                     .font(.caption)
                     .fontWeight(.medium)
-                    .foregroundStyle(delta >= 0 ? .green : .red)
+                    .foregroundStyle(delta >= 0 ? SupportTheme.accent : .red)
             }
         }
     }
@@ -411,12 +423,12 @@ struct MetricComparison: View {
 // MARK: - Preview
 
 #if DEBUG
-struct LifeEventsView_Previews: PreviewProvider {
-    static var previews: some View {
-        NavigationStack {
-            LifeEventsView()
-                .environmentObject(DependencyContainer.preview)
+    struct LifeEventsView_Previews: PreviewProvider {
+        static var previews: some View {
+            NavigationStack {
+                LifeEventsView()
+                    .environmentObject(DependencyContainer.preview)
+            }
         }
     }
-}
 #endif

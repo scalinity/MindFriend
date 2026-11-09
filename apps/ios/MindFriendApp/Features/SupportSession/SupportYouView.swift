@@ -10,8 +10,10 @@ struct SupportYouExtension: Identifiable {
     let icon: String
     let destination: AnyView
 
-    init<Destination: View>(id: String, section: SupportSection, title: String, subtitle: String? = nil,
-                            icon: String, @ViewBuilder destination: () -> Destination) {
+    init<Destination: View>(
+        id: String, section: SupportSection, title: String, subtitle: String? = nil,
+        icon: String, @ViewBuilder destination: () -> Destination
+    ) {
         self.id = id
         self.section = section
         self.title = title
@@ -24,6 +26,7 @@ struct SupportYouExtension: Identifiable {
 /// You: Progress and History first, then memory, measurements, settings, and help (SUPPORT_SESSION_SPEC §4.1, §5.6).
 /// Nothing here is gated by activation. Paid actions remain guarded inside their own destination views.
 struct SupportYouView: View {
+    @Environment(\.dynamicTypeSize) private var typeSize
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var container: DependencyContainer
     @EnvironmentObject private var navigator: SupportShellNavigator
@@ -51,6 +54,8 @@ struct SupportYouView: View {
                 helpSection
             }
             .supportCanvas()
+            .supportScreen()
+            .foregroundStyle(SupportTheme.textPrimary)
             .navigationTitle(SupportShellTab.you.title)
             .navigationDestination(for: SupportDestination.self) { destination in
                 SupportDestinationView(destination: destination)
@@ -75,26 +80,27 @@ struct SupportYouView: View {
                 (dynamicTypeSize.isAccessibilitySize
                     ? AnyLayout(VStackLayout(alignment: .leading, spacing: SupportTheme.Spacing.s))
                     : AnyLayout(HStackLayout(spacing: SupportTheme.Spacing.m))) {
-                    Image(systemName: "person.crop.circle.fill")
-                        .font(.largeTitle)
-                        .foregroundStyle(SupportTheme.accent)
-                        .accessibilityHidden(true)
-                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
-                        Text(appState.currentUser?.displayName ?? String(localized: "Your profile"))
-                            .font(.title3.weight(.semibold))
-                            .foregroundStyle(SupportTheme.textPrimary)
-                        if appState.entitlements.tier == .premium {
-                            Text("Premium")
-                                .font(.subheadline)
-                                .foregroundStyle(SupportTheme.textSecondary)
+                        Image(systemName: "person.crop.circle.fill")
+                            .font(.largeTitle)
+                            .foregroundStyle(SupportTheme.accent)
+                            .accessibilityHidden(true)
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
+                            Text(appState.currentUser?.displayName ?? String(localized: "Your profile"))
+                                .font(.title3.weight(.semibold))
+                                .accessibilityAddTraits(.isHeader)
+                                .foregroundStyle(SupportTheme.textPrimary)
+                            if appState.entitlements.tier == .premium {
+                                Text("Premium")
+                                    .font(.subheadline)
+                                    .foregroundStyle(SupportTheme.textSecondary)
+                            }
                         }
+                        Spacer(minLength: 0)
+                        Text("Edit")
+                            .font(.subheadline)
+                            .foregroundStyle(SupportTheme.accent)
                     }
-                    Spacer(minLength: 0)
-                    Text("Edit")
-                        .font(.subheadline)
-                        .foregroundStyle(SupportTheme.accent)
-                }
-                .frame(minHeight: SupportTheme.minimumTarget)
+                    .frame(minHeight: SupportTheme.minimumTarget)
             }
             .accessibilityLabel(Text("Edit profile"))
 
@@ -111,22 +117,27 @@ struct SupportYouView: View {
                 .buttonStyle(.plain)
             }
         }
+        .listRowBackground(SupportTheme.surface)
     }
 
     private var progressSection: some View {
         Section(SupportSection.progress.title) {
             // Summary from real account stats only; nothing is shown as a score or judgment.
-            HStack(alignment: .top, spacing: SupportTheme.Spacing.m) {
-                summaryItem(value: appState.currentUser?.stats?.level, label: String(localized: "Level"))
-                summaryItem(value: appState.currentUser?.stats?.totalQuestsCompleted, label: String(localized: "Quests"))
-                summaryItem(value: badgeCount, label: String(localized: "Badges"))
-            }
-            .accessibilityElement(children: .contain)
+            (typeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: SupportTheme.Spacing.m))
+                : AnyLayout(HStackLayout(alignment: .top, spacing: SupportTheme.Spacing.m))) {
+                    summaryItem(value: appState.currentUser?.stats?.level, label: String(localized: "Level"))
+                    summaryItem(
+                        value: appState.currentUser?.stats?.totalQuestsCompleted, label: String(localized: "Quests"))
+                    summaryItem(value: badgeCount, label: String(localized: "Badges"))
+                }
+                .accessibilityElement(children: .contain)
             ForEach(SupportDestination.destinations(in: .progress)) { destination in
                 pinnableRow(destination)
             }
             extensionRows(in: .progress)
         }
+        .listRowBackground(SupportTheme.surface)
     }
 
     private var historySection: some View {
@@ -151,6 +162,7 @@ struct SupportYouView: View {
             }
             .buttonStyle(.plain)
         }
+        .listRowBackground(SupportTheme.surface)
     }
 
     @ViewBuilder
@@ -165,9 +177,11 @@ struct SupportYouView: View {
         } footer: {
             Text("Cloud memory the AI may use, if you allow it. Your private journal below is separate.")
         }
+        .listRowBackground(SupportTheme.surface)
         Section {
             NavigationLink(value: SupportDestination.privateVault) { SupportRowLabel(.privateVault) }
         }
+        .listRowBackground(SupportTheme.surface)
     }
 
     private var measurementsSection: some View {
@@ -179,8 +193,11 @@ struct SupportYouView: View {
         } header: {
             Text(SupportSection.measurements.title)
         } footer: {
-            Text("Optional. Measurements and estimates show what they are based on. They never replace how you say you feel.")
+            Text(
+                "Optional. Measurements and estimates show what they are based on. They never replace how you say you feel."
+            )
         }
+        .listRowBackground(SupportTheme.surface)
     }
 
     private var settingsSection: some View {
@@ -194,6 +211,7 @@ struct SupportYouView: View {
             }
             extensionRows(in: .settings)
         }
+        .listRowBackground(SupportTheme.surface)
     }
 
     /// Pinning lives on the opened page's toolbar; the row only shows that it is pinned.
@@ -235,6 +253,7 @@ struct SupportYouView: View {
                 .buttonStyle(.plain)
             }
         }
+        .listRowBackground(SupportTheme.surface)
     }
 
     // MARK: Helpers
@@ -255,6 +274,7 @@ struct SupportYouView: View {
             if let value {
                 Text(String(value))
                     .font(.title2.weight(.bold))
+                    .accessibilityAddTraits(.isHeader)
                     .foregroundStyle(SupportTheme.textPrimary)
             } else {
                 Text("Not yet")
@@ -293,11 +313,10 @@ struct SupportSettingsView: View {
     @State private var showLogoutConfirm = false
     @State private var showDeleteConfirm = false
     @State private var showSubscription = false
-    @State private var showVacationMode = false
 
     private static let preferenceRows: [SupportDestination] = [
         .notificationSettings, .aiPreferences, .interventionSettings, .privacySettings, .appLock,
-        .appearance, .language, .proactiveCheckIns, .wellnessAgent, .sosSettings, .recoveryMode, .ourApproach
+        .appearance, .language, .proactiveCheckIns, .wellnessAgent, .sosSettings, .recoveryMode, .ourApproach,
     ]
 
     var body: some View {
@@ -314,22 +333,21 @@ struct SupportSettingsView: View {
                 }
                 .buttonStyle(.plain)
             }
+            .listRowBackground(SupportTheme.surface)
 
             Section(String(localized: "Preferences")) {
                 ForEach(Self.preferenceRows) { destination in
                     NavigationLink(value: destination) { SupportRowLabel(destination) }
                 }
-                Button {
-                    showVacationMode = true
-                } label: {
-                    SupportRowLabel(title: String(localized: "Vacation mode"), icon: "airplane")
-                }
-                .buttonStyle(.plain)
             }
+
+            .listRowBackground(SupportTheme.surface)
 
             Section(String(localized: "Professional")) {
                 NavigationLink(value: SupportDestination.becomeTherapist) { SupportRowLabel(.becomeTherapist) }
             }
+
+            .listRowBackground(SupportTheme.surface)
 
             Section(String(localized: "Data")) {
                 NavigationLink(value: SupportDestination.dataExport) { SupportRowLabel(.dataExport) }
@@ -339,6 +357,8 @@ struct SupportSettingsView: View {
                     SupportRowLabel(title: String(localized: "Delete account"), icon: "trash")
                 }
             }
+
+            .listRowBackground(SupportTheme.surface)
 
             Section(String(localized: "Support")) {
                 Button {
@@ -360,6 +380,8 @@ struct SupportSettingsView: View {
                 }
             }
 
+            .listRowBackground(SupportTheme.surface)
+
             Section {
                 Button(role: .destructive) {
                     showLogoutConfirm = true
@@ -367,6 +389,8 @@ struct SupportSettingsView: View {
                     SupportRowLabel(title: String(localized: "Sign out"), icon: "rectangle.portrait.and.arrow.right")
                 }
             }
+
+            .listRowBackground(SupportTheme.surface)
 
             Section {
                 HStack {
@@ -376,8 +400,12 @@ struct SupportSettingsView: View {
                 }
                 .accessibilityElement(children: .combine)
             }
+
+            .listRowBackground(SupportTheme.surface)
         }
         .supportCanvas()
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle(SupportDestination.settings.title)
         .navigationBarTitleDisplayMode(.inline)
         .alert(String(localized: "Sign out"), isPresented: $showLogoutConfirm) {
@@ -393,9 +421,6 @@ struct SupportSettingsView: View {
             Text("This will permanently delete your account and all data. This action cannot be undone.")
         }
         .sheet(isPresented: $showSubscription) { SubscriptionView() }
-        .sheet(isPresented: $showVacationMode) {
-            VacationModeSheet().environmentObject(container)
-        }
     }
 
     // Same behavior as the legacy ProfileView actions.

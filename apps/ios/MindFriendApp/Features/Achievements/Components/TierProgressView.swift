@@ -6,7 +6,7 @@ import SwiftUI
 struct TierProgressView: View {
     let badge: AchievementBadge
     let progress: UserBadgeProgress?
-    
+
     private var tierChain: [BadgeTier] {
         // Build tier chain from current badge
         if let tier = badge.tier {
@@ -25,66 +25,66 @@ struct TierProgressView: View {
         }
         return []
     }
-    
+
     private var currentTierIndex: Int {
         guard let tier = badge.tier else { return 0 }
         return tierChain.firstIndex(of: tier) ?? 0
     }
-    
+
     private var hasNextTier: Bool {
         currentTierIndex < tierChain.count - 1
     }
-    
+
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             // Tier timeline
-            HStack(spacing: 8) {
+            HStack(spacing: SupportTheme.Spacing.xs) {
                 ForEach(Array(tierChain.enumerated()), id: \.offset) { index, tier in
                     TierBadgeView(
                         tier: tier,
                         isUnlocked: index <= currentTierIndex,
                         isCurrent: index == currentTierIndex
                     )
-                    
+
                     if index < tierChain.count - 1 {
                         Rectangle()
-                            .fill(index < currentTierIndex ? Color.accentColor : Color.gray.opacity(0.3))
+                            .fill(
+                                index < currentTierIndex ? SupportTheme.accent : SupportTheme.textSecondary.opacity(0.3)
+                            )
                             .frame(height: 2)
                     }
                 }
             }
             .padding(.horizontal)
-            
+
             // Progress to next tier
             if hasNextTier, let nextTier = tierChain[safe: currentTierIndex + 1] {
-                VStack(spacing: 8) {
+                VStack(spacing: SupportTheme.Spacing.xs) {
                     HStack {
                         Text("Progress to \(nextTier.displayName)")
                             .font(.subheadline.bold())
-                        
+
                         Spacer()
-                        
+
                         if let target = progress?.progressTarget {
                             Text("\(progress?.progressCurrent ?? 0)/\(target)")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                         }
                     }
-                    
+
                     ProgressView(value: progress?.progressPercentage ?? 0)
-                        .tint(Color(hex: nextTier.color) ?? .accentColor)
+                        .tint(SupportTheme.accent)
                 }
-                .padding()
-                .background(Color(.secondarySystemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .supportCard()
             } else if !hasNextTier {
                 // Max tier reached
                 Label("Max Tier Reached!", systemImage: "crown.fill")
                     .font(.headline)
-                    .foregroundStyle(.yellow)
+                    .foregroundStyle(SupportTheme.Celebration.gold)
                     .padding()
-                    .background(Color.yellow.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .background(SupportTheme.surface)
+                    .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
             }
         }
     }
@@ -94,28 +94,28 @@ struct TierBadgeView: View {
     let tier: BadgeTier
     let isUnlocked: Bool
     let isCurrent: Bool
-    
+
     var body: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: SupportTheme.Spacing.xxs) {
             ZStack {
                 Circle()
-                    .fill(isUnlocked ? (Color(hex: tier.color) ?? .gray) : Color.gray.opacity(0.2))
+                    .fill(isUnlocked ? (SupportTheme.accent) : SupportTheme.textSecondary.opacity(0.2))
                     .frame(width: 40, height: 40)
-                
+
                 if isUnlocked {
                     Image(systemName: isCurrent ? "star.fill" : "checkmark")
-                        .foregroundStyle(.white)
+                        .foregroundStyle(SupportTheme.textPrimary)
                         .font(.caption.bold())
                 } else {
                     Image(systemName: "lock.fill")
-                        .foregroundStyle(.gray)
+                        .foregroundStyle(SupportTheme.textSecondary)
                         .font(.caption)
                 }
             }
-            
+
             Text(tier.displayName)
                 .font(.caption2)
-                .foregroundStyle(isUnlocked ? .primary : .secondary)
+                .foregroundStyle(isUnlocked ? SupportTheme.textPrimary : SupportTheme.textSecondary)
         }
     }
 }

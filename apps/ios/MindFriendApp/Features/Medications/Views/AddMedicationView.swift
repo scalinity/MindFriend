@@ -40,6 +40,7 @@ struct AddMedicationView: View {
                         }
                     }
                 }
+                .listRowBackground(SupportTheme.surface)
 
                 Section("Schedule") {
                     Picker("Frequency", selection: $frequency) {
@@ -51,7 +52,9 @@ struct AddMedicationView: View {
                     }
 
                     if frequency != .asNeeded {
-                        DatePicker(frequency == .daily || frequency == .weekly ? "Time" : "First dose", selection: $time1, displayedComponents: .hourAndMinute)
+                        DatePicker(
+                            frequency == .daily || frequency == .weekly ? "Time" : "First dose", selection: $time1,
+                            displayedComponents: .hourAndMinute)
 
                         if frequency == .twiceDaily || frequency == .threeTimesDaily {
                             DatePicker("Second dose", selection: $time2, displayedComponents: .hourAndMinute)
@@ -63,11 +66,17 @@ struct AddMedicationView: View {
                     }
                 }
 
+                .listRowBackground(SupportTheme.surface)
+
                 Section("Reminders") {
                     Toggle("Enable Reminders", isOn: $reminderEnabled)
                     Toggle("Generic Text", isOn: $useGenericNotification)
                 }
+
+                .listRowBackground(SupportTheme.surface)
             }
+            .supportScreen()
+            .foregroundStyle(SupportTheme.textPrimary)
             .navigationTitle("Add Medication")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -84,7 +93,8 @@ struct AddMedicationView: View {
                     .disabled(name.isEmpty || isSaving)
                 }
             }
-            .alert("Error", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
+            .alert("Error", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } }))
+            {
                 Button("OK") { errorMessage = nil }
             } message: {
                 Text(errorMessage ?? "")
@@ -127,7 +137,9 @@ struct AddMedicationView: View {
             case .twiceDaily:
                 scheduledTimes = [formatter.string(from: time1), formatter.string(from: time2)]
             case .threeTimesDaily:
-                scheduledTimes = [formatter.string(from: time1), formatter.string(from: time2), formatter.string(from: time3)]
+                scheduledTimes = [
+                    formatter.string(from: time1), formatter.string(from: time2), formatter.string(from: time3),
+                ]
             case .asNeeded, .custom:
                 scheduledTimes = []
             }
@@ -136,8 +148,10 @@ struct AddMedicationView: View {
                 id: UUID().uuidString,
                 user_id: userId.uuidString,
                 name: name.trimmingCharacters(in: .whitespacesAndNewlines),
-                dosage: dosage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : dosage.trimmingCharacters(in: .whitespacesAndNewlines),
-                purpose: purpose.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : purpose.trimmingCharacters(in: .whitespacesAndNewlines),
+                dosage: dosage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    ? nil : dosage.trimmingCharacters(in: .whitespacesAndNewlines),
+                purpose: purpose.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    ? nil : purpose.trimmingCharacters(in: .whitespacesAndNewlines),
                 icon: icon.rawValue,
                 frequency: frequency.rawValue,
                 scheduled_times: scheduledTimes,

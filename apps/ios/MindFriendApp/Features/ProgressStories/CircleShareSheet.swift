@@ -2,6 +2,7 @@ import SwiftUI
 
 /// Modal sheet for sharing a story card to a circle
 struct CircleShareSheet: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var container: DependencyContainer
 
@@ -25,23 +26,25 @@ struct CircleShareSheet: View {
             VStack(spacing: 0) {
                 // Image preview
                 imagePreview
-                    .padding(.top, 16)
+                    .padding(.top, SupportTheme.Spacing.m)
 
                 // Circle picker
                 circlePicker
-                    .padding(.top, 24)
+                    .padding(.top, SupportTheme.Spacing.l)
 
                 // Caption field
                 captionField
-                    .padding(.top, 16)
+                    .padding(.top, SupportTheme.Spacing.m)
 
                 // Privacy notice
                 privacyNotice
-                    .padding(.top, 12)
+                    .padding(.top, SupportTheme.Spacing.s)
 
                 Spacer()
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, SupportTheme.Spacing.m)
+            .supportScreen()
+            .foregroundStyle(SupportTheme.textPrimary)
             .navigationTitle("Share to Circle")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -76,13 +79,13 @@ struct CircleShareSheet: View {
         if let image = viewModel.exportedImage {
             Image(uiImage: image)
                 .resizable()
-                .aspectRatio(9/16, contentMode: .fit)
+                .aspectRatio(9 / 16, contentMode: .fit)
                 .frame(height: 200)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
+                .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
+                .shadow(color: SupportTheme.canvas.opacity(0.2), radius: 8, x: 0, y: 4)
         } else {
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.gray.opacity(0.2))
+            RoundedRectangle(cornerRadius: SupportTheme.cardRadius)
+                .fill(SupportTheme.textSecondary.opacity(0.2))
                 .frame(height: 200)
                 .overlay {
                     ProgressView()
@@ -94,9 +97,10 @@ struct CircleShareSheet: View {
 
     @ViewBuilder
     private var circlePicker: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             Text("Select Circle")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
             if isLoading {
                 HStack {
@@ -106,7 +110,7 @@ struct CircleShareSheet: View {
                 }
                 .frame(height: 60)
             } else if let error = circleLoadError {
-                VStack(spacing: 8) {
+                VStack(spacing: SupportTheme.Spacing.xs) {
                     Text(error)
                         .font(.subheadline)
                         .foregroundStyle(.red)
@@ -118,16 +122,16 @@ struct CircleShareSheet: View {
                     .font(.subheadline.weight(.medium))
                 }
                 .frame(maxWidth: .infinity, alignment: .center)
-                .padding(.vertical, 16)
+                .padding(.vertical, SupportTheme.Spacing.m)
             } else if circles.isEmpty {
                 Text("You're not in any circles yet.")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.vertical, 16)
+                    .padding(.vertical, SupportTheme.Spacing.m)
             } else {
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 12) {
+                    HStack(spacing: SupportTheme.Spacing.s) {
                         ForEach(circles, id: \.id) { circle in
                             circleButton(circle)
                         }
@@ -142,24 +146,24 @@ struct CircleShareSheet: View {
         let isSelected = selectedCircle?.id == circle.id
 
         Button {
-            withAnimation(.spring(response: 0.3)) {
+            withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : (.spring(response: 0.3))) {
                 selectedCircle = circle
             }
         } label: {
-            VStack(spacing: 4) {
+            VStack(spacing: SupportTheme.Spacing.xxs) {
                 Image(systemName: "person.3.fill")
                     .font(.title2)
 
                 Text(circle.name)
                     .font(.caption)
-                    .lineLimit(1)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .frame(width: 80, height: 70)
             .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(isSelected ? Color.accentColor : Color.gray.opacity(0.1))
+                RoundedRectangle(cornerRadius: SupportTheme.cardRadius)
+                    .fill(isSelected ? SupportTheme.accent : SupportTheme.textSecondary.opacity(0.1))
             )
-            .foregroundStyle(isSelected ? .white : .primary)
+            .foregroundStyle(isSelected ? SupportTheme.onAccent : SupportTheme.textPrimary)
         }
         .buttonStyle(.plain)
     }
@@ -168,20 +172,21 @@ struct CircleShareSheet: View {
 
     @ViewBuilder
     private var captionField: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             HStack {
                 Text("Caption")
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
 
                 Spacer()
 
                 Text("\(caption.count)/\(maxCaptionLength)")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
 
             TextField("Add a caption (optional)", text: $caption, axis: .vertical)
-                .textFieldStyle(.roundedBorder)
+                .supportField()
                 .lineLimit(3...5)
                 .onChange(of: caption) { _, newValue in
                     if newValue.count > maxCaptionLength {
@@ -195,20 +200,20 @@ struct CircleShareSheet: View {
 
     @ViewBuilder
     private var privacyNotice: some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .top, spacing: SupportTheme.Spacing.xs) {
             Image(systemName: "eye")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
 
             Text("This story card will be visible to all members of the selected circle.")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
-        .padding(12)
+        .padding(SupportTheme.Spacing.s)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(Color.gray.opacity(0.1))
+            RoundedRectangle(cornerRadius: SupportTheme.cardRadius)
+                .fill(SupportTheme.textSecondary.opacity(0.1))
         )
     }
 
@@ -217,20 +222,20 @@ struct CircleShareSheet: View {
     @ViewBuilder
     private var postingOverlay: some View {
         ZStack {
-            Color.black.opacity(0.3)
+            SupportTheme.canvas.opacity(0.3)
                 .ignoresSafeArea()
 
-            VStack(spacing: 12) {
+            VStack(spacing: SupportTheme.Spacing.s) {
                 ProgressView()
                     .scaleEffect(1.2)
 
                 Text("Posting to \(selectedCircle?.name ?? "circle")...")
                     .font(.subheadline)
             }
-            .padding(24)
+            .padding(SupportTheme.Spacing.l)
             .background(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(.regularMaterial)
+                RoundedRectangle(cornerRadius: SupportTheme.cardRadius)
+                    .fill(SupportTheme.surface)
             )
         }
     }
@@ -256,7 +261,8 @@ struct CircleShareSheet: View {
 
     private func postToCircle() async {
         guard let circle = selectedCircle,
-              let circleUUID = UUID(uuidString: circle.id) else { return }
+            let circleUUID = UUID(uuidString: circle.id)
+        else { return }
 
         isPosting = true
         defer { isPosting = false }

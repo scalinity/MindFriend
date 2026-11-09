@@ -33,12 +33,14 @@ struct SOSSettingsView: View {
             // Enable SOS Section
             Section {
                 Toggle("Enable SOS Button", isOn: $enableSOS)
-                    .tint(.blue)
+                    .tint(SupportTheme.accent)
             } header: {
                 Text("General")
             } footer: {
                 Text("When enabled, the SOS button appears on your home screen for quick access to calming exercises.")
             }
+
+            .listRowBackground(SupportTheme.surface)
 
             // Breathing Pattern Section
             Section {
@@ -48,7 +50,7 @@ struct SOSSettingsView: View {
                             Text(pattern.displayName)
                             Text(pattern.description)
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                         }
                         .tag(pattern)
                     }
@@ -60,29 +62,33 @@ struct SOSSettingsView: View {
                 Text(selectedPattern.description)
             }
 
+            .listRowBackground(SupportTheme.surface)
+
             // Intervention Flow Section
             Section {
                 Toggle("Include Breathing Exercise", isOn: $includeBreathing)
-                    .tint(.blue)
+                    .tint(SupportTheme.accent)
 
                 Toggle("Include Grounding Exercise", isOn: $includeGrounding)
-                    .tint(.blue)
+                    .tint(SupportTheme.accent)
             } header: {
                 Text("Intervention Flow")
             } footer: {
                 Text("Customize which calming exercises are included in your SOS intervention.")
             }
 
+            .listRowBackground(SupportTheme.surface)
+
             // Emergency Contact Section
             Section {
                 if let name = emergencyContactName, let phone = emergencyContactPhone {
                     HStack {
-                        VStack(alignment: .leading, spacing: 4) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                             Text(name)
                                 .font(.body)
                             Text(phone)
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                         }
 
                         Spacer()
@@ -90,7 +96,7 @@ struct SOSSettingsView: View {
                         Button("Edit") {
                             showEmergencyContactSheet = true
                         }
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(SupportTheme.accent)
                     }
                 } else {
                     Button {
@@ -104,7 +110,7 @@ struct SOSSettingsView: View {
                 }
 
                 Toggle("Auto-notify after countdown", isOn: $autoNotifyContacts)
-                    .tint(.blue)
+                    .tint(SupportTheme.accent)
                     .disabled(emergencyContactName == nil)
 
                 if autoNotifyContacts && emergencyContactName != nil {
@@ -114,11 +120,15 @@ struct SOSSettingsView: View {
                 Text("Emergency Contact")
             } footer: {
                 if autoNotifyContacts && emergencyContactName != nil {
-                    Text("When you use SOS, your emergency contact will receive a text message after \(countdownSeconds) seconds unless you cancel.")
+                    Text(
+                        "When you use SOS, your emergency contact will receive a text message after \(countdownSeconds) seconds unless you cancel."
+                    )
                 } else {
                     Text("Optional: Add a trusted person who can be notified when you use the SOS feature.")
                 }
             }
+
+            .listRowBackground(SupportTheme.surface)
 
             // Privacy Section
             Section {
@@ -137,6 +147,8 @@ struct SOSSettingsView: View {
                 Text("Privacy & Data")
             }
 
+            .listRowBackground(SupportTheme.surface)
+
             // Test Section
             Section {
                 Button {
@@ -152,7 +164,11 @@ struct SOSSettingsView: View {
             } footer: {
                 Text("Try the SOS flow without logging any events or notifying contacts.")
             }
+
+            .listRowBackground(SupportTheme.surface)
         }
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle("SOS Settings")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -185,14 +201,11 @@ struct SOSSettingsView: View {
 
     private var hasChanges: Bool {
         guard let settings else { return true }
-        return settings.sosEnabled != enableSOS ||
-            settings.preferredBreathingPattern != selectedPattern ||
-            settings.autoNotifyContacts != autoNotifyContacts ||
-            settings.countdownSeconds != countdownSeconds ||
-            settings.includeBreathing != includeBreathing ||
-            settings.includeGrounding != includeGrounding ||
-            settings.emergencyContactName != emergencyContactName ||
-            settings.emergencyContactPhone != emergencyContactPhone
+        return settings.sosEnabled != enableSOS || settings.preferredBreathingPattern != selectedPattern
+            || settings.autoNotifyContacts != autoNotifyContacts || settings.countdownSeconds != countdownSeconds
+            || settings.includeBreathing != includeBreathing || settings.includeGrounding != includeGrounding
+            || settings.emergencyContactName != emergencyContactName
+            || settings.emergencyContactPhone != emergencyContactPhone
     }
 
     private func loadSettings() async {
@@ -295,6 +308,7 @@ struct EmergencyContactSheet: View {
                 } footer: {
                     Text("This person can be automatically notified when you use the SOS feature.")
                 }
+                .listRowBackground(SupportTheme.surface)
 
                 if name != nil {
                     Section {
@@ -310,8 +324,11 @@ struct EmergencyContactSheet: View {
                             }
                         }
                     }
+                    .listRowBackground(SupportTheme.surface)
                 }
             }
+            .supportScreen()
+            .foregroundStyle(SupportTheme.textPrimary)
             .navigationTitle("Emergency Contact")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -345,28 +362,30 @@ struct EmergencyContactSheet: View {
 struct SOSPrivacyInfoView: View {
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.l) {
                 // Header
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                     Image(systemName: "lock.shield.fill")
                         .font(.system(size: 40))
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(SupportTheme.accent)
 
                     Text("Your Privacy Matters")
                         .font(.title2)
+                        .accessibilityAddTraits(.isHeader)
                         .fontWeight(.bold)
 
                     Text("Here's how we handle your SOS data")
                         .font(.body)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
 
                 Divider()
 
                 // Data stored
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                     Text("What we store")
                         .font(.headline)
+                        .accessibilityAddTraits(.isHeader)
 
                     BulletPoint(text: "When you use the SOS feature")
                     BulletPoint(text: "Which exercises you complete")
@@ -375,9 +394,10 @@ struct SOSPrivacyInfoView: View {
                 }
 
                 // Why
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                     Text("Why we store this")
                         .font(.headline)
+                        .accessibilityAddTraits(.isHeader)
 
                     BulletPoint(text: "To track what helps you most")
                     BulletPoint(text: "To personalize recommendations")
@@ -385,9 +405,10 @@ struct SOSPrivacyInfoView: View {
                 }
 
                 // What we don't store
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                     Text("What we don't store")
                         .font(.headline)
+                        .accessibilityAddTraits(.isHeader)
 
                     BulletPoint(text: "Exact location data")
                     BulletPoint(text: "Recording of your sessions")
@@ -395,9 +416,10 @@ struct SOSPrivacyInfoView: View {
                 }
 
                 // Control
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                     Text("You're in control")
                         .font(.headline)
+                        .accessibilityAddTraits(.isHeader)
 
                     BulletPoint(text: "View your history anytime")
                     BulletPoint(text: "Delete individual entries")
@@ -406,24 +428,26 @@ struct SOSPrivacyInfoView: View {
 
                 Spacer(minLength: 40)
             }
-            .padding(24)
+            .padding(SupportTheme.Spacing.l)
         }
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle("Privacy")
         .navigationBarTitleDisplayMode(.inline)
     }
 }
 
 // MARK: - BulletPoint Component
-fileprivate struct BulletPoint: View {
+private struct BulletPoint: View {
     let text: String
 
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .top, spacing: SupportTheme.Spacing.xs) {
             Text("•")
-                .foregroundColor(.secondary)
+                .foregroundColor(SupportTheme.textSecondary)
             Text(text)
                 .font(.caption)
-                .foregroundColor(.secondary)
+                .foregroundColor(SupportTheme.textSecondary)
         }
     }
 }
@@ -453,6 +477,8 @@ struct SOSHistoryView: View {
                 }
             }
         }
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle("SOS History")
         .navigationBarTitleDisplayMode(.inline)
         .task {
@@ -473,22 +499,22 @@ private struct SOSHistoryRow: View {
     let event: SOSEvent
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             HStack {
                 Text(event.createdAt.formatted(date: .abbreviated, time: .shortened))
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
 
                 Spacer()
 
                 if event.completedSuccessfully {
                     Label("Completed", systemImage: "checkmark.circle.fill")
                         .font(.caption)
-                        .foregroundStyle(.green)
+                        .foregroundStyle(SupportTheme.accent)
                 } else {
                     Label("Cancelled", systemImage: "xmark.circle")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
             }
 
@@ -504,12 +530,13 @@ private struct SOSHistoryRow: View {
                     ForEach(1...5, id: \.self) { star in
                         Image(systemName: star <= rating ? "star.fill" : "star")
                             .font(.caption)
-                            .foregroundStyle(star <= rating ? .yellow : .secondary)
+                            .foregroundStyle(
+                                star <= rating ? SupportTheme.Celebration.gold : SupportTheme.textSecondary)
                     }
                 }
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, SupportTheme.Spacing.xxs)
     }
 
     private func moodEmoji(for mood: Int) -> String {

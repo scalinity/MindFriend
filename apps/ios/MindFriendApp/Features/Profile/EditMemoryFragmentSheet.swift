@@ -22,9 +22,9 @@ struct EditMemoryFragmentSheet: View {
     }
 
     private var isValid: Bool {
-        !editedKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        !editedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        editedValue.count <= maxValueLength
+        !editedKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !editedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && editedValue.count <= maxValueLength
     }
 
     private var normalizedKey: String {
@@ -38,22 +38,23 @@ struct EditMemoryFragmentSheet: View {
         NavigationStack {
             Form {
                 Section {
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                         Text("Label")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                         TextField("e.g., Dog Name, Work Location", text: $editedKey)
                             .textInputAutocapitalization(.words)
                     }
                 } header: {
                     Label(memory.fragmentType.displayName, systemImage: memory.fragmentType.icon)
                 }
+                .listRowBackground(SupportTheme.surface)
 
                 Section {
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                         Text("Value")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                         TextField("Enter value", text: $editedValue, axis: .vertical)
                             .lineLimit(3...6)
 
@@ -61,10 +62,12 @@ struct EditMemoryFragmentSheet: View {
                             Spacer()
                             Text("\(editedValue.count)/\(maxValueLength)")
                                 .font(.caption)
-                                .foregroundStyle(editedValue.count > maxValueLength ? .red : .secondary)
+                                .foregroundStyle(editedValue.count > maxValueLength ? .red : SupportTheme.textSecondary)
                         }
                     }
                 }
+
+                .listRowBackground(SupportTheme.surface)
 
                 if let expiresAt = memory.expiresAt {
                     Section {
@@ -72,13 +75,16 @@ struct EditMemoryFragmentSheet: View {
                             Text("Expires")
                             Spacer()
                             Text(expiresAt, style: .relative)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                         }
                     } footer: {
                         Text("This memory will automatically expire and be removed.")
                     }
+                    .listRowBackground(SupportTheme.surface)
                 }
             }
+            .supportScreen()
+            .foregroundStyle(SupportTheme.textPrimary)
             .navigationTitle("Edit Memory")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

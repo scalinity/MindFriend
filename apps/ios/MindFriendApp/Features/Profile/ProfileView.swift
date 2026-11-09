@@ -20,7 +20,7 @@ struct ProfileView: View {
                     Button {
                         showEditProfile = true
                     } label: {
-                        HStack(spacing: 16) {
+                        HStack(spacing: SupportTheme.Spacing.m) {
                             // Display avatar or placeholder
                             if let avatarUrl = appState.currentUser?.avatarUrl, !avatarUrl.isEmpty {
                                 AsyncImage(url: URL(string: avatarUrl)) { phase in
@@ -34,65 +34,70 @@ struct ProfileView: View {
                                     case .failure:
                                         Image(systemName: "person.circle.fill")
                                             .font(.system(size: 60))
-                                            .foregroundStyle(Color.accentColor)
+                                            .foregroundStyle(SupportTheme.accent)
                                     case .empty:
                                         ProgressView()
                                             .frame(width: 60, height: 60)
                                     @unknown default:
                                         Image(systemName: "person.circle.fill")
                                             .font(.system(size: 60))
-                                            .foregroundStyle(Color.accentColor)
+                                            .foregroundStyle(SupportTheme.accent)
                                     }
                                 }
                                 .accessibilityLabel("Profile picture")
                             } else {
                                 Image(systemName: "person.circle.fill")
                                     .font(.system(size: 60))
-                                    .foregroundStyle(Color.accentColor)
+                                    .foregroundStyle(SupportTheme.accent)
                                     .accessibilityLabel("Profile picture placeholder")
                             }
 
-                            VStack(alignment: .leading, spacing: 4) {
+                            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                                 Text(appState.currentUser?.displayName ?? "User")
                                     .font(.title2)
+                                    .accessibilityAddTraits(.isHeader)
                                     .fontWeight(.semibold)
-                                    .foregroundStyle(.primary)
+                                    .foregroundStyle(SupportTheme.textPrimary)
 
                                 Text("@\(appState.currentUser?.handle ?? "")")
                                     .font(.subheadline)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(SupportTheme.textSecondary)
 
                                 if appState.entitlements.tier == .premium {
-                                    HStack(spacing: 4) {
+                                    HStack(spacing: SupportTheme.Spacing.xxs) {
                                         Image(systemName: "crown.fill")
                                         Text("Premium")
                                     }
                                     .font(.subheadline)
                                     .fontWeight(.medium)
-                                    .foregroundStyle(.yellow)
+                                    .foregroundStyle(SupportTheme.Celebration.gold)
                                 }
                             }
 
                             Spacer()
 
                             Image(systemName: "pencil")
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                         }
                     }
-                    .padding(.vertical, 8)
+                    .padding(.vertical, SupportTheme.Spacing.xs)
                 }
+
+                .listRowBackground(SupportTheme.surface)
 
                 // Stats
                 Section("Stats") {
                     HStack {
-                        ProfileStatItem(value: "\(appState.currentUser?.stats?.currentStreakDays ?? 0)", label: "Streak")
                         Divider()
-                        ProfileStatItem(value: "\(appState.currentUser?.stats?.totalQuestsCompleted ?? 0)", label: "Quests")
+                        ProfileStatItem(
+                            value: "\(appState.currentUser?.stats?.totalQuestsCompleted ?? 0)", label: "Quests")
                         Divider()
                         ProfileStatItem(value: "\(badgeCount)", label: "Badges")
                     }
-                    .padding(.vertical, 8)
+                    .padding(.vertical, SupportTheme.Spacing.xs)
                 }
+
+                .listRowBackground(SupportTheme.surface)
 
                 // Premium / Subscription (placed between Stats and Progress)
                 if appState.entitlements.tier == .free {
@@ -102,15 +107,16 @@ struct ProfileView: View {
                         } label: {
                             HStack {
                                 Image(systemName: "crown.fill")
-                                    .foregroundStyle(.yellow)
+                                    .foregroundStyle(SupportTheme.Celebration.gold)
                                 Text("Upgrade to Premium")
                                     .fontWeight(.semibold)
                                 Spacer()
                                 Image(systemName: "chevron.right")
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(SupportTheme.textSecondary)
                             }
                         }
                     }
+                    .listRowBackground(SupportTheme.surface)
                 }
 
                 // Progress
@@ -141,6 +147,8 @@ struct ProfileView: View {
                     }
                 }
 
+                .listRowBackground(SupportTheme.surface)
+
                 // Features
                 Section("Features") {
                     NavigationLink {
@@ -166,6 +174,8 @@ struct ProfileView: View {
                         Label("For You", systemImage: "sparkles")
                     }
                 }
+
+                .listRowBackground(SupportTheme.surface)
 
                 // Social
                 Section("Social") {
@@ -194,6 +204,8 @@ struct ProfileView: View {
                     }
                 }
 
+                .listRowBackground(SupportTheme.surface)
+
                 // Professional / Therapist
                 Section("Professional") {
                     NavigationLink {
@@ -202,6 +214,8 @@ struct ProfileView: View {
                         Label("Become a Therapist/Coach", systemImage: "person.badge.plus")
                     }
                 }
+
+                .listRowBackground(SupportTheme.surface)
 
                 // Creator Studio
                 // TODO: Uncomment when CreatorService is integrated (Spec 13)
@@ -222,7 +236,7 @@ struct ProfileView: View {
                         BiometricsSettingsView(healthKit: container.healthKitService)
                     } label: {
                         Label("Apple Health (HealthKit)", systemImage: "heart.fill")
-                            .foregroundStyle(.pink)
+                            .foregroundStyle(SupportTheme.accent)
                     }
 
                     NavigationLink {
@@ -243,19 +257,6 @@ struct ProfileView: View {
                         Label("Smart Interventions", systemImage: "waveform.path.ecg")
                     }
 
-                    // Vacation Mode & Shield History
-                    Button {
-                        showVacationMode = true
-                    } label: {
-                        Label("Vacation Mode", systemImage: "airplane")
-                    }
-                    
-                    Button {
-                        showShieldHistory = true
-                    } label: {
-                        Label("Shield History", systemImage: "shield.lefthalf.filled")
-                    }
-
                     NavigationLink {
                         PrivacySettingsView()
                     } label: {
@@ -273,11 +274,11 @@ struct ProfileView: View {
                             .environmentObject(container.vaultViewModel)
                     } label: {
                         Label {
-                            VStack(alignment: .leading, spacing: 2) {
+                            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                                 Text("Private Vault")
                                 Text("Encrypted, device-only journal")
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(SupportTheme.textSecondary)
                             }
                         } icon: {
                             Image(systemName: "lock.shield.fill")
@@ -333,7 +334,7 @@ struct ProfileView: View {
                         RecoveryModeSettingsView()
                     } label: {
                         Label("Recovery Mode", systemImage: "heart.circle.fill")
-                            .foregroundStyle(.pink)
+                            .foregroundStyle(SupportTheme.accent)
                     }
 
                     NavigationLink {
@@ -342,6 +343,8 @@ struct ProfileView: View {
                         Label("Our Approach", systemImage: "checkmark.seal.fill")
                     }
                 }
+
+                .listRowBackground(SupportTheme.surface)
 
                 // Data
                 Section("Data") {
@@ -358,6 +361,8 @@ struct ProfileView: View {
                             .foregroundStyle(.red)
                     }
                 }
+
+                .listRowBackground(SupportTheme.surface)
 
                 // Support
                 Section("Support") {
@@ -381,6 +386,8 @@ struct ProfileView: View {
                     }
                 }
 
+                .listRowBackground(SupportTheme.surface)
+
                 // Logout
                 Section {
                     Button(role: .destructive) {
@@ -390,19 +397,25 @@ struct ProfileView: View {
                     }
                 }
 
+                .listRowBackground(SupportTheme.surface)
+
                 // Version
                 Section {
                     HStack {
                         Text("Version")
                         Spacer()
                         Text(Bundle.main.appVersion)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                 }
+
+                .listRowBackground(SupportTheme.surface)
             }
+            .supportScreen()
+            .foregroundStyle(SupportTheme.textPrimary)
             .navigationTitle("Profile")
             .alert("Sign Out", isPresented: $showLogoutConfirm) {
-                Button("Cancel", role: .cancel) { }
+                Button("Cancel", role: .cancel) {}
                 Button("Sign Out", role: .destructive) {
                     logout()
                 }
@@ -410,7 +423,7 @@ struct ProfileView: View {
                 Text("Are you sure you want to sign out?")
             }
             .alert("Delete Account", isPresented: $showDeleteConfirm) {
-                Button("Cancel", role: .cancel) { }
+                Button("Cancel", role: .cancel) {}
                 Button("Delete Account", role: .destructive) {
                     deleteAccount()
                 }
@@ -489,13 +502,14 @@ private struct ProfileStatItem: View {
     let label: String
 
     var body: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: SupportTheme.Spacing.xxs) {
             Text(value)
                 .font(.title2)
+                .accessibilityAddTraits(.isHeader)
                 .fontWeight(.bold)
             Text(label)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .combine)
@@ -541,13 +555,14 @@ struct NotificationSettingsView: View {
                 Section {
                     HStack {
                         Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.yellow)
+                            .foregroundStyle(SupportTheme.Celebration.gold)
                         VStack(alignment: .leading) {
                             Text("Notifications Disabled")
                                 .font(.headline)
+                                .accessibilityAddTraits(.isHeader)
                             Text("Enable notifications in Settings to receive alerts")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                         }
                         Spacer()
                         Button("Settings") {
@@ -555,9 +570,10 @@ struct NotificationSettingsView: View {
                                 UIApplication.shared.open(url)
                             }
                         }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.supportSecondary)
                     }
                 }
+                .listRowBackground(SupportTheme.surface)
             }
 
             // Social notifications
@@ -574,17 +590,19 @@ struct NotificationSettingsView: View {
                 Text("Get notified when friends share, send hugs, or complete challenges")
             }
 
+            .listRowBackground(SupportTheme.surface)
+
             // Motivation notifications
             Section {
-                Toggle("Streak at risk", isOn: $notifyStreakRisk)
-                    .onChange(of: notifyStreakRisk) { _, _ in saveSettings() }
                 Toggle("Weekly summary", isOn: $notifyWeeklySummary)
                     .onChange(of: notifyWeeklySummary) { _, _ in saveSettings() }
             } header: {
                 Text("Motivation")
             } footer: {
-                Text("Reminders to keep your streak and weekly progress summaries")
+                Text("Weekly summaries of your progress")
             }
+
+            .listRowBackground(SupportTheme.surface)
 
             // Timing
             Section {
@@ -615,13 +633,17 @@ struct NotificationSettingsView: View {
                         Text("Quiet Hours")
                         Spacer()
                         Text(quietHoursEnabled ? quietHoursSummary : "Off")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                 }
             } header: {
                 Text("Timing")
             }
+
+            .listRowBackground(SupportTheme.surface)
         }
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle("Notifications")
         .disabled(isLoading || isSaving)
         .overlay {
@@ -672,7 +694,9 @@ struct NotificationSettingsView: View {
             try await container.achievementService.loadUserBadgeProgress()
             let earned = container.achievementService.earnedBadges
             badgeCount = earned.count
-            Log.profile.debug("Loaded \(earned.count) earned badges out of \(container.achievementService.userBadgeProgress.count) total user badges")
+            Log.profile.debug(
+                "Loaded \(earned.count) earned badges out of \(container.achievementService.userBadgeProgress.count) total user badges"
+            )
         } catch {
             Log.profile.error("Failed to load badge count: \(error.localizedDescription)")
             badgeCount = 0
@@ -696,7 +720,8 @@ struct NotificationSettingsView: View {
             // Parse quiet hours
             quietHoursEnabled = false
             if let start = settings.quietHoursStartLocal,
-               let end = settings.quietHoursEndLocal {
+                let end = settings.quietHoursEndLocal
+            {
                 quietHoursEnabled = true
                 if let startTime = parseTime(start) { quietStart = startTime }
                 if let endTime = parseTime(end) { quietEnd = endTime }
@@ -830,6 +855,7 @@ struct QuietHoursView: View {
             } footer: {
                 Text("Notifications will be held until quiet hours end")
             }
+            .listRowBackground(SupportTheme.surface)
 
             if isEnabled {
                 Section {
@@ -838,8 +864,11 @@ struct QuietHoursView: View {
                 } footer: {
                     Text("Recommended: 10 PM to 8 AM")
                 }
+                .listRowBackground(SupportTheme.surface)
             }
         }
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle("Quiet Hours")
         .navigationBarTitleDisplayMode(.inline)
         .onChange(of: isEnabled) { _, _ in onSave() }
@@ -864,22 +893,25 @@ struct AIPreferencesView: View {
                         HStack {
                             VStack(alignment: .leading) {
                                 Text(tone.displayName)
-                                    .foregroundStyle(.primary)
+                                    .foregroundStyle(SupportTheme.textPrimary)
                                 Text(tone.description)
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(SupportTheme.textSecondary)
                             }
                             Spacer()
                             if selectedTone == tone {
                                 Image(systemName: "checkmark")
-                                    .foregroundStyle(Color.accentColor)
+                                    .foregroundStyle(SupportTheme.accent)
                             }
                         }
                     }
                     .disabled(isSaving)
                 }
             }
+            .listRowBackground(SupportTheme.surface)
         }
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle("AI Preferences")
         .onAppear {
             selectedTone = appState.currentUser?.settings?.aiTone ?? .friendly
@@ -922,6 +954,7 @@ struct PrivacySettingsView: View {
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
             }
+            .listRowBackground(SupportTheme.surface)
 
             Section {
                 Toggle("Share Mood in Circles", isOn: $shareMoodInCircles)
@@ -933,6 +966,8 @@ struct PrivacySettingsView: View {
                 Text("When enabled, your daily mood will be visible to your circle members")
             }
 
+            .listRowBackground(SupportTheme.surface)
+
             Section("Privacy Mode") {
                 ForEach(PrivacyMode.allCases, id: \.self) { mode in
                     Button {
@@ -940,18 +975,22 @@ struct PrivacySettingsView: View {
                     } label: {
                         HStack {
                             Text(mode.displayName)
-                                .foregroundStyle(.primary)
+                                .foregroundStyle(SupportTheme.textPrimary)
                             Spacer()
                             if privacyMode == mode {
                                 Image(systemName: "checkmark")
-                                    .foregroundStyle(Color.accentColor)
+                                    .foregroundStyle(SupportTheme.accent)
                             }
                         }
                     }
                     .disabled(isSaving)
                 }
             }
+
+            .listRowBackground(SupportTheme.surface)
         }
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle("Privacy")
         .onAppear {
             loadSettings()
@@ -1018,19 +1057,22 @@ struct DataExportView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                VStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.l) {
+                VStack(spacing: SupportTheme.Spacing.s) {
                     Image(systemName: "square.and.arrow.up")
                         .font(.system(size: 52))
-                        .foregroundStyle(Color.accentColor)
+                        .foregroundStyle(SupportTheme.accent)
                         .accessibilityHidden(true)
                     Text("Export Your Data")
                         .font(.title2)
+                        .accessibilityAddTraits(.isHeader)
                         .fontWeight(.semibold)
-                    Text("Create a file with a copy of the records listed below that MindFriend keeps for your account, plus support data saved only on this device. Nothing is created until you tap Export Data.")
-                        .font(.body)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
+                    Text(
+                        "Create a file with a copy of the records listed below that MindFriend keeps for your account, plus support data saved only on this device. Nothing is created until you tap Export Data."
+                    )
+                    .font(.body)
+                    .foregroundStyle(SupportTheme.textSecondary)
+                    .multilineTextAlignment(.center)
                 }
                 .frame(maxWidth: .infinity)
 
@@ -1039,6 +1081,8 @@ struct DataExportView: View {
             }
             .padding()
         }
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle("Export Data")
         .sheet(isPresented: $export.showShareSheet) {
             // The ticket pins this sheet to the exact file and generation it was created for.
@@ -1058,20 +1102,22 @@ struct DataExportView: View {
     // MARK: Sections
 
     private var scopeSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             DisclosureGroup("What this export includes") {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                     ForEach(SupportExportDataset.allCases, id: \.rawValue) { dataset in
                         Text("• \(dataset.title)")
                     }
-                    Text("• Protected support data saved on this device: drafts, transcript lines and changes still waiting to sync, each marked as local or pending.")
+                    Text(
+                        "• Protected support data saved on this device: drafts, transcript lines and changes still waiting to sync, each marked as local or pending."
+                    )
                 }
                 .font(.subheadline)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.top, 6)
+                .padding(.top, SupportTheme.Spacing.xs)
             }
             DisclosureGroup("What it does not include") {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                     ForEach(SupportExportScope.notIncluded, id: \.self) { item in
                         Text("• \(item)")
                     }
@@ -1080,11 +1126,13 @@ struct DataExportView: View {
                 }
                 .font(.subheadline)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.top, 6)
+                .padding(.top, SupportTheme.Spacing.xs)
             }
-            Text("The file contains private details such as conversations and notes. Share it only with people and apps you trust, and delete saved copies you no longer need.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+            Text(
+                "The file contains private details such as conversations and notes. Share it only with people and apps you trust, and delete saved copies you no longer need."
+            )
+            .font(.footnote)
+            .foregroundStyle(SupportTheme.textSecondary)
         }
     }
 
@@ -1094,32 +1142,37 @@ struct DataExportView: View {
         case .idle:
             exportButton(title: "Export Data")
         case .running(let status):
-            VStack(spacing: 12) {
+            VStack(spacing: SupportTheme.Spacing.s) {
                 ProgressView()
                 Text(status)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .multilineTextAlignment(.center)
                 Button("Cancel Export", role: .cancel) { export.cancel() }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.supportSecondary)
             }
             .frame(maxWidth: .infinity)
             .accessibilityElement(children: .combine)
             .accessibilityLabel("Exporting your data. \(status)")
         case .ready(let result):
-            VStack(alignment: .leading, spacing: 12) {
-                Label(result.summary.isComplete ? "Your export is ready" : "Your export is ready, but not everything is in it",
-                      systemImage: result.summary.isComplete ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                    .font(.headline)
-                    .foregroundStyle(result.summary.isComplete ? Color.green : Color.orange)
-                Text("\(result.summary.totalRows) account records from \(result.summary.datasets.filter { $0.status == .included }.count) of \(result.summary.datasets.count) cloud groups\(deviceSummary(result.summary.local)).")
-                    .font(.subheadline)
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
+                Label(
+                    result.summary.isComplete
+                        ? "Your export is ready" : "Your export is ready, but not everything is in it",
+                    systemImage: result.summary.isComplete ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
+                )
+                .font(.headline)
+                .foregroundStyle(result.summary.isComplete ? SupportTheme.accent : SupportTheme.accent)
+                Text(
+                    "\(result.summary.totalRows) account records from \(result.summary.datasets.filter { $0.status == .included }.count) of \(result.summary.datasets.count) cloud groups\(deviceSummary(result.summary.local))."
+                )
+                .font(.subheadline)
                 if !result.summary.isComplete {
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                         ForEach(result.summary.omissions, id: \.self) { Text("• \($0)").font(.footnote) }
                         Text("The file itself marks these as unavailable. They are not empty.")
                             .font(.footnote)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                 }
                 Button {
@@ -1128,12 +1181,12 @@ struct DataExportView: View {
                     Label("Share or Save File", systemImage: "square.and.arrow.up")
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.supportPrimary)
                 Button("Discard Export", role: .destructive) { export.reset() }
                     .frame(maxWidth: .infinity)
             }
         case .failed(let message):
-            VStack(spacing: 12) {
+            VStack(spacing: SupportTheme.Spacing.s) {
                 Label("Export didn't finish", systemImage: "exclamationmark.octagon.fill")
                     .font(.headline)
                     .foregroundStyle(Color.red)
@@ -1153,15 +1206,18 @@ struct DataExportView: View {
         } label: {
             Text(title).frame(maxWidth: .infinity)
         }
-        .buttonStyle(.borderedProminent)
+        .buttonStyle(.supportPrimary)
         .disabled(export.isRunning)
     }
 
     private func deviceSummary(_ local: SupportExportLocalSummary) -> String {
         switch local.status {
         case .included:
-            let pending = local.unsentMutations + local.pendingTranscriptEvents + local.rejectedTranscriptEvents + local.pendingChatRequests + local.unacknowledgedPrivacyChanges
-            return " and your on-device support data (\(local.drafts) draft\(local.drafts == 1 ? "" : "s"), \(pending) item\(pending == 1 ? "" : "s") awaiting sync or attention)"
+            let pending =
+                local.unsentMutations + local.pendingTranscriptEvents + local.rejectedTranscriptEvents
+                + local.pendingChatRequests + local.unacknowledgedPrivacyChanges
+            return
+                " and your on-device support data (\(local.drafts) draft\(local.drafts == 1 ? "" : "s"), \(pending) item\(pending == 1 ? "" : "s") awaiting sync or attention)"
         case .unavailable:
             return " (on-device support data not included)"
         }
@@ -1180,8 +1236,9 @@ struct DataExportView: View {
             guard let appState, let container else { return nil }
             return await MainActor.run {
                 guard appState.currentUser?.id == binding.ownerID, appState.accountEpoch == binding.accountEpoch,
-                      container.supabaseAuthService.userId == binding.ownerID,
-                      container.supabaseClient.auth.currentSession?.user.id == binding.ownerID else { return nil }
+                    container.supabaseAuthService.userId == binding.ownerID,
+                    container.supabaseClient.auth.currentSession?.user.id == binding.ownerID
+                else { return nil }
                 return binding
             }
         }
@@ -1190,7 +1247,9 @@ struct DataExportView: View {
             try await container.supabaseAuthService.ensureValidSession()
             guard await proof() == binding else { throw SupportExportError.ownerChanged }
             let token: String? = await MainActor.run {
-                guard let session = container.supabaseAuthService.session, session.user.id == binding.ownerID else { return nil }
+                guard let session = container.supabaseAuthService.session, session.user.id == binding.ownerID else {
+                    return nil
+                }
                 return session.accessToken
             }
             guard let token else { throw SupportExportError.ownerChanged }
@@ -1209,11 +1268,15 @@ struct DataExportView: View {
     /// Requires the loaded coordinator's owner AND account epoch to match, then only READS the journal: nothing is
     /// replayed, sent or changed.
     @MainActor
-    private static func readLocalJournal(container: DependencyContainer, binding: SupportExportBinding) async -> SupportExportLocalOutcome {
+    private static func readLocalJournal(container: DependencyContainer, binding: SupportExportBinding) async
+        -> SupportExportLocalOutcome
+    {
         if container.supportSessionRecovery != nil { return .unavailable(.journalNeedsRecovery) }
         guard let coordinator = container.supportSessionCoordinator else { return .unavailable(.noSupportScope) }
         guard coordinator.identity.ownerID == binding.ownerID else { return .unavailable(.ownerMismatch) }
-        guard container.supportSessionAccountEpoch == binding.accountEpoch else { return .unavailable(.accountEpochMismatch) }
+        guard container.supportSessionAccountEpoch == binding.accountEpoch else {
+            return .unavailable(.accountEpochMismatch)
+        }
         do {
             return .journal(try await coordinator.repository.currentJournal(epoch: coordinator.identity.epochID))
         } catch {
@@ -1277,9 +1340,9 @@ struct EditProfileView: View {
 
         var color: Color {
             switch self {
-            case .valid: return .green
+            case .valid: return SupportTheme.accent
             case .tooShort, .invalidFormat, .taken: return .red
-            default: return .secondary
+            default: return SupportTheme.textSecondary
             }
         }
     }
@@ -1292,7 +1355,7 @@ struct EditProfileView: View {
                     Button {
                         showProfilePictureEditor = true
                     } label: {
-                        HStack(spacing: 16) {
+                        HStack(spacing: SupportTheme.Spacing.m) {
                             if let avatarUrl = appState.currentUser?.avatarUrl, !avatarUrl.isEmpty {
                                 AsyncImage(url: URL(string: avatarUrl)) { phase in
                                     switch phase {
@@ -1305,36 +1368,39 @@ struct EditProfileView: View {
                                     case .failure, .empty:
                                         Image(systemName: "person.circle.fill")
                                             .font(.system(size: 80))
-                                            .foregroundStyle(.gray)
+                                            .foregroundStyle(SupportTheme.textSecondary)
                                     @unknown default:
                                         Image(systemName: "person.circle.fill")
                                             .font(.system(size: 80))
-                                            .foregroundStyle(.gray)
+                                            .foregroundStyle(SupportTheme.textSecondary)
                                     }
                                 }
                             } else {
                                 Image(systemName: "person.circle.fill")
                                     .font(.system(size: 80))
-                                    .foregroundStyle(.gray)
+                                    .foregroundStyle(SupportTheme.textSecondary)
                             }
 
-                            VStack(alignment: .leading, spacing: 4) {
+                            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                                 Text("Profile Picture")
                                     .font(.headline)
-                                    .foregroundStyle(.primary)
+                                    .accessibilityAddTraits(.isHeader)
+                                    .foregroundStyle(SupportTheme.textPrimary)
                                 Text("Tap to edit")
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(SupportTheme.textSecondary)
                             }
 
                             Spacer()
 
                             Image(systemName: "chevron.right")
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                         }
                     }
-                    .padding(.vertical, 8)
+                    .padding(.vertical, SupportTheme.Spacing.xs)
                 }
+
+                .listRowBackground(SupportTheme.surface)
 
                 Section {
                     TextField("Display Name", text: $displayName)
@@ -1342,7 +1408,7 @@ struct EditProfileView: View {
 
                     HStack {
                         Text("@")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                         TextField("handle", text: $handle)
                             .textContentType(.username)
                             .textInputAutocapitalization(.never)
@@ -1356,14 +1422,14 @@ struct EditProfileView: View {
                                 .scaleEffect(0.8)
                         } else if handleValidation == .valid {
                             Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(.green)
+                                .foregroundStyle(SupportTheme.accent)
                         } else if handleValidation == .taken || handleValidation == .invalidFormat {
                             Image(systemName: "xmark.circle.fill")
                                 .foregroundStyle(.red)
                         }
                     }
                 } footer: {
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                         if let message = handleValidation.message {
                             Text(message)
                                 .foregroundStyle(handleValidation.color)
@@ -1372,13 +1438,18 @@ struct EditProfileView: View {
                     }
                 }
 
+                .listRowBackground(SupportTheme.surface)
+
                 if let error = errorMessage {
                     Section {
                         Text(error)
                             .foregroundStyle(.red)
                     }
+                    .listRowBackground(SupportTheme.surface)
                 }
             }
+            .supportScreen()
+            .foregroundStyle(SupportTheme.textPrimary)
             .navigationTitle("Edit Profile")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -1399,7 +1470,7 @@ struct EditProfileView: View {
                 displayName = appState.currentUser?.displayName ?? ""
                 let currentHandle = appState.currentUser?.handle ?? ""
                 handle = currentHandle
-                
+
                 // If there's an existing handle, mark it as valid initially
                 if !currentHandle.isEmpty {
                     handleValidation = .valid
@@ -1417,7 +1488,7 @@ struct EditProfileView: View {
 
     private var canSave: Bool {
         if handle.isEmpty {
-            return true // Handle is optional
+            return true  // Handle is optional
         }
         return handleValidation == .valid
     }
@@ -1512,9 +1583,9 @@ struct PremiumBadgeLabel: View {
 
     private var badgeColor: Color {
         switch badge.code {
-        case "annual_achiever": return .purple
-        case "family_champion": return .blue
-        default: return .yellow
+        case "annual_achiever": return SupportTheme.accent
+        case "family_champion": return SupportTheme.accent
+        default: return SupportTheme.Celebration.gold
         }
     }
 
@@ -1523,10 +1594,10 @@ struct PremiumBadgeLabel: View {
             .font(.caption)
             .fontWeight(.medium)
             .foregroundStyle(badgeColor)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
+            .padding(.horizontal, SupportTheme.Spacing.xs)
+            .padding(.vertical, SupportTheme.Spacing.xxs)
             .background(badgeColor.opacity(0.15))
-            .cornerRadius(6)
+            .cornerRadius(SupportTheme.controlRadius)
     }
 }
 

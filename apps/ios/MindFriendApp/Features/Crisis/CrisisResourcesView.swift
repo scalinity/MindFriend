@@ -9,48 +9,50 @@ struct CrisisResourcesView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: SupportTheme.Spacing.l) {
                     // Emergency banner
                     EmergencyBanner()
 
                     // Message
-                    VStack(spacing: 12) {
+                    VStack(spacing: SupportTheme.Spacing.s) {
                         Text("You're not alone")
                             .font(.title2)
+                            .accessibilityAddTraits(.isHeader)
                             .fontWeight(.bold)
 
-                        Text("If you're experiencing a mental health crisis, please reach out to one of these resources. Help is available 24/7.")
-                            .font(.body)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
+                        Text(
+                            "If you're experiencing a mental health crisis, please reach out to one of these resources. Help is available 24/7."
+                        )
+                        .font(.body)
+                        .foregroundStyle(SupportTheme.textSecondary)
+                        .multilineTextAlignment(.center)
                     }
                     .padding(.horizontal)
 
                     NavigationLink {
                         SafetyPlanView()
                     } label: {
-                        HStack(spacing: 12) {
+                        HStack(spacing: SupportTheme.Spacing.s) {
                             Image(systemName: "heart.shield.fill")
                                 .font(.title3)
                                 .foregroundStyle(.red)
 
-                            VStack(alignment: .leading, spacing: 4) {
+                            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                                 Text("View My Safety Plan")
                                     .font(.headline)
-                                    .foregroundStyle(.primary)
+                                    .accessibilityAddTraits(.isHeader)
+                                    .foregroundStyle(SupportTheme.textPrimary)
                                 Text("Personal steps you chose for difficult moments")
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(SupportTheme.textSecondary)
                             }
 
                             Spacer()
 
                             Image(systemName: "chevron.right")
-                                .foregroundStyle(.tertiary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                         }
-                        .padding()
-                        .background(Color(.secondarySystemBackground))
-                        .cornerRadius(12)
+                        .supportCard()
                         .padding(.horizontal)
                     }
                     .buttonStyle(.plain)
@@ -58,9 +60,9 @@ struct CrisisResourcesView: View {
                     // Resources list
                     if isLoading && resources.isEmpty {
                         ProgressView()
-                            .padding(.top, 20)
+                            .padding(.top, SupportTheme.Spacing.l)
                     } else {
-                        VStack(spacing: 16) {
+                        VStack(spacing: SupportTheme.Spacing.m) {
                             ForEach(resources) { resource in
                                 CrisisResourceCard(resource: resource)
                             }
@@ -69,24 +71,27 @@ struct CrisisResourcesView: View {
                     }
 
                     // Additional support
-                    VStack(spacing: 12) {
+                    VStack(spacing: SupportTheme.Spacing.s) {
                         Text("Additional Support")
                             .font(.headline)
+                            .accessibilityAddTraits(.isHeader)
 
-                        Text("Remember that MindFriend is not a replacement for professional mental health care. If you need ongoing support, please consult a healthcare provider.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
+                        Text(
+                            "Remember that MindFriend is not a replacement for professional mental health care. If you need ongoing support, please consult a healthcare provider."
+                        )
+                        .font(.caption)
+                        .foregroundStyle(SupportTheme.textSecondary)
+                        .multilineTextAlignment(.center)
                     }
-                    .padding()
-                    .background(Color(.secondarySystemBackground))
-                    .cornerRadius(12)
+                    .supportCard()
                     .padding(.horizontal)
 
-                    Spacer(minLength: 32)
+                    Spacer(minLength: SupportTheme.Spacing.xl)
                 }
                 .padding(.vertical)
             }
+            .supportScreen()
+            .foregroundStyle(SupportTheme.textPrimary)
             .navigationTitle("Crisis Resources")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -122,18 +127,18 @@ struct CrisisResourcesResponse: Decodable {
 
 struct EmergencyBanner: View {
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: SupportTheme.Spacing.s) {
             HStack {
                 Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.white)
+                    .foregroundStyle(SupportTheme.textPrimary)
                 Text("Emergency?")
                     .fontWeight(.bold)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(SupportTheme.textPrimary)
             }
 
             Text("If you are in immediate danger, call your local emergency services (911 in the US)")
                 .font(.subheadline)
-                .foregroundStyle(.white.opacity(0.9))
+                .foregroundStyle(SupportTheme.textPrimary.opacity(0.9))
                 .multilineTextAlignment(.center)
 
             Button {
@@ -143,17 +148,17 @@ struct EmergencyBanner: View {
             } label: {
                 Text("Call Emergency Services")
                     .fontWeight(.semibold)
-                    .padding(.horizontal, 24)
-                    .padding(.vertical, 12)
-                    .background(.white)
+                    .padding(.horizontal, SupportTheme.Spacing.l)
+                    .padding(.vertical, SupportTheme.Spacing.s)
+                    .background(SupportTheme.textPrimary)
                     .foregroundStyle(.red)
-                    .cornerRadius(25)
+                    .cornerRadius(SupportTheme.controlRadius)
             }
         }
         .padding()
         .frame(maxWidth: .infinity)
         .background(Color.red)
-        .cornerRadius(16)
+        .cornerRadius(SupportTheme.controlRadius)
         .padding(.horizontal)
     }
 }
@@ -162,24 +167,25 @@ struct CrisisResourceCard: View {
     let resource: CrisisResource
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             HStack {
                 Text(resource.name)
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
                 Spacer()
                 Text(resource.countryCode)
                     .font(.caption)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Color(.secondarySystemBackground))
-                    .cornerRadius(8)
+                    .padding(.horizontal, SupportTheme.Spacing.xs)
+                    .padding(.vertical, SupportTheme.Spacing.xxs)
+                    .background(SupportTheme.surface)
+                    .cornerRadius(SupportTheme.controlRadius)
             }
 
             Text(resource.available)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
 
-            HStack(spacing: 12) {
+            HStack(spacing: SupportTheme.Spacing.s) {
                 if let phone = resource.phone {
                     Button {
                         if let url = URL(string: "tel://\(phone.replacingOccurrences(of: " ", with: ""))") {
@@ -189,7 +195,7 @@ struct CrisisResourceCard: View {
                         Label(phone, systemImage: "phone.fill")
                             .font(.subheadline)
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.supportSecondary)
                 }
 
                 if let sms = resource.sms {
@@ -201,7 +207,7 @@ struct CrisisResourceCard: View {
                         Label("Text", systemImage: "message.fill")
                             .font(.subheadline)
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.supportSecondary)
                 }
 
                 if let chat = resource.chat {
@@ -213,13 +219,11 @@ struct CrisisResourceCard: View {
                         Label("Chat", systemImage: "bubble.left.fill")
                             .font(.subheadline)
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.supportSecondary)
                 }
             }
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .cornerRadius(12)
+        .supportCard()
     }
 }
 
@@ -254,7 +258,7 @@ extension CrisisResource {
             sms: nil,
             chat: "https://www.iasp.info/resources/Crisis_Centres/",
             available: "Directory of crisis centers worldwide"
-        )
+        ),
     ]
 }
 

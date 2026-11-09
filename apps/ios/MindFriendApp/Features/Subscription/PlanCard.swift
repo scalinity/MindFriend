@@ -2,6 +2,7 @@ import SwiftUI
 
 /// Reusable plan selector card with pricing information
 struct PlanCard: View {
+    @Environment(\.dynamicTypeSize) private var typeSize
     let plan: SubscriptionPlan
     let isSelected: Bool
     let onSelect: () -> Void
@@ -22,80 +23,84 @@ struct PlanCard: View {
 
     var body: some View {
         Button(action: onSelect) {
-            HStack(spacing: 12) {
-                // Left side: Plan name and badge
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(spacing: 8) {
-                        Text(plan.name)
-                            .font(.headline)
-                            .foregroundStyle(.primary)
+            (typeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: SupportTheme.Spacing.s))
+                : AnyLayout(HStackLayout(spacing: SupportTheme.Spacing.s))) {
+                    // Left side: Plan name and badge
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
+                        HStack(spacing: SupportTheme.Spacing.xs) {
+                            Text(plan.name)
+                                .font(.headline)
+                                .accessibilityAddTraits(.isHeader)
+                                .foregroundStyle(SupportTheme.textPrimary)
 
-                        if isBestValue {
-                            Text("Best Value")
-                                .font(.caption2)
-                                .fontWeight(.semibold)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 2)
-                                .background(Color.green)
-                                .foregroundStyle(.white)
-                                .cornerRadius(4)
+                            if isBestValue {
+                                Text("Best Value")
+                                    .font(.caption2)
+                                    .fontWeight(.semibold)
+                                    .padding(.horizontal, SupportTheme.Spacing.xs)
+                                    .padding(.vertical, SupportTheme.Spacing.xxs)
+                                    .background(SupportTheme.field)
+                                    .foregroundStyle(SupportTheme.accent)
+                                    .cornerRadius(SupportTheme.controlRadius)
+                            }
+
+                            if let discount = discount, discount > 0 {
+                                Text("\(discount)% off")
+                                    .font(.caption2)
+                                    .fontWeight(.semibold)
+                                    .padding(.horizontal, SupportTheme.Spacing.xs)
+                                    .padding(.vertical, SupportTheme.Spacing.xxs)
+                                    .background(SupportTheme.field)
+                                    .foregroundStyle(SupportTheme.accent)
+                                    .cornerRadius(SupportTheme.controlRadius)
+                            }
                         }
 
-                        if let discount = discount, discount > 0 {
-                            Text("\(discount)% off")
-                                .font(.caption2)
-                                .fontWeight(.semibold)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 2)
-                                .background(Color.orange)
-                                .foregroundStyle(.white)
-                                .cornerRadius(4)
+                        if let description = plan.description {
+                            Text(description)
+                                .font(.caption)
+                                .foregroundStyle(SupportTheme.textSecondary)
                         }
                     }
 
-                    if let description = plan.description {
-                        Text(description)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                    Spacer()
+
+                    // Right side: Price information
+                    VStack(alignment: .trailing, spacing: SupportTheme.Spacing.xxs) {
+                        Text(displayPrice)
+                            .font(.title3)
+                            .accessibilityAddTraits(.isHeader)
+                            .fontWeight(.bold)
+                            .foregroundStyle(SupportTheme.textPrimary)
+
+                        if let monthly = monthlyEquivalent {
+                            Text(monthly)
+                                .font(.caption)
+                                .foregroundStyle(SupportTheme.textSecondary)
+                        } else {
+                            Text(plan.billingPeriod.displayName)
+                                .font(.caption)
+                                .foregroundStyle(SupportTheme.textSecondary)
+                        }
                     }
                 }
-
-                Spacer()
-
-                // Right side: Price information
-                VStack(alignment: .trailing, spacing: 4) {
-                    Text(displayPrice)
-                        .font(.title3)
-                        .fontWeight(.bold)
-                        .foregroundStyle(.primary)
-
-                    if let monthly = monthlyEquivalent {
-                        Text(monthly)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Text(plan.billingPeriod.displayName)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-            .padding()
-            .background(
-                isSelected
-                    ? Color.accentColor.opacity(0.1)
-                    : Color(.secondarySystemBackground)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(
-                        isSelected
-                            ? Color.accentColor
-                            : Color.clear,
-                        lineWidth: 2
-                    )
-            )
-            .cornerRadius(12)
+                .padding()
+                .background(
+                    isSelected
+                        ? SupportTheme.elevated
+                        : SupportTheme.surface
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: SupportTheme.cardRadius)
+                        .stroke(
+                            isSelected
+                                ? SupportTheme.accent
+                                : Color.clear,
+                            lineWidth: 2
+                        )
+                )
+                .cornerRadius(SupportTheme.controlRadius)
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
@@ -113,7 +118,7 @@ struct PlanCard: View {
 // TODO: Re-enable preview once BusinessModels.swift is added to project
 /*
 #Preview {
-    VStack(spacing: 16) {
+    VStack(spacing: SupportTheme.Spacing.m) {
         PlanCard(
             plan: .premiumMonthly,
             isSelected: false,

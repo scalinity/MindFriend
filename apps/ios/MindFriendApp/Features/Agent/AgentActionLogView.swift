@@ -19,16 +19,21 @@ struct AgentActionLogView: View {
                 } header: {
                     Text(formatDate(date))
                 }
+                .listRowBackground(SupportTheme.surface)
             }
 
             if viewModel.actions.isEmpty && !viewModel.isLoading {
                 ContentUnavailableView(
                     "No Actions Yet",
                     systemImage: "bell.slash",
-                    description: Text("The agent hasn't taken any actions yet. Enable the agent and it will start monitoring your patterns.")
+                    description: Text(
+                        "The agent hasn't taken any actions yet. Enable the agent and it will start monitoring your patterns."
+                    )
                 )
             }
         }
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle("Action History")
         .refreshable {
             await viewModel.loadActions(service: dependencies.agentService)
@@ -59,7 +64,7 @@ struct AgentActionLogView: View {
     }
 
     private var groupedActions: [(key: Date, value: [AgentAction])] {
-        let grouped = Dictionary(grouping: viewModel.actions) { action in
+        let grouped = Dictionary(grouping: viewModel.actions.filter { $0.actionType != .streakReminder }) { action in
             Calendar.current.startOfDay(for: action.createdAt)
         }
         return grouped.sorted { $0.key > $1.key }
@@ -84,34 +89,34 @@ struct AgentActionRow: View {
     let action: AgentAction
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: SupportTheme.Spacing.s) {
             Image(systemName: action.actionType.iconName)
                 .font(.title3)
                 .foregroundStyle(statusColor)
                 .frame(width: 32)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text(action.content.title)
                     .font(.subheadline)
                     .fontWeight(.medium)
 
                 Text(action.content.body)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .lineLimit(2)
 
-                HStack(spacing: 8) {
+                HStack(spacing: SupportTheme.Spacing.xs) {
                     Text(action.status.displayName)
                         .font(.caption2)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
+                        .padding(.horizontal, SupportTheme.Spacing.xs)
+                        .padding(.vertical, SupportTheme.Spacing.xxs)
                         .background(statusColor.opacity(0.2))
                         .foregroundStyle(statusColor)
                         .clipShape(Capsule())
 
                     Text(timeAgo)
                         .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
             }
 
@@ -120,25 +125,25 @@ struct AgentActionRow: View {
             if let score = action.effectivenessScore {
                 VStack {
                     Image(systemName: score > 0.5 ? "hand.thumbsup.fill" : "hand.thumbsdown.fill")
-                        .foregroundStyle(score > 0.5 ? .green : .orange)
+                        .foregroundStyle(score > 0.5 ? SupportTheme.accent : SupportTheme.accent)
                 }
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, SupportTheme.Spacing.xxs)
     }
 
     private var statusColor: Color {
         switch action.status {
         case .planned, .scheduled:
-            return .blue
+            return SupportTheme.accent
         case .delivered:
-            return .orange
+            return SupportTheme.accent
         case .opened:
-            return .yellow
+            return SupportTheme.Celebration.gold
         case .responded:
-            return .green
+            return SupportTheme.accent
         case .dismissed:
-            return .gray
+            return SupportTheme.textSecondary
         case .cancelled:
             return .red
         }
@@ -161,30 +166,33 @@ struct ActionDetailSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.l) {
                     // Header
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                         HStack {
                             Image(systemName: action.actionType.iconName)
                                 .font(.title2)
                             Text(action.actionType.displayName)
                                 .font(.headline)
+                                .accessibilityAddTraits(.isHeader)
                         }
 
                         Text(action.content.title)
                             .font(.title3)
+                            .accessibilityAddTraits(.isHeader)
                             .fontWeight(.semibold)
 
                         Text(action.content.body)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
 
                     Divider()
 
                     // Status Timeline
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                         Text("Status")
                             .font(.headline)
+                            .accessibilityAddTraits(.isHeader)
 
                         HStack {
                             ActionStatusBadge(status: action.status)
@@ -192,36 +200,38 @@ struct ActionDetailSheet: View {
                             if let delivered = action.deliveredAt {
                                 Text("Delivered: \(formatted(delivered))")
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(SupportTheme.textSecondary)
                             }
                         }
                     }
 
                     // Reasoning
                     if let reasoning = action.reasoning {
-                        VStack(alignment: .leading, spacing: 8) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                             HStack {
                                 Image(systemName: "brain")
                                 Text("Why did I get this?")
                                     .font(.headline)
+                                    .accessibilityAddTraits(.isHeader)
                             }
 
                             Text(reasoning)
                                 .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                         }
                         .padding()
-                        .background(Color(.systemGray6))
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .background(SupportTheme.field)
+                        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
                     }
 
                     // Feedback Section
                     if action.effectivenessScore == nil && action.status.isTerminal {
-                        VStack(alignment: .leading, spacing: 12) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                             Text("Was this helpful?")
                                 .font(.headline)
+                                .accessibilityAddTraits(.isHeader)
 
-                            HStack(spacing: 16) {
+                            HStack(spacing: SupportTheme.Spacing.m) {
                                 Button {
                                     onHelpful(true)
                                     dismiss()
@@ -232,8 +242,8 @@ struct ActionDetailSheet: View {
                                     }
                                     .frame(maxWidth: .infinity)
                                 }
-                                .buttonStyle(.bordered)
-                                .tint(.green)
+                                .buttonStyle(.supportSecondary)
+                                .tint(SupportTheme.accent)
 
                                 Button {
                                     onHelpful(false)
@@ -245,17 +255,18 @@ struct ActionDetailSheet: View {
                                     }
                                     .frame(maxWidth: .infinity)
                                 }
-                                .buttonStyle(.bordered)
-                                .tint(.orange)
+                                .buttonStyle(.supportSecondary)
+                                .tint(SupportTheme.accent)
                             }
                         }
                     }
 
                     // Quick Actions
                     if let quickActions = action.content.quickActions, !quickActions.isEmpty {
-                        VStack(alignment: .leading, spacing: 12) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                             Text("Quick Actions")
                                 .font(.headline)
+                                .accessibilityAddTraits(.isHeader)
 
                             ForEach(quickActions) { quickAction in
                                 Button {
@@ -267,7 +278,7 @@ struct ActionDetailSheet: View {
                                         Image(systemName: "chevron.right")
                                     }
                                 }
-                                .buttonStyle(.bordered)
+                                .buttonStyle(.supportSecondary)
                             }
                         }
                     }
@@ -276,6 +287,8 @@ struct ActionDetailSheet: View {
                 }
                 .padding()
             }
+            .supportScreen()
+            .foregroundStyle(SupportTheme.textPrimary)
             .navigationTitle("Action Details")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -303,8 +316,8 @@ struct ActionStatusBadge: View {
         Text(status.displayName)
             .font(.caption)
             .fontWeight(.medium)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
+            .padding(.horizontal, SupportTheme.Spacing.xs)
+            .padding(.vertical, SupportTheme.Spacing.xxs)
             .background(color.opacity(0.2))
             .foregroundStyle(color)
             .clipShape(Capsule())
@@ -312,11 +325,11 @@ struct ActionStatusBadge: View {
 
     private var color: Color {
         switch status {
-        case .planned, .scheduled: return .blue
-        case .delivered: return .orange
-        case .opened: return .yellow
-        case .responded: return .green
-        case .dismissed: return .gray
+        case .planned, .scheduled: return SupportTheme.accent
+        case .delivered: return SupportTheme.accent
+        case .opened: return SupportTheme.Celebration.gold
+        case .responded: return SupportTheme.accent
+        case .dismissed: return SupportTheme.textSecondary
         case .cancelled: return .red
         }
     }
