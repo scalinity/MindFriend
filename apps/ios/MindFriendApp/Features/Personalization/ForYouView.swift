@@ -82,7 +82,8 @@ struct ForYouView: View {
 
     private var anxietyEnergySection: some View {
         VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
-            HStack(spacing: SupportTheme.Spacing.m) {
+            // Stacked: each selector needs five 44-point targets, too wide to sit side by side on a phone.
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
                 // Anxiety Level
                 VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                     Label("Anxiety", systemImage: "brain.head.profile")
@@ -100,14 +101,12 @@ struct ForYouView: View {
                                 Image(systemName: level.icon)
                                     .foregroundStyle(anxietyLevel == level ? SupportTheme.accent : SupportTheme.textSecondary)
                                     .font(.caption)
-                                .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                                    .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                             }
                             .accessibilityLabel("Anxiety: \(level.displayName)")
                         }
                     }
                 }
-
-                Spacer()
 
                 // Energy Level
                 VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
@@ -126,7 +125,7 @@ struct ForYouView: View {
                                 Image(systemName: level.icon)
                                     .foregroundStyle(energyLevel == level ? SupportTheme.accent : SupportTheme.textSecondary)
                                     .font(.caption)
-                                .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                                    .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                             }
                             .accessibilityLabel("Energy: \(level.displayName)")
                         }

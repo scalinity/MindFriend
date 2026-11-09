@@ -185,13 +185,13 @@ struct ResultsView: View {
 
                             Text(assessmentDescription)
                                 .font(.system(.caption, design: .default).weight(.regular))
-                                .foregroundColor(SupportTheme.accent)
+                                .foregroundColor(SupportTheme.textSecondary)
                                 .lineSpacing(3)
                         }
                         .padding(SupportTheme.Spacing.s)
                         .background(
                             RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
-                                .fill(SupportTheme.accent)
+                                .fill(SupportTheme.surface)
                         )
                         .padding(.horizontal, SupportTheme.Spacing.m)
 

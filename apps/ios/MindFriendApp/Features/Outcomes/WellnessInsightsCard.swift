@@ -188,5 +188,5 @@ struct HelpfulActivityChip: View {
 
         Spacer()
     }
-    .background(SupportTheme.accent)
+    .background(SupportTheme.canvas)
 }

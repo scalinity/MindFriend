@@ -415,7 +415,7 @@ struct OutcomeGoalCard: View {
         .padding(SupportTheme.Spacing.s)
         .background(
             RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
-                .fill(SupportTheme.accent)
+                .fill(SupportTheme.surface)
         )
     }
 }

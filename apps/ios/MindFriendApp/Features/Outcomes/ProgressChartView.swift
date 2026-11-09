@@ -154,7 +154,7 @@ struct ProgressChartView: View {
                 .padding(SupportTheme.Spacing.s)
                 .background(
                     RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
-                        .fill(SupportTheme.accent)
+                        .fill(SupportTheme.surface)
                 )
                 .padding(.horizontal, SupportTheme.Spacing.m)
             } else {
@@ -175,7 +175,7 @@ struct ProgressChartView: View {
                 .frame(maxWidth: .infinity)
                 .background(
                     RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
-                        .fill(SupportTheme.accent)
+                        .fill(SupportTheme.surface)
                 )
                 .padding(.horizontal, SupportTheme.Spacing.m)
             }
