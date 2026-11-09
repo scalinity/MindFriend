@@ -1170,3 +1170,7 @@ DROP TRIGGER IF EXISTS guard_mentorship_message_client_update ON public.mentorsh
 CREATE TRIGGER guard_mentorship_message_client_update
     BEFORE UPDATE ON public.mentorship_messages
     FOR EACH ROW EXECUTE FUNCTION public.guard_mentorship_message_client_update();
+
+-- 11. Definer functions whose fixed search_path never reached production; the bodies already match.
+ALTER FUNCTION public.delete_old_nervous_system_data() SET search_path = public, pg_temp;
+ALTER FUNCTION public.update_intervention_efficacy() SET search_path = public, pg_temp;
