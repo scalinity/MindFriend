@@ -183,7 +183,7 @@ private struct PartnerBenefitRow: View {
             Image(systemName: icon)
                 .font(.title3)
                 .foregroundStyle(.tint)
-                .frame(width: 28)
+                .frame(minWidth: 28)
 
             VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text(title)

@@ -87,7 +87,7 @@ struct ProactiveSettingsView: View {
                             HStack(spacing: SupportTheme.Spacing.s) {
                                 Image(systemName: type.icon)
                                     .foregroundColor(type.color)
-                                    .frame(width: 24)
+                                    .frame(minWidth: 24)
                                 VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                                     Text(type.displayName)
                                     Text(type.description)

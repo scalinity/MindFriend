@@ -721,7 +721,7 @@ private struct SubscriptionFeatureRow: View {
         HStack(spacing: SupportTheme.Spacing.s) {
             Image(systemName: icon)
                 .foregroundStyle(included ? SupportTheme.accent : SupportTheme.textSecondary)
-                .frame(width: 24)
+                .frame(minWidth: 24)
 
             Text(title)
                 .font(.subheadline)

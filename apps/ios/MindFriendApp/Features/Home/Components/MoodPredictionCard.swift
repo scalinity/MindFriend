@@ -156,7 +156,7 @@ struct FactorRow: View {
             Image(systemName: factor.icon)
                 .font(.caption)
                 .foregroundColor(SupportTheme.accent)
-                .frame(width: 20)
+                .frame(minWidth: 20)
                 .accessibilityHidden(true)
 
             Text(factor.description)

@@ -31,7 +31,7 @@ struct HomeWelcomeStep: View {
                             Image(systemName: feature.icon)
                                 .font(.title3)
                                 .foregroundStyle(feature.color)
-                                .frame(width: 28)
+                                .frame(minWidth: 28)
 
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(feature.title)

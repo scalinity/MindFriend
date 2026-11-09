@@ -334,7 +334,7 @@ struct SettingsRow: View {
             Image(systemName: icon)
                 .font(.body)
                 .foregroundStyle(isDestructive ? .red : SupportTheme.textSecondary)
-                .frame(width: 24)
+                .frame(minWidth: 24)
 
             Text(title)
                 .foregroundStyle(isDestructive ? .red : SupportTheme.textPrimary)

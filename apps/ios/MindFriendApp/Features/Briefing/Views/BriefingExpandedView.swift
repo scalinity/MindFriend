@@ -182,7 +182,7 @@ struct BriefingExpandedView: View {
                 HStack(alignment: .top, spacing: SupportTheme.Spacing.s) {
                     Image(systemName: "calendar")
                         .foregroundColor(SupportTheme.accent)
-                        .frame(width: 20)
+                        .frame(minWidth: 20)
 
                     VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                         Text(event.title)

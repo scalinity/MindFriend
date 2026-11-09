@@ -14,7 +14,7 @@ struct AppearanceSettingsView: View {
                         HStack {
                             Image(systemName: theme.icon)
                                 .foregroundStyle(SupportTheme.accent)
-                                .frame(width: 24)
+                                .frame(minWidth: 24)
 
                             Text(theme.displayName)
                                 .foregroundStyle(SupportTheme.textPrimary)
@@ -51,7 +51,7 @@ struct AppearanceSettingsView: View {
                     HStack {
                         Image(systemName: "sparkles")
                             .foregroundStyle(SupportTheme.accent)
-                            .frame(width: 24)
+                            .frame(minWidth: 24)
 
                         VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                             Text("Ambient Themes")

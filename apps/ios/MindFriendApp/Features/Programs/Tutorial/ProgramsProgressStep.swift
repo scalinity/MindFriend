@@ -124,7 +124,7 @@ private struct ProgressFeature: View {
             Image(systemName: icon)
                 .font(.caption)
                 .foregroundStyle(SupportTheme.accent)
-                .frame(width: 20)
+                .frame(minWidth: 20)
 
             Text(text)
                 .font(.caption)

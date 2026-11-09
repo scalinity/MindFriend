@@ -409,7 +409,7 @@ struct SeasonRow: View {
     var body: some View {
         HStack {
             Image(systemName: seasonIcon)
-                .frame(width: 24)
+                .frame(minWidth: 24)
                 .foregroundStyle(SupportTheme.textSecondary)
 
             Text(name.capitalized)

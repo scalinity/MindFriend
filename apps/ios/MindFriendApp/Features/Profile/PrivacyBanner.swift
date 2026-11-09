@@ -36,7 +36,7 @@ private struct PrivacyPoint: View {
             Image(systemName: icon)
                 .font(.caption)
                 .foregroundColor(SupportTheme.accent)
-                .frame(width: 20)
+                .frame(minWidth: 20)
             Text(text)
                 .font(.caption)
         }

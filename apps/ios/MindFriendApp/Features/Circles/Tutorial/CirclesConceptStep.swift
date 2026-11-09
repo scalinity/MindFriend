@@ -84,7 +84,7 @@ private struct CircleBenefitRow: View {
         HStack(spacing: SupportTheme.Spacing.s) {
             Image(systemName: icon)
                 .foregroundStyle(color)
-                .frame(width: 20)
+                .frame(minWidth: 20)
             Text(text)
                 .font(.subheadline)
                 .foregroundStyle(SupportTheme.textSecondary)

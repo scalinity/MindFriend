@@ -352,7 +352,7 @@ private struct DataSourceToggle: View {
             HStack(spacing: 12) {
                 Image(systemName: icon)
                     .foregroundColor(iconColor)
-                    .frame(width: 24)
+                    .frame(minWidth: 24)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
@@ -440,7 +440,7 @@ private struct IconInfoRow: View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: icon)
                 .foregroundColor(iconColor)
-                .frame(width: 24)
+                .frame(minWidth: 24)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)

@@ -157,7 +157,7 @@ private struct ActionButton: View {
                 Image(systemName: iconForAction)
                     .font(.system(size: 18))
                     .foregroundStyle(isSelected ? .white : .accentColor)
-                    .frame(width: 24)
+                    .frame(minWidth: 24)
 
                 Text(label)
                     .font(.subheadline.weight(.medium))

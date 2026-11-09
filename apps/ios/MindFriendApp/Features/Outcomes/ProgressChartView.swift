@@ -321,7 +321,7 @@ struct InsightCard: View {
             Image(systemName: icon)
                 .font(.system(.subheadline).weight(.semibold))
                 .foregroundColor(color)
-                .frame(width: 24)
+                .frame(minWidth: 24)
 
             VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text(title)

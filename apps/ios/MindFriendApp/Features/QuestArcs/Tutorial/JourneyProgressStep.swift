@@ -117,7 +117,7 @@ struct JourneyProgressStep: View {
         HStack(spacing: SupportTheme.Spacing.s) {
             Image(systemName: icon)
                 .foregroundStyle(color)
-                .frame(width: 24)
+                .frame(minWidth: 24)
 
             Text(text)
                 .font(.subheadline)

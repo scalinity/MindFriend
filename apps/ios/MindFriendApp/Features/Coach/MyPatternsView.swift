@@ -191,7 +191,7 @@ struct MyPatternsView: View {
                                     HStack(alignment: .top, spacing: 12) {
                                         Image(systemName: "lightbulb.fill")
                                             .foregroundColor(.yellow)
-                                            .frame(width: 20)
+                                            .frame(minWidth: 20)
 
                                         VStack(alignment: .leading, spacing: 4) {
                                             Text("Keep an eye on your top patterns")
@@ -206,7 +206,7 @@ struct MyPatternsView: View {
                                     HStack(alignment: .top, spacing: 12) {
                                         Image(systemName: "info.circle.fill")
                                             .foregroundColor(.blue)
-                                            .frame(width: 20)
+                                            .frame(minWidth: 20)
 
                                         VStack(alignment: .leading, spacing: 4) {
                                             Text("No patterns detected yet")
@@ -459,7 +459,7 @@ struct DistortionDetailView: View {
                             HStack(alignment: .top, spacing: 12) {
                                 Image(systemName: "lightbulb.fill")
                                     .foregroundColor(.yellow)
-                                    .frame(width: 20)
+                                    .frame(minWidth: 20)
 
                                 Text(template)
                                     .font(.body)

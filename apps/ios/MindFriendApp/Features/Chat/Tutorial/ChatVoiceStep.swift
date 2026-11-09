@@ -54,7 +54,7 @@ struct ChatVoiceStep: View {
                             Image(systemName: feature.icon)
                                 .font(.body)
                                 .foregroundStyle(feature.color)
-                                .frame(width: 24)
+                                .frame(minWidth: 24)
 
                             Text(feature.text)
                                 .font(.subheadline)

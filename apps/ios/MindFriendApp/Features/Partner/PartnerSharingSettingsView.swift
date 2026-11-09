@@ -52,7 +52,7 @@ struct PartnerSharingSettingsView: View {
                     HStack {
                         Image(systemName: "face.smiling")
                             .foregroundStyle(SupportTheme.textSecondary)
-                            .frame(width: 28)
+                            .frame(minWidth: 28)
                         Text("Their mood")
                         Spacer()
                         Text(info.isSharingMood ? "Shared" : "Not shared")
@@ -63,7 +63,7 @@ struct PartnerSharingSettingsView: View {
                     HStack {
                         Image(systemName: "star")
                             .foregroundStyle(SupportTheme.textSecondary)
-                            .frame(width: 28)
+                            .frame(minWidth: 28)
                         Text("Their exercises")
                         Spacer()
                         Text(info.isSharingExercises ? "Shared" : "Not shared")
@@ -122,7 +122,7 @@ struct SharingToggleRow: View {
         HStack(spacing: SupportTheme.Spacing.s) {
             Image(systemName: icon)
                 .foregroundStyle(.tint)
-                .frame(width: 28)
+                .frame(minWidth: 28)
 
             VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text(title)

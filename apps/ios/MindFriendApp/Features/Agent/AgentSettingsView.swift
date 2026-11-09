@@ -80,7 +80,7 @@ struct AgentSettingsView: View {
                                 HStack {
                                     Image(systemName: signalType.iconName)
                                         .foregroundStyle(SupportTheme.accent)
-                                        .frame(width: 24)
+                                        .frame(minWidth: 24)
 
                                     Text(signalType.displayName)
                                 }
