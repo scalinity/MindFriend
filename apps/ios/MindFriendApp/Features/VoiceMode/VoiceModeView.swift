@@ -1,63 +1,74 @@
 import SwiftUI
+import UIKit
 import Supabase
 
 // MARK: - Voice Mode View
 
-/// Full-screen voice conversation interface with dynamic orb visualization
-/// Implements advanced turn-taking, barge-in support, and real-time captions
+/// Full-screen voice conversation interface with dynamic orb visualization.
+///
+/// Nothing here connects, prepares a session or starts the microphone until the person taps
+/// "Start voice". Without support-session access the view shows a truthful unavailable state and
+/// offers text; there is no legacy fallback. Transcript persistence is owned by the voice service
+/// (typed final events through `VoiceSupportAccess`), not by this view.
 struct VoiceModeView: View {
 
     // MARK: - Environment
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.openURL) private var openURL
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @EnvironmentObject private var container: DependencyContainer
     @EnvironmentObject private var appState: AppState
 
     // MARK: - State
 
     @StateObject private var voiceService: GrokVoiceService
+    @StateObject private var voiceCoordinator = VoiceCoordinator()
     @State private var stateMachine = VoiceStateMachine()
 
     @State private var showSettings = false
     @State private var showUpgradeSheet = false
     @State private var errorMessage: String?
     @State private var showError = false
-
-    // Emotion analysis setting (persisted) - uses Accelerate/vDSP for fast FFT
-    @AppStorage("voiceEmotionAnalysisEnabled") private var emotionAnalysisEnabled = true
-
-    // Transcript state
-    @State private var userTranscript = ""
-    @State private var assistantTranscript = ""
+    @State private var showMicrophoneSettings = false
     @State private var showCaptions = true
+    @State private var startTask: Task<Void, Never>?
+    @State private var isStartingVoice = false
+    /// Owns the End / text-switch decision, bound to an exit generation (see `VoiceLeaveController`).
+    @StateObject private var leaveController = VoiceLeaveController()
 
-    // Conversation persistence state
-    @State private var userMessages: [String] = []
-    @State private var assistantMessages: [String] = []
-    @State private var didPersist = false
-
-    // Animation state
-    @State private var isAnimating = false
-
-    // Emotion state
-    @State private var showEmotionDetail = false
-
-    // MARK: - Callbacks
+    // MARK: - Callbacks / access
 
     private let onDismiss: (() -> Void)?
     private let onSwitchToText: (() -> Void)?
+    private let supportAccess: (any VoiceSupportAccess)?
 
     // MARK: - Initialization
 
     init(
         supabase: SupabaseClient,
         onDismiss: (() -> Void)? = nil,
-        onSwitchToText: (() -> Void)? = nil
+        onSwitchToText: (() -> Void)? = nil,
+        supportAccess: (any VoiceSupportAccess)? = nil
     ) {
         _voiceService = StateObject(wrappedValue: GrokVoiceService(supabase: supabase))
         self.onDismiss = onDismiss
         self.onSwitchToText = onSwitchToText
+        self.supportAccess = supportAccess
+    }
+
+    private enum Mode {
+        case unavailable
+        case ready
+        case starting
+        case active
+    }
+
+    private var mode: Mode {
+        if supportAccess == nil { return .unavailable }
+        if isStartingVoice || voiceService.connectionState == .connecting { return .starting }
+        if voiceService.connectionState.isConnected { return .active }
+        return .ready
     }
 
     // MARK: - Body
@@ -90,27 +101,39 @@ struct VoiceModeView: View {
                     topBar
                         .padding(.top, geometry.safeAreaInsets.top > 0 ? 0 : 16)
 
-                    Spacer()
-
-                    // Captions area
-                    if showCaptions {
-                        captionsView
-                            .padding(.horizontal, 24)
-                            .padding(.bottom, 20)
+                    switch mode {
+                    case .unavailable:
+                        ScrollView {
+                            VoiceUnavailablePanel(onUseText: { leave(reason: .switchedToText) })
+                                .padding(.top, 48)
+                                .padding(.bottom, 40)
+                        }
+                    case .ready:
+                        ScrollView {
+                            VStack(spacing: 20) {
+                                VoiceTranscriptSaveBanner(
+                                    unsaved: voiceService.unsavedTranscriptCount,
+                                    rejected: voiceService.rejectedTranscriptCount,
+                                    canLeave: leaveController.isHolding,
+                                    onRetry: retrySaving,
+                                    onLeaveWithoutSaving: discardAndLeave
+                                )
+                                VoiceStartPanel(
+                                    preview: supportAccess?.preview() ?? VoiceSupportPreview(scope: .conversationOnly),
+                                    notice: stopNotice,
+                                    isStarting: false,
+                                    onStart: startVoice,
+                                    onUseText: { leave(reason: .switchedToText) }
+                                )
+                            }
+                            .padding(.top, 32)
+                            .padding(.bottom, 40)
+                        }
+                    case .starting:
+                        startingContent
+                    case .active:
+                        activeContent(size: geometry.size, safeBottom: geometry.safeAreaInsets.bottom)
                     }
-
-                    // Central orb
-                    orbSection(size: min(geometry.size.width * 0.55, 280))
-
-                    Spacer()
-
-                    // Status text
-                    statusView
-                        .padding(.bottom, 24)
-
-                    // Bottom controls
-                    bottomControls
-                        .padding(.bottom, geometry.safeAreaInsets.bottom > 0 ? 24 : 40)
                 }
             }
         }
@@ -122,19 +145,13 @@ struct VoiceModeView: View {
         .sheet(isPresented: $showUpgradeSheet) {
             SubscriptionView()
         }
-        .sheet(isPresented: $showEmotionDetail) {
-            EmotionDetailSheet(
-                currentEmotion: voiceService.currentEmotion,
-                emotionHistory: voiceService.emotionHistory,
-                isPresented: $showEmotionDetail,
-                onDisableEmotions: {
-                    emotionAnalysisEnabled = false  // Persist the setting
-                    voiceService.setEmotionAnalysisEnabled(false)
-                }
-            )
-        }
         .alert("Voice Error", isPresented: $showError) {
             Button("OK", role: .cancel) {}
+            if showMicrophoneSettings {
+                Button("Open Settings") {
+                    if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
+                }
+            }
             if shouldShowUpgradeButton {
                 Button("Upgrade") {
                     showUpgradeSheet = true
@@ -144,53 +161,64 @@ struct VoiceModeView: View {
             Text(errorMessage ?? "An error occurred")
         }
         .task {
-            await startVoiceSession()
-        }
-        .onDisappear {
-            Task {
-                await endVoiceSession()
+            // Wiring only. Nothing connects on presentation: the person must tap Start voice.
+            voiceCoordinator.onStateEvent = { event in
+                _ = stateMachine.send(event)
             }
-        }
-        .onChange(of: voiceService.connectionState) { _, newState in
-            updateStateMachineFromService(newState)
-        }
-        .onChange(of: voiceService.isUserSpeaking) { oldValue, isUserSpeaking in
-            if isUserSpeaking {
-                _ = stateMachine.send(.speechStart)
-            } else {
-                _ = stateMachine.send(.speechEnd)
+            voiceCoordinator.onQuotaExceeded = {
+                showUpgradeSheet = true
             }
-        }
-        .onChange(of: voiceService.isSpeaking) { oldValue, isSpeaking in
-            if isSpeaking {
-                _ = stateMachine.send(.serverAudioChunk(Data()))
-            } else {
-                _ = stateMachine.send(.audioPlaybackFinished)
-                // Capture completed assistant response when AI finishes speaking
-                if oldValue && !isSpeaking {
-                    captureAssistantResponse()
+            voiceService.delegate = voiceCoordinator
+            leaveController.exitScreen = { exit in
+                dismiss()
+                switch exit {
+                case .close: onDismiss?()
+                case .text: onSwitchToText?()
                 }
             }
         }
-        .onChange(of: voiceService.transcribedText) { _, newText in
-            // Only update when there's actual content - don't clear when service resets
-            // This preserves the transcript for capture even after response.done clears it
-            if !newText.isEmpty {
-                assistantTranscript = newText
+        .task {
+            // Any originating owner / privacy / context change retires pending leave decisions, even
+            // after End has already torn the session's own monitoring down.
+            if let stream = supportAccess?.invalidations() {
+                await leaveController.retireOnInvalidation(from: stream)
             }
         }
-        .onChange(of: voiceService.userTranscribedText) { oldValue, newText in
-            // Capture user message when transcription arrives (async from xAI)
-            // This is the only reliable way to get user transcripts since
-            // transcription arrives AFTER the user stops speaking
-            if !newText.isEmpty && newText != oldValue {
-                captureUserMessage(transcript: newText)
+        .onDisappear {
+            // Safety net only. Correctness does not depend on this callback.
+            startTask?.cancel()
+            voiceService.stopNow(.userEnded)
+        }
+        .onChange(of: scenePhase) { _, phase in
+            // Background or lock stops capture. Returning shows a paused state, never a live mic.
+            if phase == .background {
+                startTask?.cancel()
+                voiceService.stopNow(.appBackgrounded)
             }
         }
-        .onChange(of: voiceService.isIdleDisconnected) { _, isIdleDisconnected in
-            if isIdleDisconnected {
-                _ = stateMachine.send(.idleTimeoutReached)
+        .onChange(of: appState.accountEpoch) { _, _ in
+            handleAccountChange()
+        }
+        .onChange(of: appState.currentUser?.id) { _, _ in
+            handleAccountChange()
+        }
+        .onChange(of: voiceService.lastStopReason) { _, reason in
+            leaveController.noteStop(reason)
+            guard reason != nil else { return }
+            stateMachine.reset()
+            if let message = reason?.statusMessage {
+                VoiceAccessibility.announce(message)
+            } else {
+                VoiceAccessibility.announce("Voice stopped. Microphone is off.")
             }
+        }
+        .onChange(of: voiceService.isMuted) { _, muted in
+            syncMuteIntoStateMachine(muted)
+        }
+        .onChange(of: voiceService.hasUnresolvedTranscript) { _, _ in
+            // Pending, in-flight AND rejected finals all hold the screen. A pending final turning into
+            // a rejected one during End must not release the hold.
+            leaveController.autoLeaveIfResolved(service: voiceService)
         }
     }
 
@@ -215,92 +243,130 @@ struct VoiceModeView: View {
         HStack {
             // Close button
             Button {
-                Task {
-                    await endVoiceSession()
-                    dismiss()
-                    onDismiss?()
-                }
+                leave(reason: .userEnded)
             } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 18, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.7))
+                    .foregroundStyle(.white.opacity(0.85))
                     .frame(width: 44, height: 44)
                     .background(Color.white.opacity(0.1))
                     .clipShape(Circle())
             }
+            .accessibilityLabel("Close voice")
 
             Spacer()
 
-            // Captions toggle
-            Button {
-                withAnimation(.spring(response: 0.3)) {
-                    showCaptions.toggle()
+            if mode == .active || mode == .ready {
+                // Captions toggle
+                Button {
+                    withAnimation(reduceMotion ? nil : .spring(response: 0.3)) {
+                        showCaptions.toggle()
+                    }
+                } label: {
+                    Image(systemName: showCaptions ? "captions.bubble.fill" : "captions.bubble")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundStyle(showCaptions ? .white : .white.opacity(0.7))
+                        .frame(width: 44, height: 44)
+                        .background(Color.white.opacity(showCaptions ? 0.2 : 0.1))
+                        .clipShape(Circle())
                 }
-            } label: {
-                Image(systemName: showCaptions ? "captions.bubble.fill" : "captions.bubble")
-                    .font(.system(size: 18, weight: .medium))
-                    .foregroundStyle(showCaptions ? .white : .white.opacity(0.5))
-                    .frame(width: 44, height: 44)
-                    .background(Color.white.opacity(showCaptions ? 0.2 : 0.1))
-                    .clipShape(Circle())
-            }
-            .accessibilityLabel(showCaptions ? "Hide captions" : "Show captions")
+                .accessibilityLabel(showCaptions ? "Hide captions" : "Show captions")
 
-            // Voice selection
-            Button {
-                showSettings = true
-            } label: {
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(voiceColor(voiceService.currentVoice))
-                        .frame(width: 10, height: 10)
-                    Text(voiceService.currentVoice.displayName)
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.8))
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(Color.white.opacity(0.1))
-                .clipShape(Capsule())
-            }
-            .accessibilityLabel("Voice: \(voiceService.currentVoice.displayName). Tap to change.")
-
-            // Settings
-            Button {
-                showSettings = true
-            } label: {
-                Image(systemName: "gearshape")
-                    .font(.system(size: 18, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.7))
-                    .frame(width: 44, height: 44)
+                // Voice selection
+                Button {
+                    showSettings = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(voiceColor(voiceService.currentVoice))
+                            .frame(width: 10, height: 10)
+                        Text(voiceService.currentVoice.displayName)
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.white.opacity(0.9))
+                    }
+                    .padding(.horizontal, 14)
+                    .frame(minHeight: 44)
                     .background(Color.white.opacity(0.1))
-                    .clipShape(Circle())
+                    .clipShape(Capsule())
+                }
+                .accessibilityLabel("Voice: \(voiceService.currentVoice.displayName). Tap to change.")
+
+                // Settings
+                Button {
+                    showSettings = true
+                } label: {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.85))
+                        .frame(width: 44, height: 44)
+                        .background(Color.white.opacity(0.1))
+                        .clipShape(Circle())
+                }
+                .accessibilityLabel("Voice settings")
             }
         }
         .padding(.horizontal, 20)
         .padding(.top, 12)
     }
 
+    // MARK: - Modes
+
+    private var startingContent: some View {
+        VStack(spacing: 20) {
+            Spacer()
+            ProgressView()
+                .controlSize(.large)
+                .tint(.white)
+            Text("Starting voice…")
+                .font(.title3.weight(.medium))
+                .foregroundStyle(.white)
+            Text("The microphone turns on once the connection is ready.")
+                .font(.footnote)
+                .foregroundStyle(.white.opacity(0.75))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+            Button("Cancel") {
+                startTask?.cancel()
+                leave(reason: .userEnded, dismissWhenDone: false)
+            }
+            .buttonStyle(.bordered)
+            .tint(.white)
+            .controlSize(.large)
+            Spacer()
+        }
+        .accessibilityElement(children: .contain)
+    }
+
+    private func activeContent(size: CGSize, safeBottom: CGFloat) -> some View {
+        VStack(spacing: 0) {
+            Spacer()
+
+            // Captions area
+            if showCaptions {
+                captionsView
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 20)
+            }
+
+            // Central orb
+            orbSection(size: min(size.width * 0.55, 280))
+
+            Spacer()
+
+            // Status text
+            statusView
+                .padding(.bottom, 24)
+
+            // Bottom controls
+            bottomControls
+                .padding(.bottom, safeBottom > 0 ? 24 : 40)
+        }
+    }
+
     // MARK: - Captions View
 
     private var captionsView: some View {
-        VStack(spacing: 12) {
-            if !assistantTranscript.isEmpty {
-                Text(assistantTranscript)
-                    .font(.body)
-                    .foregroundStyle(.white.opacity(0.9))
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 16)
-                    .background(
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(Color.white.opacity(0.1))
-                    )
-                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
-            }
-        }
-        .animation(.spring(response: 0.3), value: assistantTranscript)
-        .frame(minHeight: 60)
+        VoiceCaptionView(caption: voiceService.caption, reduceMotion: reduceMotion)
     }
 
     // MARK: - Orb Section
@@ -313,34 +379,15 @@ struct VoiceModeView: View {
             reducedMotion: reduceMotion
         )
 
-        return ZStack {
-            OrbContainerView(
-                config: orbConfig,
-                size: size,
-                onTap: {
-                    handleOrbTap()
-                }
-            )
-
-            // Emotion badge overlay (positioned bottom-right of orb)
-            // Use emotionHistory.last directly from service instead of duplicate state
-            if let snapshot = voiceService.emotionHistory.last {
-                VStack {
-                    Spacer()
-                    HStack {
-                        Spacer()
-                        EmotionBadge(emotion: snapshot) {
-                            showEmotionDetail = true
-                        }
-                        .offset(x: 8, y: 8)
-                    }
-                }
-                .frame(width: size, height: size)
+        return OrbContainerView(
+            config: orbConfig,
+            size: size,
+            onTap: {
+                handleOrbTap()
             }
-        }
+        )
         .shadow(color: orbShadowColor.opacity(0.4), radius: 40, x: 0, y: 20)
-        .animation(.spring(response: 0.4), value: stateMachine.state)
-        .animation(.spring(response: 0.3), value: voiceService.emotionHistory.last?.emotion)
+        .animation(reduceMotion ? nil : .spring(response: 0.4), value: stateMachine.state)
     }
 
     private var orbShadowColor: Color {
@@ -364,47 +411,44 @@ struct VoiceModeView: View {
 
     private var statusView: some View {
         VStack(spacing: 8) {
+            // Explicit capture indicator: text and icon, never only motion or color.
+            VoiceCaptureIndicator(isListening: voiceService.isListening, isMuted: voiceService.isMuted)
+
             // Connection status indicator
             HStack(spacing: 6) {
                 Circle()
                     .fill(connectionStatusColor)
                     .frame(width: 8, height: 8)
+                    .accessibilityHidden(true)
 
                 Text(connectionStatusText)
                     .font(.subheadline)
-                    .foregroundStyle(.white.opacity(0.6))
+                    .foregroundStyle(.white.opacity(0.75))
             }
 
             // State status
             Text(stateMachine.state.statusText)
                 .font(.title3.weight(.medium))
-                .foregroundStyle(.white.opacity(0.9))
+                .foregroundStyle(.white.opacity(0.95))
 
             Text("Up to two minutes per session")
                 .font(.caption)
-                .foregroundStyle(.white.opacity(0.6))
+                .foregroundStyle(.white.opacity(0.75))
             Text(voiceService.isPremium ? "Unlimited monthly voice minutes" :
                 String(format: "%.1f of 3 free monthly voice minutes remaining", voiceService.minutesRemaining))
                 .font(.caption)
-                .foregroundStyle(.white.opacity(0.6))
+                .foregroundStyle(.white.opacity(0.75))
         }
+        .padding(.horizontal, 24)
     }
 
     private var connectionStatusColor: Color {
         switch voiceService.connectionState {
         case .connected:
-            // Check if we're idle disconnected (paused state)
-            if voiceService.isIdleDisconnected {
-                return .blue.opacity(0.5)
-            }
             return .green
         case .connecting, .reconnecting:
             return .orange
         case .disconnected:
-            // Check if we're in paused state (idle disconnect with mic still listening)
-            if voiceService.isIdleDisconnected {
-                return .blue.opacity(0.5)
-            }
             return .gray
         case .error:
             return .red
@@ -416,17 +460,13 @@ struct VoiceModeView: View {
         case .connected:
             return "Connected"
         case .connecting:
-            return "Connecting..."
+            return "Connecting…"
         case .reconnecting:
-            return "Reconnecting..."
+            return "Reconnecting…"
         case .disconnected:
-            // Check if we're in paused state
-            if voiceService.isIdleDisconnected {
-                return "Paused"
-            }
             return "Disconnected"
-        case .error(let message):
-            return "Error: \(message)"
+        case .error:
+            return "Voice stopped"
         }
     }
 
@@ -434,33 +474,24 @@ struct VoiceModeView: View {
 
     private var bottomControls: some View {
         HStack(spacing: 32) {
-            // Mute button
+            // Mute button (the service owns the mute choice)
             Button {
-                _ = stateMachine.send(.toggleMute)
-                if stateMachine.isMuted {
-                    voiceService.stopListening()
-                } else {
-                    try? voiceService.startListening()
-                }
+                toggleMute()
             } label: {
-                Image(systemName: stateMachine.isMuted ? "mic.slash.fill" : "mic.fill")
+                Image(systemName: voiceService.isMuted ? "mic.slash.fill" : "mic.fill")
                     .font(.system(size: 24, weight: .medium))
-                    .foregroundStyle(stateMachine.isMuted ? .red : .white)
+                    .foregroundStyle(voiceService.isMuted ? .red : .white)
                     .frame(width: 60, height: 60)
                     .background(
                         Circle()
-                            .fill(stateMachine.isMuted ? Color.red.opacity(0.2) : Color.white.opacity(0.15))
+                            .fill(voiceService.isMuted ? Color.red.opacity(0.2) : Color.white.opacity(0.15))
                     )
             }
-            .accessibilityLabel(stateMachine.isMuted ? "Unmute microphone" : "Mute microphone")
+            .accessibilityLabel(voiceService.isMuted ? "Unmute microphone" : "Mute microphone")
 
             // End call button
             Button {
-                Task {
-                    await endVoiceSession()
-                    dismiss()
-                    onDismiss?()
-                }
+                leave(reason: .userEnded)
             } label: {
                 Image(systemName: "phone.down.fill")
                     .font(.system(size: 28, weight: .medium))
@@ -476,15 +507,11 @@ struct VoiceModeView: View {
 
             // Switch to text button
             Button {
-                Task {
-                    await endVoiceSession()
-                    dismiss()
-                    onSwitchToText?()
-                }
+                leave(reason: .switchedToText)
             } label: {
                 Image(systemName: "keyboard")
                     .font(.system(size: 24, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.8))
+                    .foregroundStyle(.white.opacity(0.9))
                     .frame(width: 60, height: 60)
                     .background(
                         Circle()
@@ -492,115 +519,116 @@ struct VoiceModeView: View {
                     )
             }
             .accessibilityLabel("Switch to text chat")
+            .accessibilityHint("Stops the microphone and returns to this conversation.")
         }
     }
 
     // MARK: - Actions
 
-    private func startVoiceSession() async {
+    /// Explicit "Start voice": the only place a session is prepared or connected from this view.
+    private func startVoice() {
+        guard let supportAccess, startTask == nil else { return }
+        // A new explicit Start makes every older End / text-switch decision obsolete: its continuation
+        // can no longer dismiss this screen or show a hold for a session that has since been replaced.
+        leaveController.startBegan()
+        stateMachine.reset()
         _ = stateMachine.send(.tapStart)
+        _ = stateMachine.send(.micPermissionGranted)
+        isStartingVoice = true
+        startTask = Task { @MainActor in
+            defer {
+                startTask = nil
+                isStartingVoice = false
+            }
+            do {
+                try await voiceService.startVoice(access: supportAccess, startMuted: false)
+                _ = stateMachine.send(.connected)
+                VoiceAccessibility.announce("Voice started. Microphone is on.")
+            } catch {
+                handleStartError(error)
+            }
+        }
+    }
 
-        // Enable emotion analysis based on user preference
-        #if DEBUG
-        print("[VoiceMode] Starting with emotionAnalysisEnabled=\(emotionAnalysisEnabled)")
-        #endif
-        voiceService.setEmotionAnalysisEnabled(emotionAnalysisEnabled)
+    /// End, then leave. Capture is already stopped when `end` starts waiting, and the wait for remote
+    /// work is bounded, so a suspended server call cannot hold this screen. The decision that follows is
+    /// bound to an exit generation and ignored if a newer Start has begun in the meantime.
+    private func leave(reason: VoiceStopReason, dismissWhenDone: Bool = true) {
+        startTask?.cancel()
+        Task { @MainActor in
+            await leaveController.leave(reason: reason, dismissWhenDone: dismissWhenDone, service: voiceService)
+        }
+    }
 
+    private func retrySaving() {
+        Task { @MainActor in
+            await leaveController.retry(service: voiceService)
+        }
+    }
+
+    /// The explicit, separate decision to give up finals that were not acknowledged.
+    private func discardAndLeave() {
+        leaveController.discardAndLeave(service: voiceService)
+    }
+
+    private func handleAccountChange() {
+        // Do not depend on disappearance: stop capture now, before anything else can run.
+        startTask?.cancel()
+        leaveController.invalidate()
+        voiceService.stopNow(.accountChanged)
+        dismiss()
+        onDismiss?()
+    }
+
+    private func toggleMute() {
         do {
-            try await voiceService.connect(startMuted: stateMachine.isMuted)
-            _ = stateMachine.send(.connected)
-        } catch is CancellationError {
-            // Session end and view dismissal already update the connection state.
-            return
-        } catch let error as VoiceError {
-            handleVoiceError(error)
+            try voiceService.setMuted(!voiceService.isMuted)
         } catch {
             errorMessage = error.localizedDescription
             showError = true
-            _ = stateMachine.send(.serverError(error.localizedDescription))
         }
     }
 
-    private func endVoiceSession() async {
-        _ = stateMachine.send(.tapEnd)
-        // Capture any in-progress transcripts before disconnecting
-        // User messages are captured when transcription arrives via onChange,
-        // but capture the current one in case it hasn't been processed yet
-        let currentUserTranscript = voiceService.userTranscribedText
-        if !currentUserTranscript.isEmpty {
-            captureUserMessage(transcript: currentUserTranscript)
-        }
-        captureAssistantResponse()
-        await voiceService.disconnect()
-        // Persist the conversation to database
-        await persistConversation()
+    /// The service owns the mute choice; the orb state machine only mirrors it.
+    private func syncMuteIntoStateMachine(_ muted: Bool) {
+        guard stateMachine.isMuted != muted else { return }
+        _ = stateMachine.send(.toggleMute)
     }
 
     private func handleOrbTap() {
-        // Handle tap based on current state
+        // Tapping never starts voice. While the assistant is responding it interrupts playback only;
+        // that never changes the mute choice or starts the microphone.
         switch stateMachine.state {
         case .speaking, .thinking, .processing:
-            // Manual interrupts disabled - only automatic barge-in via speech detection
-            // Tapping during AI speech has no effect
-            break
-
-        case .idle:
-            // Start session
-            Task {
-                await startVoiceSession()
-            }
-
-        case .idleDisconnected:
-            // Tapping while paused triggers reconnection (same as speaking)
-            _ = stateMachine.send(.tapStart)
-
-        case .error:
-            // Retry connection
-            Task {
-                await startVoiceSession()
-            }
-
-        case .ended:
-            // Restart session
-            Task {
-                await startVoiceSession()
-            }
-
+            _ = stateMachine.send(.tapInterrupt)
+            voiceService.interruptPlayback()
         default:
             break
         }
     }
 
-    private func handleVoiceError(_ error: VoiceError) {
+    private func handleStartError(_ error: Error) {
+        stateMachine.reset()
+        if error is CancellationError { return }
         errorMessage = error.localizedDescription
-        showError = true
-
-        if case .quotaExceeded = error {
-            _ = stateMachine.send(.quotaExceeded)
-            showUpgradeSheet = true
-        } else {
-            _ = stateMachine.send(.serverError(error.localizedDescription))
-        }
-    }
-
-    private func updateStateMachineFromService(_ connectionState: GrokVoiceService.ConnectionState) {
-        switch connectionState {
-        case .connected:
-            _ = stateMachine.send(.connected)
-        case .connecting:
-            // Already in connecting state from tapStart
-            break
-        case .reconnecting:
-            _ = stateMachine.send(.disconnected)
-        case .disconnected:
-            _ = stateMachine.send(.disconnected)
-        case .error(let message):
-            _ = stateMachine.send(.serverError(message))
-            errorMessage = message
-            if message.lowercased().contains("quota") {
+        showMicrophoneSettings = false
+        if let voiceError = error as? VoiceError {
+            switch voiceError {
+            case .quotaExceeded:
                 showUpgradeSheet = true
+            case .microphonePermissionDenied:
+                showMicrophoneSettings = true
+            default:
+                break
             }
         }
+        showError = true
+    }
+
+    /// Plain-language reason the last session stopped, with an explicit way back in.
+    private var stopNotice: String? {
+        if case .error(let message) = voiceService.connectionState { return message }
+        return voiceService.lastStopReason?.statusMessage
     }
 
     private var shouldShowUpgradeButton: Bool {
@@ -615,94 +643,6 @@ struct VoiceModeView: View {
         case .sal: return .purple
         case .eve: return .orange
         case .leo: return .green
-        }
-    }
-
-    // MARK: - Conversation Persistence
-
-    /// Captures a user message from transcription
-    /// Called when transcription arrives from xAI (asynchronously after user stops speaking)
-    private func captureUserMessage(transcript: String) {
-        let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        // Avoid duplicates - xAI sometimes sends the same transcript multiple times
-        if userMessages.last != trimmed {
-            userMessages.append(trimmed)
-            Log.voice.debug("[VoiceMode] Captured user message: \(trimmed.prefix(50))...")
-        }
-    }
-
-    /// Captures the current assistant transcript as a completed response
-    /// Called when the AI finishes speaking (isSpeaking goes from true to false)
-    private func captureAssistantResponse() {
-        let trimmed = assistantTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        // Avoid duplicates
-        if assistantMessages.last != trimmed {
-            assistantMessages.append(trimmed)
-            Log.voice.debug("[VoiceMode] Captured assistant message: \(trimmed.prefix(50))...")
-        }
-    }
-
-    /// Persists the voice conversation to the database as a text chat
-    private func persistConversation() async {
-        guard !didPersist else { return }
-        didPersist = true
-
-        // Need at least one message to persist
-        guard !userMessages.isEmpty || !assistantMessages.isEmpty else {
-            Log.voice.debug("[VoiceMode] No messages to persist - userMessages: \(userMessages.count), assistantMessages: \(assistantMessages.count)")
-            return
-        }
-
-        do {
-            // Create a new conversation
-            let conversation = try await container.chatService.createConversation()
-            Log.voice.debug("[VoiceMode] Created conversation: \(conversation.id)")
-
-            // Interleave user and assistant messages (user speaks, then assistant responds)
-            let maxCount = max(userMessages.count, assistantMessages.count)
-            for i in 0..<maxCount {
-                // User message first (if exists)
-                if i < userMessages.count {
-                    _ = try await container.chatService.insertMessage(
-                        conversationId: conversation.id,
-                        role: .user,
-                        content: userMessages[i]
-                    )
-                }
-                // Then assistant response (if exists)
-                if i < assistantMessages.count {
-                    _ = try await container.chatService.insertMessage(
-                        conversationId: conversation.id,
-                        role: .assistant,
-                        content: assistantMessages[i]
-                    )
-                }
-            }
-            Log.voice.debug("[VoiceMode] Inserted \(userMessages.count) user + \(assistantMessages.count) assistant messages")
-
-            // Generate a title from the first user message (or assistant if no user messages)
-            let titleContent = userMessages.first ?? assistantMessages.first ?? ""
-            Log.voice.debug("[VoiceMode] Title content: '\(titleContent.prefix(100))...'")
-            if !titleContent.isEmpty {
-                do {
-                    let generatedTitle = try await container.chatService.generateConversationTitle(
-                        conversationId: conversation.id,
-                        content: titleContent
-                    )
-                    Log.voice.debug("[VoiceMode] Generated title: '\(generatedTitle)'")
-                } catch {
-                    Log.voice.error("[VoiceMode] Title generation failed: \(error)")
-                }
-            } else {
-                Log.voice.warning("[VoiceMode] No content for title generation")
-            }
-
-            Log.voice.info("[VoiceMode] Persisted conversation \(conversation.id) with \(userMessages.count) user + \(assistantMessages.count) assistant messages")
-        } catch {
-            Log.voice.error("[VoiceMode] Failed to persist conversation: \(error)")
-            // Don't show error to user - persistence is best-effort
         }
     }
 }
@@ -773,7 +713,6 @@ struct VoiceModePaywallView: View {
                 // Premium features list
                 VStack(alignment: .leading, spacing: 12) {
                     PremiumFeatureRow(icon: "mic.fill", text: "Natural voice conversations")
-                    PremiumFeatureRow(icon: "person.wave.2.fill", text: "Real-time emotion detection")
                     PremiumFeatureRow(icon: "captions.bubble.fill", text: "Live captions & transcripts")
                     PremiumFeatureRow(icon: "infinity", text: "Unlimited monthly minutes · sessions up to two minutes")
                 }

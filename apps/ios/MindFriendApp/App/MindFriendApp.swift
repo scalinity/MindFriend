@@ -55,6 +55,8 @@ struct MindFriendApp: App {
                 .environment(\.layoutDirection, localizationService.isRTL ? .rightToLeft : .leftToRight)
                 .task {
                     #if DEBUG
+                    // Unit-test hosts must not start live account/service work.
+                    if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil { return }
                     if ProcessInfo.processInfo.arguments.contains("--subscription-ui-test") ||
                        ProcessInfo.processInfo.arguments.contains("--sleep-ui-test") ||
                        ProcessInfo.processInfo.arguments.contains("--debt-calendar-ui-test") { return }
@@ -121,15 +123,10 @@ struct MindFriendApp: App {
                         if let profile = await container.supabaseAuthService.fetchProfileWithCache() {
                             // Check if user needs onboarding
                             if profile.needsOnboarding {
-                                appState.requireOnboarding()
+                                appState.setAuthenticated(user: profile)
                             } else {
                                 // Update with verified network data
                                 appState.setAuthenticated(user: profile)
-
-                                // Request notification permission after authentication
-                                if !notificationManager.isAuthorized {
-                                    _ = await notificationManager.requestAuthorization()
-                                }
 
                                 // Start ambient theme service
                                 await container.ambientThemeService.start()
@@ -156,14 +153,12 @@ struct MindFriendApp: App {
                                 await appState.processPendingWidgetSyncs(container: container)
                             }
 
-                            // Set user context for crash reporting and analytics
-                            CrashReporter.shared.setUser(
-                                id: profile.id.uuidString,
-                                email: profile.email,
-                                username: profile.handle
-                            )
-                            Analytics.shared.identify(userId: profile.id.uuidString)
-                            Analytics.shared.setUserProperty(.subscriptionTier, value: profile.entitlements?.subscriptionTier ?? "free")
+                            if !profile.needsOnboarding {
+                                CrashReporter.shared.setUser(id: profile.id.uuidString)
+                                Analytics.shared.identify(userId: profile.id.uuidString)
+                                Analytics.shared.setUserProperty(.subscriptionTier, value: profile.entitlements?.subscriptionTier ?? "free")
+                            }
+
                         } else {
                             // Could not fetch profile, session may be invalid
                             if !appState.isUsingCachedData {
@@ -231,7 +226,7 @@ struct MindFriendApp: App {
             Task { @MainActor in
                 do {
                     let profile = try await container.supabaseAuthService.handleAuthCallback(url)
-                    if profile.needsOnboarding { appState.requireOnboarding() }
+                    if profile.needsOnboarding { appState.setAuthenticated(user: profile) }
                     else { appState.setAuthenticated(user: profile) }
                 } catch {
                     appState.showError(.apiError("The sign-in link could not be completed. Request a new link and try again."))
@@ -330,15 +325,76 @@ struct RootView: View {
             case .unauthenticated:
                 SignInView()
             case .onboarding:
-                OnboardingFlow()
+                OnboardingFlow().id(container.supabaseAuthService.userId)
             case .authenticated:
-                MainTabView()
+                AuthenticatedSupportRoot()
                     .ambientBackground(service: ambientService)
                     .privacyLockOverlay(onUnlock: {})
                     .badgeEarnedCelebration()
             }
         }
         .animation(.easeInOut(duration: 0.3), value: appState.authState)
+    }
+}
+
+/// Account data views are not constructed until their protected local repository is bound and loaded.
+private struct AuthenticatedSupportRoot: View {
+    @EnvironmentObject private var appState: AppState
+    @EnvironmentObject private var container: DependencyContainer
+    @State private var retry = UUID()
+    @State private var showHelp = false
+    @State private var showFreshJournalChoice = false
+
+    private struct Scope: Hashable {
+        let ownerID: UUID?
+        let epoch: UInt64
+        let retry: UUID
+    }
+
+    var body: some View {
+        let scope = Scope(ownerID: appState.currentUser?.id, epoch: appState.accountEpoch, retry: retry)
+        Group {
+            if let coordinator = container.supportSessionCoordinator,
+               coordinator.identity.ownerID == scope.ownerID,
+               container.supportSessionAccountEpoch == scope.epoch {
+                MainTabView()
+                    .environmentObject(coordinator)
+                    .id(coordinator.identity.epochID)
+                    .fullScreenCover(item: Binding(get: { coordinator.activityPresentation },
+                                                  set: { coordinator.activityPresentation = $0 })) { presentation in
+                        SupportActivityView(coordinator: coordinator, presentation: presentation)
+                            .interactiveDismissDisabled()
+                    }
+            } else {
+                VStack(spacing: 24) {
+                    if let message = container.supportSessionLoadError {
+                        ContentUnavailableView("Saved work unavailable", systemImage: "lock.doc",
+                                               description: Text(message))
+                        Button("Try again") { appState.retryAccountScope(); retry = UUID() }.buttonStyle(.borderedProminent)
+                        if container.supportSessionRecovery != nil {
+                            Button("Start with an empty journal") { showFreshJournalChoice = true }
+                        }
+                    } else {
+                        ProgressView("Opening your saved work…")
+                    }
+                    Button("Support and crisis resources") { showHelp = true }
+                }
+                .padding()
+            }
+        }
+        .task(id: scope) {
+            guard let ownerID = scope.ownerID else { return }
+            await container.prepareSupportSessionScope(ownerID: ownerID, accountEpoch: scope.epoch)
+        }
+        .sheet(isPresented: $showHelp) { CrisisResourcesView() }
+        .confirmationDialog("Start with an empty journal?", isPresented: $showFreshJournalChoice, titleVisibility: .visible) {
+            Button("Keep recovery files and start empty") {
+                guard let ownerID = scope.ownerID else { return }
+                Task { await container.startFreshSupportJournal(ownerID: ownerID, accountEpoch: scope.epoch) }
+            }
+        } message: {
+            Text("Unreadable files stay on this device for recovery. They are not added to the empty journal. You can remove them later with a separate choice.")
+        }
     }
 }
 

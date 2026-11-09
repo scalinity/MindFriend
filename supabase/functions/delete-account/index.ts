@@ -63,6 +63,26 @@ Deno.serve(async (req) => {
     }
 
     const userId = user.id;
+    // Older clients omit this field. New clients bind a destructive request to the account
+    // selected before the request began, even if their SDK session changes meanwhile.
+    let body: Record<string, unknown> = {};
+    if (req.body !== null) {
+      try {
+        const parsed = await req.json();
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("invalid body");
+        body = parsed;
+      } catch {
+        return new Response(JSON.stringify({ error: "Invalid deletion request" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+    if (body.expected_owner !== undefined &&
+      (typeof body.expected_owner !== "string" || body.expected_owner.toLowerCase() !== userId.toLowerCase())) {
+      return new Response(JSON.stringify({ error: "The signed-in account changed" }), {
+        status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     log.info("Deleting account", { userId });
 
     // Delete from tables that don't have ON DELETE CASCADE FKs to profiles

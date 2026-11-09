@@ -3,6 +3,7 @@ import UIKit
 
 /// Full-screen swipeable story viewer for weekly progress recaps
 struct ProgressStoryViewer: View {
+    @Environment(\.supportRootEmbedded) private var supportRootEmbedded
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var container: DependencyContainer
     @EnvironmentObject private var appState: AppState
@@ -24,7 +25,7 @@ struct ProgressStoryViewer: View {
     @State private var showMoodLogger = false
 
     var body: some View {
-        NavigationStack {
+        SupportRootNavigation(embedded: supportRootEmbedded) {
             ZStack {
                 // Dark background
                 Color.black.ignoresSafeArea()

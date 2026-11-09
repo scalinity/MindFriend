@@ -21,12 +21,16 @@ final class SafetyPlanViewModel: ObservableObject {
 
     private var originalPayload: SafetyPlanPayload = .empty
     private var planVersion: Int = 0
+    private var localOwnerID: String?
     private static let pinnedQuickActionKey = "safety_plan.pinned_quick_actions"
     private static let cacheTtl: TimeInterval = 7 * 24 * 60 * 60
 
     // MARK: - Public Methods
 
     func loadPlan(container: DependencyContainer) async {
+        guard let owner = container.supabaseAuthService.userId else { return }
+        let scope = OfflineScope.shared.binding
+        localOwnerID = owner.uuidString
         isLoading = true
         errorMessage = ""
         isCacheStale = false
@@ -34,6 +38,7 @@ final class SafetyPlanViewModel: ObservableObject {
         do {
             let response: SafetyPlanResponse = try await container.supabaseDataService.fetchSafetyPlan()
 
+            guard isCurrent(owner, scope: scope, container: container) else { return }
             if response.success, let data = response.data {
                 payload = data.payload
                 originalPayload = data.payload
@@ -43,7 +48,7 @@ final class SafetyPlanViewModel: ObservableObject {
                 )
                 hasExistingPlan = true
                 planVersion = data.version
-                await cachePlan(payload: data.payload, settings: settings, version: data.version)
+                await cachePlan(payload: data.payload, settings: settings, version: data.version, binding: scope)
             } else {
                 // No existing plan
                 hasExistingPlan = false
@@ -53,10 +58,11 @@ final class SafetyPlanViewModel: ObservableObject {
                     pinnedToQuickActions: loadPinnedQuickAction()
                 )
                 planVersion = 0
-                await clearCachedPlan()
+                await clearCachedPlan(binding: scope)
             }
         } catch {
-            if await loadCachedPlan() {
+            guard isCurrent(owner, scope: scope, container: container) else { return }
+            if await loadCachedPlan(binding: scope, owner: owner, container: container) {
                 hasExistingPlan = true
             } else {
                 errorMessage = error.localizedDescription
@@ -69,6 +75,9 @@ final class SafetyPlanViewModel: ObservableObject {
     }
 
     func updatePlan(container: DependencyContainer, payload: SafetyPlanPayload) async -> Bool {
+        guard let owner = container.supabaseAuthService.userId else { return false }
+        let scope = OfflineScope.shared.binding
+        localOwnerID = owner.uuidString
         isSaving = true
         errorMessage = ""
 
@@ -79,6 +88,7 @@ final class SafetyPlanViewModel: ObservableObject {
                 operation: operation
             )
 
+            guard isCurrent(owner, scope: scope, container: container) else { return false }
             if response.success, let data = response.data {
                 self.payload = data.payload
                 originalPayload = data.payload
@@ -89,7 +99,7 @@ final class SafetyPlanViewModel: ObservableObject {
                 hasExistingPlan = true
                 isCacheStale = false
                 planVersion = data.version
-                await cachePlan(payload: data.payload, settings: settings, version: data.version)
+                await cachePlan(payload: data.payload, settings: settings, version: data.version, binding: scope)
                 isSaving = false
                 return true
             } else if let error = response.error {
@@ -97,6 +107,7 @@ final class SafetyPlanViewModel: ObservableObject {
                 showError = true
             }
         } catch {
+            guard isCurrent(owner, scope: scope, container: container) else { return false }
             errorMessage = error.localizedDescription
             showError = true
         }
@@ -106,6 +117,9 @@ final class SafetyPlanViewModel: ObservableObject {
     }
 
     func updateSettings(container: DependencyContainer, allowAiReference: Bool? = nil, pinnedToQuickActions: Bool? = nil) async {
+        guard let owner = container.supabaseAuthService.userId else { return }
+        let scope = OfflineScope.shared.binding
+        localOwnerID = owner.uuidString
         var newSettings = settings
         if let allowAiReference = allowAiReference {
             newSettings.allowAiReference = allowAiReference
@@ -125,17 +139,18 @@ final class SafetyPlanViewModel: ObservableObject {
         }
 
         guard allowAiReference != nil else {
-            await cachePlan(payload: payload, settings: settings, version: planVersion)
+            await cachePlan(payload: payload, settings: settings, version: planVersion, binding: scope)
             return
         }
 
         do {
             let response: SafetyPlanResponse = try await container.supabaseDataService.updateSafetyPlanSettings(settings: newSettings)
 
+            guard isCurrent(owner, scope: scope, container: container) else { return }
             if response.success, let data = response.data {
                 settings.allowAiReference = data.settings.allowAiReference
                 planVersion = data.version
-                await cachePlan(payload: payload, settings: settings, version: data.version)
+                await cachePlan(payload: payload, settings: settings, version: data.version, binding: scope)
             } else if let error = response.error {
                 // Revert to previous settings on failure
                 errorMessage = error
@@ -143,6 +158,7 @@ final class SafetyPlanViewModel: ObservableObject {
                 settings.allowAiReference = previousSettings.allowAiReference
             }
         } catch {
+            guard isCurrent(owner, scope: scope, container: container) else { return }
             errorMessage = error.localizedDescription
             showError = true
             // Revert to previous settings on failure
@@ -151,24 +167,29 @@ final class SafetyPlanViewModel: ObservableObject {
     }
 
     func deletePlan(container: DependencyContainer) async {
+        guard let owner = container.supabaseAuthService.userId else { return }
+        let scope = OfflineScope.shared.binding
+        localOwnerID = owner.uuidString
         isSaving = true
         errorMessage = ""
 
         do {
             let response: SafetyPlanResponse = try await container.supabaseDataService.deleteSafetyPlan()
 
+            guard isCurrent(owner, scope: scope, container: container) else { return }
             if response.success {
                 payload = .empty
                 settings = .default
                 hasExistingPlan = false
                 storePinnedQuickAction(false)
                 planVersion = 0
-                await clearCachedPlan()
+                await clearCachedPlan(binding: scope)
             } else if let error = response.error {
                 errorMessage = error
                 showError = true
             }
         } catch {
+            guard isCurrent(owner, scope: scope, container: container) else { return }
             errorMessage = error.localizedDescription
             showError = true
         }
@@ -179,14 +200,16 @@ final class SafetyPlanViewModel: ObservableObject {
     // MARK: - Local Storage
 
     private func loadPinnedQuickAction() -> Bool {
-        UserDefaults.standard.bool(forKey: Self.pinnedQuickActionKey)
+        localOwnerID.map { UserDefaults.standard.bool(forKey: Self.pinnedQuickActionKey + "." + $0.lowercased()) } ?? false
     }
 
     private func storePinnedQuickAction(_ value: Bool) {
-        UserDefaults.standard.set(value, forKey: Self.pinnedQuickActionKey)
+        guard let localOwnerID else { return }
+        UserDefaults.standard.set(value, forKey: Self.pinnedQuickActionKey + "." + localOwnerID.lowercased())
     }
 
-    private func cachePlan(payload: SafetyPlanPayload, settings: SafetyPlanSettings, version: Int) async {
+    private func cachePlan(payload: SafetyPlanPayload, settings: SafetyPlanSettings, version: Int, binding: OfflineOwnerBinding?) async {
+        guard let binding else { return }
         let cached = SafetyPlanCachePayload(
             payload: payload,
             settings: settings,
@@ -194,22 +217,25 @@ final class SafetyPlanViewModel: ObservableObject {
             cachedAt: Date(),
             expiresAt: Date().addingTimeInterval(Self.cacheTtl)
         )
-        try? await OfflineCacheService.shared.cache(cached, key: .safetyPlan)
+        try? await OfflineCacheService.shared.cache(cached, key: .safetyPlan, binding: binding)
     }
 
-    private func clearCachedPlan() async {
-        await OfflineCacheService.shared.invalidate(key: .safetyPlan)
+    private func clearCachedPlan(binding: OfflineOwnerBinding?) async {
+        guard let binding else { return }
+        await OfflineCacheService.shared.invalidate(key: .safetyPlan, binding: binding)
         isCacheStale = false
     }
 
-    private func loadCachedPlan() async -> Bool {
+    private func loadCachedPlan(binding: OfflineOwnerBinding?, owner: UUID, container: DependencyContainer) async -> Bool {
+        guard let binding else { return false }
         guard let cached: SafetyPlanCachePayload = try? await OfflineCacheService.shared.retrieve(
             key: .safetyPlan,
-            as: SafetyPlanCachePayload.self
+            as: SafetyPlanCachePayload.self, binding: binding
         ) else {
             return false
         }
 
+        guard isCurrent(owner, scope: binding, container: container) else { return false }
         payload = cached.payload
         originalPayload = cached.payload
         settings = SafetyPlanSettings(
@@ -220,6 +246,11 @@ final class SafetyPlanViewModel: ObservableObject {
         planVersion = cached.version
         isCacheStale = cached.isExpired
         return true
+    }
+
+    private func isCurrent(_ owner: UUID, scope: OfflineOwnerBinding?, container: DependencyContainer) -> Bool {
+        container.supabaseAuthService.userId == owner && OfflineScope.shared.binding == scope &&
+            (scope == nil || scope?.userId.lowercased() == owner.uuidString.lowercased())
     }
 
     // MARK: - Computed Properties

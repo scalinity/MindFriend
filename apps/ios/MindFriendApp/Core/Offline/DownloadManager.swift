@@ -36,6 +36,12 @@ final class DownloadManager: NSObject, ObservableObject {
     /// Whether downloads are currently paused
     @Published private(set) var isPaused: Bool = false
 
+    /// Last local persistence / load failure for the bound account.
+    @Published private(set) var persistenceError: Error?
+
+    /// Whether an account is bound (downloads state is loaded and usable).
+    var isBound: Bool { binding != nil }
+
     // MARK: - Private Properties
 
     private var urlSession: URLSession!
@@ -43,6 +49,9 @@ final class DownloadManager: NSObject, ObservableObject {
     private var sessionGeneration = UUID()
     private var backgroundTaskMap: [Int: UUID] = [:] // URLSessionTask.taskIdentifier -> DownloadTask.id
     private let storageManager = OfflineStorageManager.shared
+    /// The account lifecycle this manager serves. Nil until `bind` finishes
+    /// loading that account's state; there is no initial or fallback I/O.
+    private var binding: OfflineOwnerBinding?
     private var cancellables = Set<AnyCancellable>()
 
     private static let backgroundSessionIdentifier = "com.mindfriend.downloads"
@@ -71,13 +80,61 @@ final class DownloadManager: NSObject, ObservableObject {
 
         urlSession = URLSession(configuration: config, delegate: self, delegateQueue: nil)
 
-        // Load persisted data
-        Task {
-            await loadPersistedData()
-        }
-
         // Observe connectivity for WiFi-only setting
         setupConnectivityObserver()
+    }
+
+    // MARK: - Account lifecycle
+
+    private func requireBinding() throws -> OfflineOwnerBinding {
+        guard let binding else { throw OfflineStorageError.notBound }
+        return binding
+    }
+
+    /// Bind to an authenticated owner/epoch (already bound in storage) and load
+    /// that account's downloads, tasks and settings. Nothing is read before
+    /// this succeeds. Re-binding the same binding is a no-op.
+    func bind(_ newBinding: OfflineOwnerBinding) async throws {
+        if binding == newBinding { return }
+        if binding != nil { unbind() }
+        let generation = sessionGeneration
+        let loaded = try await loadPersistedData(newBinding)
+        // Another unbind/bind may have happened while loading.
+        guard generation == sessionGeneration, binding == nil else { throw CancellationError() }
+        binding = newBinding
+        downloads = loaded.downloads
+        activeTasks = loaded.tasks
+        settings = loaded.settings ?? .default
+        storageLimit = settings.storageLimit
+        persistenceError = loaded.error
+        await updateStorageUsed()
+    }
+
+    /// End the lifecycle synchronously (logout / account switch): invalidate
+    /// every in-flight task, cancel transfers, drop in-memory state. Files stay
+    /// on disk under their owner.
+    func unbind(expected: OfflineOwnerBinding? = nil) {
+        if let expected, binding != expected { return }
+        sessionGeneration = UUID()
+        binding = nil
+        pendingDownloads.removeAll()
+        backgroundTaskMap.removeAll()
+        downloads.removeAll()
+        activeTasks.removeAll()
+        totalStorageUsed = 0
+        persistenceError = nil
+        isPaused = false
+        settings = .default
+        storageLimit = settings.storageLimit
+        // Cancel transfers that outlive this lifecycle, but never ones the next
+        // lifecycle has registered in the meantime.
+        urlSession.getAllTasks { [weak self] tasks in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                let live = Set(self.backgroundTaskMap.keys)
+                for task in tasks where !live.contains(task.taskIdentifier) { task.cancel() }
+            }
+        }
     }
 
     // MARK: - Setup
@@ -106,6 +163,7 @@ final class DownloadManager: NSObject, ObservableObject {
 
     /// Start downloading content
     func download(_ content: any DownloadableContent) async throws {
+        let binding = try requireBinding()
         // Check if already downloaded
         guard !isDownloaded(contentId: content.id) else {
             throw OfflineError.invalidContent
@@ -126,7 +184,8 @@ final class DownloadManager: NSObject, ObservableObject {
         // Check storage limit
         let hasSpace = try await storageManager.hasEnoughSpace(
             for: content.estimatedSize,
-            currentLimit: storageLimit
+            currentLimit: storageLimit,
+            binding: binding
         )
         try Task.checkCancellation()
         guard generation == sessionGeneration else { throw CancellationError() }
@@ -267,8 +326,11 @@ final class DownloadManager: NSObject, ObservableObject {
             return
         }
 
+        let binding = try requireBinding()
+        let generation = sessionGeneration
         let fileExtension = download.localFilePath.pathExtension
-        try await storageManager.deleteFile(for: contentId, fileExtension: fileExtension)
+        try await storageManager.deleteFile(for: contentId, fileExtension: fileExtension, binding: binding)
+        guard generation == sessionGeneration else { throw CancellationError() }
 
         downloads.removeAll { $0.id == contentId }
         await saveDownloads()
@@ -277,32 +339,19 @@ final class DownloadManager: NSObject, ObservableObject {
 
     /// Delete all downloads
     func deleteAllDownloads() async throws {
-        try await storageManager.deleteAllContent()
+        let binding = try requireBinding()
+        let generation = sessionGeneration
+        try await storageManager.deleteAllContent(binding: binding)
+        guard generation == sessionGeneration else { throw CancellationError() }
         downloads.removeAll()
         await saveDownloads()
         await updateStorageUsed()
     }
 
-    /// Clear all state on logout - cancels downloads and resets state
+    /// Clear all state on logout. Equivalent to `unbind()`; kept for callers that
+    /// await it. Never touches files.
     func clearOnLogout() async {
-        sessionGeneration = UUID()
-        pendingDownloads.removeAll()
-        backgroundTaskMap.removeAll()
-        // Background-session tasks can outlive the app process and its map.
-        // Finish cancellation before another account can start new transfers.
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            urlSession.getAllTasks { tasks in
-                for task in tasks { task.cancel() }
-                continuation.resume()
-            }
-        }
-
-        // Clear in-memory state
-        downloads.removeAll()
-        activeTasks.removeAll()
-        totalStorageUsed = 0
-
-        // Note: File cleanup is handled by OfflineStorageManager.deleteCurrentUserData()
+        unbind()
     }
 
     // MARK: - Query Methods
@@ -363,7 +412,10 @@ final class DownloadManager: NSObject, ObservableObject {
     func autoEvictIfNeeded(forBytes bytes: Int64) async throws -> [UUID] {
         guard settings.autoDeleteUnused else { return [] }
 
-        let currentUsage = try await storageManager.totalStorageUsed()
+        let binding = try requireBinding()
+        let generation = sessionGeneration
+        let currentUsage = try await storageManager.totalStorageUsed(binding: binding)
+        guard generation == sessionGeneration else { throw CancellationError() }
         let neededSpace = bytes - (storageLimit - currentUsage)
 
         guard neededSpace > 0 else { return [] }
@@ -371,8 +423,10 @@ final class DownloadManager: NSObject, ObservableObject {
         var mutableDownloads = downloads
         let evictedIds = try await storageManager.evictOldContent(
             from: &mutableDownloads,
-            toFreeBytes: neededSpace
+            toFreeBytes: neededSpace,
+            binding: binding
         )
+        guard generation == sessionGeneration else { throw CancellationError() }
 
         downloads = mutableDownloads
         await saveDownloads()
@@ -403,54 +457,77 @@ final class DownloadManager: NSObject, ObservableObject {
 
     private func updateStorageUsed() async {
         let generation = sessionGeneration
-        let total = (try? await storageManager.totalStorageUsed()) ?? 0
+        guard let binding else { totalStorageUsed = 0; return }
+        let total = (try? await storageManager.totalStorageUsed(binding: binding)) ?? 0
         guard generation == sessionGeneration else { return }
         totalStorageUsed = total
     }
 
     // MARK: - Persistence
 
-    private func loadPersistedData() async {
-        let generation = sessionGeneration
-        // Load downloads
-        if let loaded = try? await storageManager.loadContentIndex() {
-            guard generation == sessionGeneration else { return }
-            downloads = loaded
-        }
-
-        // Load active tasks
-        if let tasks: [DownloadTask] = try? await storageManager.loadMetadata(
-            key: "active_download_tasks",
-            as: [DownloadTask].self
-        ) {
-            guard generation == sessionGeneration else { return }
-            // Restore only paused tasks, others should be re-queued
-            activeTasks = tasks.filter { $0.status == .paused }
-        }
-
-        // Load settings
-        if let loadedSettings: DownloadSettings = try? await storageManager.loadMetadata(
-            key: OfflineCacheKey.downloadSettings.rawValue,
-            as: DownloadSettings.self
-        ) {
-            guard generation == sessionGeneration else { return }
-            settings = loadedSettings
-            storageLimit = loadedSettings.storageLimit
-        }
-
-        await updateStorageUsed()
+    private struct LoadedState {
+        var downloads: [DownloadedContent] = []
+        var tasks: [DownloadTask] = []
+        var settings: DownloadSettings?
+        var error: Error?
     }
 
+    /// Load one account's state. A missing file is empty state; an unreadable
+    /// file is quarantined (kept for recovery) and surfaced, never silently reset.
+    private func loadPersistedData(_ binding: OfflineOwnerBinding) async throws -> LoadedState {
+        var state = LoadedState()
+
+        func load<T: Codable>(_ key: String, _ type: T.Type) async throws -> T? {
+            do {
+                return try await storageManager.loadMetadata(key: key, as: type, binding: binding)
+            } catch let error as OfflineStorageError {
+                throw error                      // notBound / stale: the lifecycle is gone
+            } catch {
+                state.error = error
+                try await storageManager.quarantineMetadata(key: key, binding: binding)
+                return nil
+            }
+        }
+
+        state.downloads = try await load(OfflineCacheKey.downloadedContentIndex.rawValue, [DownloadedContent].self) ?? []
+        // Restore only paused tasks, others should be re-queued
+        state.tasks = (try await load("active_download_tasks", [DownloadTask].self) ?? []).filter { $0.status == .paused }
+        state.settings = try await load(OfflineCacheKey.downloadSettings.rawValue, DownloadSettings.self)
+        return state
+    }
+
+    /// Persist best-effort, but with the owner/epoch and the data captured
+    /// together, synchronously, so a late write can never land in another
+    /// account. Failures are surfaced in `persistenceError`.
     private func saveDownloads() async {
-        try? await storageManager.saveContentIndex(downloads)
+        guard let binding else { return }
+        let snapshot = downloads
+        let generation = sessionGeneration
+        do { try await storageManager.saveContentIndex(snapshot, binding: binding) }
+        catch { recordPersistenceFailure(error, generation) }
     }
 
     private func saveActiveTasks() async {
-        try? await storageManager.saveMetadata(activeTasks, key: "active_download_tasks")
+        guard let binding else { return }
+        let snapshot = activeTasks
+        let generation = sessionGeneration
+        do { try await storageManager.saveMetadata(snapshot, key: "active_download_tasks", binding: binding) }
+        catch { recordPersistenceFailure(error, generation) }
     }
 
     func saveSettings() async {
-        try? await storageManager.saveMetadata(settings, key: OfflineCacheKey.downloadSettings.rawValue)
+        guard let binding else { return }
+        let snapshot = settings
+        let generation = sessionGeneration
+        do { try await storageManager.saveMetadata(snapshot, key: OfflineCacheKey.downloadSettings.rawValue, binding: binding) }
+        catch { recordPersistenceFailure(error, generation) }
+    }
+
+    private func recordPersistenceFailure(_ error: Error, _ generation: UUID) {
+        // A stale-binding rejection is the guard working, not a failure to show.
+        if error as? OfflineStorageError == .staleBinding { return }
+        guard generation == sessionGeneration else { return }
+        persistenceError = error
     }
 }
 
@@ -544,11 +621,15 @@ extension DownloadManager: URLSessionDownloadDelegate {
     }
 
     private func handleDownloadCompletion(taskIdentifier: Int, location: URL) async {
-        guard let taskId = backgroundTaskMap[taskIdentifier],
+        guard let binding,
+              let taskId = backgroundTaskMap[taskIdentifier],
               let task = activeTasks.first(where: { $0.id == taskId && $0.status == .downloading }) else {
             return
         }
 
+        // Owner/epoch captured together with the generation; storage verifies
+        // the binding BEFORE it removes or moves anything, so a completion that
+        // resumes after an account change cannot touch the new account's files.
         let generation = sessionGeneration
         var movedFile: URL?
         do {
@@ -557,20 +638,21 @@ extension DownloadManager: URLSessionDownloadDelegate {
             let destination = try await storageManager.moveToStorage(
                 from: location,
                 contentId: task.contentId,
-                fileExtension: fileExtension
+                fileExtension: fileExtension,
+                binding: binding
             )
 
             movedFile = destination
             guard generation == sessionGeneration else {
-                try? FileManager.default.removeItem(at: destination)
+                try? await storageManager.removeStoredFile(at: destination, binding: binding)
                 return
             }
 
             // Get actual file size
-            let fileSize = try await storageManager.fileSize(for: task.contentId, fileExtension: fileExtension)
+            let fileSize = try await storageManager.fileSize(for: task.contentId, fileExtension: fileExtension, binding: binding)
 
             guard generation == sessionGeneration, activeTasks.contains(where: { $0.id == taskId && $0.status == .downloading }) else {
-                try? FileManager.default.removeItem(at: destination)
+                try? await storageManager.removeStoredFile(at: destination, binding: binding)
                 return
             }
 
@@ -606,7 +688,9 @@ extension DownloadManager: URLSessionDownloadDelegate {
 
         } catch {
             guard generation == sessionGeneration else {
-                if let movedFile { try? FileManager.default.removeItem(at: movedFile) }
+                // Only removes a file this stale binding itself placed, and only
+                // while that binding is still live; otherwise it is left alone.
+                if let movedFile { try? await storageManager.removeStoredFile(at: movedFile, binding: binding) }
                 return
             }
             failDownload(taskIdentifier: taskIdentifier, error: error)

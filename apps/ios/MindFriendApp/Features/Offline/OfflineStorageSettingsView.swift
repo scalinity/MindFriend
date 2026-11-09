@@ -90,8 +90,9 @@ struct OfflineStorageSettingsView: View {
             // Cache management section
             Section {
                 Button {
+                    guard let binding = OfflineScope.shared.binding else { return }
                     Task {
-                        await offlineService.invalidateAllCaches()
+                        await offlineService.invalidateAllCaches(binding: binding)
                     }
                 } label: {
                     HStack {
@@ -182,11 +183,12 @@ struct OfflineStorageSettingsView: View {
     }
 
     private func clearAllData() async {
+        guard let binding = OfflineScope.shared.binding else { return }
         isClearing = true
         defer { isClearing = false }
 
         try? await offlineService.deleteAllDownloads()
-        await offlineService.invalidateAllCaches()
+        await offlineService.invalidateAllCaches(binding: binding)
         await loadStorageBreakdown()
     }
 }

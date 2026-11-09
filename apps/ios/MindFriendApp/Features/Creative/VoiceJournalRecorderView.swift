@@ -2,6 +2,7 @@ import SwiftUI
 import AVFoundation
 
 struct VoiceJournalRecorderView: View {
+    @Environment(\.supportRootEmbedded) private var supportRootEmbedded
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var container: DependencyContainer
     @Environment(\.dismiss) private var dismiss
@@ -14,7 +15,7 @@ struct VoiceJournalRecorderView: View {
     @State private var error: String?
 
     var body: some View {
-        NavigationStack {
+        SupportRootNavigation(embedded: supportRootEmbedded) {
             VStack(spacing: 32) {
                 Spacer()
 

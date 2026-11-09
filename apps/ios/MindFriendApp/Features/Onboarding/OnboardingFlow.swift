@@ -1,700 +1,154 @@
 import SwiftUI
+import Supabase
 
 // MARK: - Onboarding Container
+
+/// Birth year is self-reported; the boundary-year confirmation avoids inventing a birthday.
+struct OnboardingConsent: Equatable {
+    static let version = "2026-11-06"
+    static func referenceYear(at date: Date = Date()) -> Int {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        return calendar.component(.year, from: date)
+    }
+    var birthYear: Int?
+    var confirmsThirteen = false
+    var acceptsTerms = false
+
+    func isEligible(currentYear: Int) -> Bool {
+        guard let birthYear, (1900...currentYear).contains(birthYear) else { return false }
+        return currentYear - birthYear >= 13 && confirmsThirteen && acceptsTerms
+    }
+}
 
 struct OnboardingFlow: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var container: DependencyContainer
-
-    @State private var currentStep: OnboardingStep = .quiz
-    @State private var selectedFocus: WellnessFocus?
+    @State private var consent = OnboardingConsent()
+    @State private var showWelcome = false
     @State private var isCompleting = false
-    @State private var showError = false
-    @State private var errorMessage = ""
-
-    enum OnboardingStep: Int, CaseIterable {
-        case quiz = 0
-        case aiGreeting = 1
-        case buddyInvite = 2
-        case complete = 3
-
-        var progress: Double {
-            Double(self.rawValue + 1) / Double(OnboardingStep.allCases.count)
-        }
-    }
+    @State private var errorMessage: String?
+    @State private var showDeleteAccount = false
+    private var currentYear: Int { OnboardingConsent.referenceYear() }
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Progress bar
-            ProgressView(value: currentStep.progress)
-                .progressViewStyle(.linear)
-                .tint(.accentColor)
-                .padding(.horizontal)
-                .padding(.top)
-
-            // Step content
-            Group {
-                switch currentStep {
-                case .quiz:
-                    OnboardingQuizView(
-                        selectedFocus: $selectedFocus,
-                        onContinue: advanceToAIGreeting,
-                        onSkip: { completeOnboarding(focus: .general, skippedQuiz: true) }
-                    )
-
-                case .aiGreeting:
-                    OnboardingAIGreetingView(
-                        wellnessFocus: selectedFocus ?? .general,
-                        onComplete: advanceToBuddyInvite
-                    )
-
-                case .buddyInvite:
-                    OnboardingBuddyInviteView(
-                        onContinue: { completeOnboarding(focus: selectedFocus ?? .general, skippedQuiz: false) },
-                        onSkip: { completeOnboarding(focus: selectedFocus ?? .general, skippedQuiz: false) }
-                    )
-
-                case .complete:
-                    OnboardingCompleteView()
-                }
-            }
-            .transition(.asymmetric(
-                insertion: .move(edge: .trailing).combined(with: .opacity),
-                removal: .move(edge: .leading).combined(with: .opacity)
-            ))
-        }
-        .animation(.easeInOut(duration: 0.3), value: currentStep)
-        .alert("Setup Error", isPresented: $showError) {
-            Button("Try Again") {
-                currentStep = .quiz
-                isCompleting = false
-            }
-        } message: {
-            Text(errorMessage)
-        }
-        .onAppear {
-            Analytics.shared.track(.onboardingStarted)
-        }
-    }
-
-    private func advanceToAIGreeting() {
-        withAnimation {
-            currentStep = .aiGreeting
-        }
-    }
-
-    private func advanceToBuddyInvite() {
-        withAnimation {
-            currentStep = .buddyInvite
-        }
-        Analytics.shared.track(.onboardingStepCompleted, properties: [
-            "step": "ai_greeting"
-        ])
-    }
-
-    private func completeOnboarding(focus: WellnessFocus, skippedQuiz: Bool) {
-        guard !isCompleting else { return }
-        isCompleting = true
-
-        withAnimation {
-            currentStep = .complete
-        }
-
-        Task {
-            do {
-                // Atomic update: save wellness focus + mark onboarding complete
-                try await container.supabaseDataService.completeOnboarding(focus: focus)
-
-                // Track skip event if applicable
-                if skippedQuiz {
-                    Analytics.shared.track(.onboardingSkipped)
-                }
-
-                // Fetch fresh profile with updated fields
-                let profile = try await container.supabaseAuthService.fetchProfile()
-
-                // Set crash reporter context
-                CrashReporter.shared.setUser(
-                    id: profile.id.uuidString,
-                    email: profile.email,
-                    username: profile.handle
-                )
-                Analytics.shared.identify(userId: profile.id.uuidString)
-                Analytics.shared.setUserProperty(.subscriptionTier, value: profile.entitlements?.subscriptionTier ?? "free")
-                Analytics.shared.track(.onboardingCompleted, properties: [
-                    "wellness_focus": focus.rawValue,
-                    "skipped_quiz": skippedQuiz
-                ])
-
-                // Update app state to transition to main app
-                await MainActor.run {
-                    appState.completeOnboarding(user: profile)
-                }
-            } catch {
-                await MainActor.run {
-                    isCompleting = false
-                    errorMessage = "Unable to complete setup. Please check your connection and try again."
-                    showError = true
-                }
-                error.report(context: ["action": "complete_onboarding"])
-            }
-        }
-    }
-}
-
-// MARK: - Quiz View
-
-struct OnboardingQuizView: View {
-    @Binding var selectedFocus: WellnessFocus?
-    let onContinue: () -> Void
-    let onSkip: () -> Void
-
-    var body: some View {
-        ScrollView {
-            VStack(spacing: 24) {
-                // Header
-                VStack(spacing: 12) {
-                    Text("What brings you here today?")
-                        .font(.title)
-                        .fontWeight(.bold)
-                        .multilineTextAlignment(.center)
-
-                    Text("This helps me personalize your experience")
-                        .font(.body)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.horizontal, 32)
-                .padding(.top, 32)
-
-                // Options
-                VStack(spacing: 12) {
-                    ForEach(WellnessFocus.selectableOptions, id: \.self) { focus in
-                        WellnessFocusButton(
-                            focus: focus,
-                            isSelected: selectedFocus == focus,
-                            action: { selectedFocus = focus }
-                        )
-                    }
-                }
-                .padding(.horizontal, 24)
-
-                // Testimonials - social proof
-                TestimonialsCarousel()
-                    .padding(.top, 8)
-
-                // Privacy banner - trust building
-                PrivacyBanner()
-                    .padding(.horizontal, 24)
-
-                // Actions
-                VStack(spacing: 12) {
-                    Button(action: onContinue) {
-                        Text("Continue")
-                            .font(.headline)
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(selectedFocus != nil ? Color.accentColor : Color.secondary.opacity(0.3))
-                            .foregroundStyle(.white)
-                            .cornerRadius(12)
-                    }
-                    .disabled(selectedFocus == nil)
-                    .accessibilityLabel("Continue")
-                    .accessibilityHint(selectedFocus != nil ? "Proceed to AI greeting" : "Select a focus area first")
-
-                    Button("Skip for now", action: onSkip)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .accessibilityLabel("Skip personalization")
-                        .accessibilityHint("Skip the quiz and use default settings")
-                }
-                .padding(.horizontal, 24)
-                .padding(.bottom, 32)
-            }
-        }
-    }
-}
-
-// MARK: - Wellness Focus Button
-
-struct WellnessFocusButton: View {
-    let focus: WellnessFocus
-    let isSelected: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 16) {
-                Text(focus.emoji)
-                    .font(.title2)
-
-                Text(focus.displayTitle)
-                    .fontWeight(.medium)
-                    .foregroundStyle(.primary)
-
-                Spacer()
-
-                if isSelected {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(Color.accentColor)
-                        .font(.title3)
-                }
-            }
-            .padding()
-            .background(isSelected ? Color.accentColor.opacity(0.1) : Color(.secondarySystemBackground))
-            .cornerRadius(12)
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
-            )
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(focus.displayTitle)
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
-    }
-}
-
-// MARK: - AI Greeting View
-
-struct OnboardingAIGreetingView: View {
-    let wellnessFocus: WellnessFocus
-    let onComplete: () -> Void
-
-    @State private var messages: [OnboardingMessage] = []
-    @State private var inputText = ""
-    @State private var isTyping = false
-    @State private var userMessageCount = 0
-    @FocusState private var isInputFocused: Bool
-
-    private let maxExchanges = 2
-
-    var body: some View {
-        VStack(spacing: 0) {
-            // Chat area
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(spacing: 12) {
-                        ForEach(messages) { message in
-                            OnboardingMessageBubble(message: message)
-                                .id(message.id)
-                        }
-
-                        if isTyping {
-                            OnboardingTypingIndicator()
-                                .id("typing")
-                        }
-                    }
-                    .padding()
-                }
-                .scrollDismissesKeyboard(.interactively)
-                .onChange(of: messages.count) { _, _ in
-                    withAnimation {
-                        if isTyping {
-                            proxy.scrollTo("typing", anchor: .bottom)
-                        } else {
-                            proxy.scrollTo(messages.last?.id, anchor: .bottom)
-                        }
-                    }
-                }
-                .onChange(of: isTyping) { _, newValue in
-                    if newValue {
-                        withAnimation {
-                            proxy.scrollTo("typing", anchor: .bottom)
-                        }
-                    }
-                }
-            }
-
-            Divider()
-
-            // Input area
-            VStack(spacing: 12) {
-                HStack(spacing: 12) {
-                    TextField("Type a message...", text: $inputText, axis: .vertical)
-                        .textFieldStyle(.plain)
-                        .lineLimit(1...3)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .background(Color(.secondarySystemBackground))
-                        .cornerRadius(20)
-                        .focused($isInputFocused)
-                        .submitLabel(.send)
-                        .onSubmit { sendMessage() }
-                        .accessibilityLabel("Message input")
-                        .accessibilityHint("Type your response to the AI assistant")
-
-                    Button(action: sendMessage) {
-                        Image(systemName: "arrow.up.circle.fill")
-                            .font(.title)
-                            .foregroundStyle(canSend ? Color.accentColor : Color.secondary)
-                    }
-                    .disabled(!canSend)
-                    .accessibilityLabel("Send message")
-                    .accessibilityHint(canSend ? "Send your message" : "Type a message first")
-                }
-
-                // Show "Get Started" after exchanges or as skip option
-                if userMessageCount >= maxExchanges {
-                    Button(action: onComplete) {
-                        Text("Get started")
-                            .font(.headline)
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.accentColor)
-                            .foregroundStyle(.white)
-                            .cornerRadius(12)
-                    }
-                    .accessibilityLabel("Get started")
-                    .accessibilityHint("Complete onboarding and enter the app")
-                } else if !messages.isEmpty {
-                    Button("Skip to app", action: onComplete)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .accessibilityLabel("Skip to app")
-                        .accessibilityHint("Skip the conversation and enter the app")
-                }
-            }
-            .padding()
-        }
-        .task {
-            // AI sends first message after a short delay
-            try? await Task.sleep(for: .milliseconds(500))
-            guard !Task.isCancelled else { return }
-            isTyping = true
-
-            try? await Task.sleep(for: .seconds(1))
-            guard !Task.isCancelled else { return }
-            isTyping = false
-            messages.append(OnboardingMessage(
-                role: .assistant,
-                content: wellnessFocus.aiGreeting
-            ))
-        }
-    }
-
-    private var canSend: Bool {
-        !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isTyping
-    }
-
-    private func sendMessage() {
-        let content = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !content.isEmpty, !isTyping else { return }
-
-        // Add user message
-        messages.append(OnboardingMessage(role: .user, content: content))
-        inputText = ""
-        userMessageCount += 1
-
-        // Show typing indicator
-        isTyping = true
-
-        // Generate canned response after delay using Task for proper lifecycle management
-        let response = generateResponse()
-        Task {
-            try? await Task.sleep(for: .milliseconds(1500))
-            guard !Task.isCancelled else { return }
-            isTyping = false
-            messages.append(OnboardingMessage(
-                role: .assistant,
-                content: response
-            ))
-        }
-
-        Analytics.shared.track(.onboardingStepCompleted, properties: [
-            "step": "ai_greeting",
-            "message_count": userMessageCount
-        ])
-    }
-
-    private func generateResponse() -> String {
-        if userMessageCount == 1 {
-            return "Thank you for sharing that with me. I'm here for you, and together we'll work on building habits that help. Ready to explore the app?"
-        } else {
-            return "I'm glad we connected! The app has daily quests, mood tracking, and more to support your journey. Let's get started!"
-        }
-    }
-}
-
-// MARK: - Onboarding Message Model
-
-struct OnboardingMessage: Identifiable, Equatable {
-    let id = UUID()
-    let role: MessageRole
-    let content: String
-}
-
-// MARK: - Message Bubble
-
-struct OnboardingMessageBubble: View {
-    let message: OnboardingMessage
-
-    private var isUser: Bool { message.role == .user }
-
-    var body: some View {
-        HStack {
-            if isUser { Spacer(minLength: 60) }
-
-            Text(message.content)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .background(isUser ? Color.accentColor : Color(.secondarySystemBackground))
-                .foregroundStyle(isUser ? .white : .primary)
-                .cornerRadius(20)
-                .accessibilityLabel(isUser ? "You said: \(message.content)" : "MindFriend said: \(message.content)")
-
-            if !isUser { Spacer(minLength: 60) }
-        }
-    }
-}
-
-// MARK: - Typing Indicator
-
-struct OnboardingTypingIndicator: View {
-    @State private var animating = false
-
-    var body: some View {
-        HStack {
-            HStack(spacing: 4) {
-                ForEach(0..<3, id: \.self) { index in
-                    Circle()
-                        .fill(Color.secondary)
-                        .frame(width: 8, height: 8)
-                        .scaleEffect(animating ? 1.2 : 0.8)
-                        .animation(
-                            .easeInOut(duration: 0.6)
-                            .repeatForever()
-                            .delay(Double(index) * 0.2),
-                            value: animating
-                        )
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .background(Color(.secondarySystemBackground))
-            .cornerRadius(20)
-            .accessibilityLabel("MindFriend is typing")
-
-            Spacer()
-        }
-        .onAppear { animating = true }
-    }
-}
-
-// MARK: - Buddy Invite View
-
-struct OnboardingBuddyInviteView: View {
-    @EnvironmentObject var container: DependencyContainer
-
-    let onContinue: () -> Void
-    let onSkip: () -> Void
-
-    @State private var contactMethod: BuddyRelationship.InviteMethod = .sms
-    @State private var contact = ""
-    @State private var isSending = false
-    @State private var showSuccess = false
-    @State private var inviteCode: String?
-    @State private var showError = false
-    @State private var errorMessage = ""
-
-    var body: some View {
-        ScrollView {
-            VStack(spacing: 24) {
-                Spacer(minLength: 40)
-
-                // Icon
-                Image(systemName: "person.2.fill")
-                    .font(.system(size: 60))
-                    .foregroundStyle(.tint)
-                    .padding(.bottom, 8)
-                    .accessibilityHidden(true)
-
-                // Header
-                VStack(spacing: 12) {
-                    Text("Invite a Wellness Buddy")
-                        .font(.title)
-                        .fontWeight(.bold)
-                        .multilineTextAlignment(.center)
-
-                    Text("People with an accountability partner are **3x more likely** to reach their wellness goals!")
-                        .font(.body)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                }
-                .padding(.horizontal, 32)
-
-                // Method picker
-                Picker("Contact Method", selection: $contactMethod) {
-                    Text("Text Message").tag(BuddyRelationship.InviteMethod.sms)
-                    Text("Email").tag(BuddyRelationship.InviteMethod.email)
-                }
-                .pickerStyle(.segmented)
-                .padding(.horizontal, 24)
-
-                // Contact input
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(contactMethod == .sms ? "Phone Number" : "Email Address")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-
-                    TextField(
-                        contactMethod == .sms ? "Enter phone number" : "Enter email address",
-                        text: $contact
-                    )
-                    .textFieldStyle(.plain)
-                    .keyboardType(contactMethod == .sms ? .phonePad : .emailAddress)
-                    .textContentType(contactMethod == .sms ? .telephoneNumber : .emailAddress)
-                    .autocapitalization(.none)
-                    .padding()
-                    .background(Color(.secondarySystemBackground))
-                    .cornerRadius(12)
-                    .accessibilityLabel(contactMethod == .sms ? "Phone number input" : "Email address input")
-                }
-                .padding(.horizontal, 24)
-
-                // Benefits
-                VStack(alignment: .leading, spacing: 12) {
-                    BuddyBenefitRow(icon: "flame.fill", text: "See each other's streaks")
-                    BuddyBenefitRow(icon: "hand.thumbsup.fill", text: "Send encouragement")
-                    BuddyBenefitRow(icon: "gift.fill", text: "Both earn bonus XP")
-                }
-                .padding(.horizontal, 24)
-                .padding(.vertical, 8)
-
-                Spacer(minLength: 24)
-
-                // Actions
-                VStack(spacing: 12) {
-                    Button(action: sendInvite) {
-                        HStack {
-                            if isSending {
-                                ProgressView()
-                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                    .padding(.trailing, 4)
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    Group {
+                    if showWelcome {
+                        Text("What would be useful right now?").font(.largeTitle.bold())
+                        Text("We can talk it through or try one small thing. You can explore at your own pace.")
+                        Button("Talk about something") { completeOnboarding(destination: .chat) }
+                            .buttonStyle(.borderedProminent)
+                        Button("Try a short practice") { completeOnboarding(destination: .home, practice: true) }
+                            .buttonStyle(.bordered)
+                        Button("Explore first") { completeOnboarding(destination: .profile) }
+                            .buttonStyle(.bordered)
+                        Button("Review consent") { showWelcome = false }
+                    } else {
+                        Text("Welcome to MindFriend").font(.largeTitle.bold())
+                        Text("Not a medical provider. Not for emergencies.").font(.headline)
+                        Text("MindFriend offers nonclinical support and practical self-care. It is for people aged 13 and older.")
+                        Picker("Birth year", selection: $consent.birthYear) {
+                            Text("Select your birth year").tag(nil as Int?)
+                            ForEach(Array((1900...currentYear).reversed()), id: \.self) { year in
+                                Text(String(year)).tag(Optional(year))
                             }
-                            Text(isSending ? "Sending..." : "Send Invite")
-                                .font(.headline)
                         }
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(canSend ? Color.accentColor : Color.secondary.opacity(0.3))
-                        .foregroundStyle(.white)
-                        .cornerRadius(12)
+                        .pickerStyle(.menu)
+                        Toggle("My thirteenth birthday has already occurred", isOn: $consent.confirmsThirteen)
+                        Toggle("I agree to the Terms of Service and Privacy Policy", isOn: $consent.acceptsTerms)
+                        Link("Terms of Service", destination: AppURLs.termsOfUse)
+                        Link("Privacy Policy", destination: AppURLs.privacyPolicy)
+                        if let year = consent.birthYear, currentYear - year < 13 {
+                            Text("MindFriend is available from age 13. You can still open support and crisis resources below.")
+                        }
+                        Button("Continue") { showWelcome = true }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(!consent.isEligible(currentYear: currentYear))
                     }
-                    .disabled(!canSend)
-                    .accessibilityLabel("Send invite")
-                    .accessibilityHint(canSend ? "Send an invite to your buddy" : "Enter a valid contact first")
-
-                    Button("Skip for now", action: onSkip)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .accessibilityLabel("Skip buddy invite")
-                        .accessibilityHint("Continue without inviting a buddy")
+                    }
+                    .disabled(isCompleting)
+                    if let errorMessage {
+                        Text(errorMessage).foregroundStyle(.red).accessibilityLabel("Setup not saved. " + errorMessage)
+                    }
+                    if isCompleting { ProgressView("Saving your choices…") }
+                    Button("Support and crisis resources") { appState.showCrisisResources = true }
+                    Button("Delete account", role: .destructive) { showDeleteAccount = true }
+                        .disabled(isCompleting)
+                    Button("Sign out") {
+                        Task {
+                            do { try await container.supabaseAuthService.signOut(); appState.setUnauthenticated() }
+                            catch { errorMessage = "Could not sign out. Please try again." }
+                        }
+                    }
                 }
-                .padding(.horizontal, 24)
-                .padding(.bottom, 32)
+                .frame(maxWidth: 680, alignment: .leading)
+                .padding(24)
             }
-        }
-        .dismissKeyboardOnSwipe()
-        .onTapGesture {
-            hideKeyboard()
-        }
-        .alert("Invite Sent!", isPresented: $showSuccess) {
-            Button("Continue", action: onContinue)
-        } message: {
-            if let code = inviteCode {
-                Text("Your buddy will receive an invitation. Share this code if needed: **\(code)**")
-            } else {
-                Text("Your buddy will receive an invitation to join you!")
+            .navigationTitle("Welcome")
+            .sheet(isPresented: $appState.showCrisisResources) { CrisisResourcesView() }
+            .confirmationDialog("Delete this account and its account data?", isPresented: $showDeleteAccount, titleVisibility: .visible) {
+                Button("Delete account", role: .destructive) { deleteAccount() }
+                Button("Cancel", role: .cancel) { }
             }
-        }
-        .alert("Unable to Send", isPresented: $showError) {
-            Button("OK", role: .cancel) { }
-        } message: {
-            Text(errorMessage)
+            .onChange(of: container.supabaseAuthService.userId) { _, _ in
+                consent = OnboardingConsent()
+                showWelcome = false
+                errorMessage = nil
+            }
         }
     }
 
-    private var canSend: Bool {
-        !contact.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isSending
-    }
-
-    private func sendInvite() {
-        guard canSend else { return }
-        isSending = true
-
+    private func completeOnboarding(destination: MainTab, practice: Bool = false) {
+        guard !isCompleting, consent.isEligible(currentYear: currentYear), let birthYear = consent.birthYear,
+              let owner = container.supabaseAuthService.userId else { return }
+        let submittedConsent = consent
+        isCompleting = true
+        errorMessage = nil
         Task {
+            defer { isCompleting = false }
             do {
-                let trimmedContact = contact.trimmingCharacters(in: .whitespacesAndNewlines)
-                let relationship = try await container.supabaseDataService.createBuddyInvite(
-                    contact: trimmedContact,
-                    method: contactMethod
-                )
-
-                await MainActor.run {
-                    isSending = false
-                    inviteCode = relationship.inviteCode
-                    showSuccess = true
-                }
-
-                Analytics.shared.track(.buddyInviteSent, properties: [
-                    "method": contactMethod.rawValue,
-                    "source": "onboarding"
-                ])
+                try await container.supabaseDataService.completeOnboarding(
+                    expectedOwner: owner, birthYear: birthYear, confirmsThirteen: submittedConsent.confirmsThirteen,
+                    acceptsTerms: submittedConsent.acceptsTerms)
+                let profile = try await container.supabaseAuthService.fetchProfile()
+                guard container.supabaseAuthService.userId == owner, profile.id == owner,
+                      !profile.needsOnboarding else { throw CancellationError() }
+                appState.completeOnboarding(user: profile)
+                container.supabaseAuthService.identifyCurrentUserAfterOnboarding(profile: profile)
+                appState.selectedTab = destination
+                if destination == .chat { appState.shouldOpenNewChat = true }
+                if practice { DeepLinkRouter.shared.handleRoute(.exerciseLibrary, appState: appState) }
+            } catch is CancellationError {
+                return
+            } catch let error as PostgrestError where error.code == "42501" {
+                return
+            } catch let error as PostgrestError where error.code == "22023" {
+                guard container.supabaseAuthService.userId == owner else { return }
+                errorMessage = "Your birth year and consent could not be accepted. Review your choices before trying again."
+                showWelcome = false
             } catch {
-                await MainActor.run {
-                    isSending = false
-                    errorMessage = "Could not send invite. Please check the contact and try again."
-                    showError = true
-                }
-                error.report(context: ["action": "send_buddy_invite", "source": "onboarding"])
+                guard container.supabaseAuthService.userId == owner else { return }
+                errorMessage = "Your setup has not been confirmed. The service may be unavailable. Try again when connected; your choices are still here."
             }
         }
     }
-}
-
-// MARK: - Buddy Benefit Row
-
-struct BuddyBenefitRow: View {
-    let icon: String
-    let text: String
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .foregroundStyle(.tint)
-                .frame(width: 24)
-                .accessibilityHidden(true)
-            Text(text)
-                .font(.subheadline)
+    private func deleteAccount() {
+        guard let owner = container.supabaseAuthService.userId else { return }
+        isCompleting = true
+        Task {
+            defer { isCompleting = false }
+            do {
+                guard container.supabaseAuthService.userId == owner else { return }
+                try await container.supabaseAuthService.deleteAccount(expectedOwner: owner)
+                if container.supabaseAuthService.userId == nil { appState.setUnauthenticated() }
+            } catch {
+                guard container.supabaseAuthService.userId == owner else { return }
+                errorMessage = "Your account was not deleted. Please try again when connected."
+            }
         }
     }
-}
 
-// MARK: - Complete View
-
-struct OnboardingCompleteView: View {
-    var body: some View {
-        VStack(spacing: 24) {
-            Spacer()
-
-            ProgressView()
-                .scaleEffect(1.5)
-                .accessibilityLabel("Loading")
-
-            Text("Setting up your experience...")
-                .font(.headline)
-                .foregroundStyle(.secondary)
-
-            Spacer()
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Setting up your experience, please wait")
-    }
-}
-
-// MARK: - Preview
-
-#Preview("Quiz") {
-    OnboardingFlow()
-        .environmentObject(AppState())
-        .environmentObject(DependencyContainer())
 }

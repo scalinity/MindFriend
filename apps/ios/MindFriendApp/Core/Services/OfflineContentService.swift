@@ -97,17 +97,30 @@ final class OfflineContentService: ObservableObject {
             .assign(to: &$lastSyncTime)
     }
 
-    /// Configure sync handlers (call this during app initialization)
-    func configureSyncHandlers(
+    /// Bind every offline component (storage, sync queue, downloads, cache) to
+    /// the authenticated owner and account epoch and install the sync handlers.
+    /// Call after user restoration, before any offline data is read or written.
+    /// Handlers must treat `item.idempotencyKey` as an owner-scoped idempotency
+    /// key: an item can be delivered again after a crash or a failed local save.
+    func bindOfflineScope(
+        userId: String,
+        epoch: UInt64,
         moodHandler: @escaping (OfflineMoodEntry) async throws -> Void,
         questHandler: @escaping (OfflineQuestCompletion) async throws -> Void,
         exerciseHandler: @escaping (OfflineExerciseSession) async throws -> Void
-    ) {
-        syncQueueManager.configure(
-            moodSyncHandler: moodHandler,
-            questSyncHandler: questHandler,
-            exerciseSyncHandler: exerciseHandler
+    ) async throws {
+        try await OfflineScope.shared.bind(
+            userId: userId,
+            epoch: epoch,
+            moodHandler: moodHandler,
+            questHandler: questHandler,
+            exerciseHandler: exerciseHandler
         )
+    }
+
+    /// End the offline scope (logout / account switch). Unsynced work stays on disk.
+    func unbindOfflineScope() {
+        OfflineScope.shared.unbind()
     }
 
     // MARK: - Download Operations
@@ -176,8 +189,8 @@ final class OfflineContentService: ObservableObject {
         energy: Int? = nil,
         notes: String? = nil,
         factors: [String]? = nil
-    ) async {
-        await syncQueueManager.saveMoodOffline(
+    ) async throws {
+        try await syncQueueManager.saveMoodOffline(
             score: score,
             anxiety: anxiety,
             energy: energy,
@@ -187,8 +200,8 @@ final class OfflineContentService: ObservableObject {
     }
 
     /// Save quest completion offline
-    func saveQuestCompletionOffline(questId: UUID, questTitle: String? = nil) async {
-        await syncQueueManager.saveQuestCompletionOffline(
+    func saveQuestCompletionOffline(questId: UUID, questTitle: String? = nil) async throws {
+        try await syncQueueManager.saveQuestCompletionOffline(
             questId: questId,
             questTitle: questTitle
         )
@@ -199,8 +212,8 @@ final class OfflineContentService: ObservableObject {
         exerciseId: UUID,
         exerciseTitle: String? = nil,
         duration: Int
-    ) async {
-        await syncQueueManager.saveExerciseSessionOffline(
+    ) async throws {
+        try await syncQueueManager.saveExerciseSessionOffline(
             exerciseId: exerciseId,
             exerciseTitle: exerciseTitle,
             duration: duration
@@ -220,65 +233,65 @@ final class OfflineContentService: ObservableObject {
     }
 
     /// Clear sync queue (use with caution)
-    func clearSyncQueue() async {
-        await syncQueueManager.clearQueue()
+    func clearSyncQueue() async throws {
+        try await syncQueueManager.clearQueue()
     }
 
     /// Retry failed sync items
-    func retryFailedSyncs() async {
-        await syncQueueManager.retryFailedItems()
+    func retryFailedSyncs() async throws {
+        try await syncQueueManager.retryFailedItems()
     }
 
     // MARK: - Cache Operations
 
     /// Cache today's quest
-    func cacheTodayQuest(_ quest: Quest) async {
-        await cacheService.cacheTodayQuest(quest)
+    func cacheTodayQuest(_ quest: Quest, binding: OfflineOwnerBinding) async {
+        await cacheService.cacheTodayQuest(quest, binding: binding)
     }
 
     /// Get cached today's quest
-    func getCachedTodayQuest() async -> Quest? {
-        await cacheService.getCachedTodayQuest()
+    func getCachedTodayQuest(binding: OfflineOwnerBinding) async -> Quest? {
+        await cacheService.getCachedTodayQuest(binding: binding)
     }
 
     /// Cache mood history
-    func cacheMoodHistory(_ moods: [MoodEntry]) async {
-        await cacheService.cacheMoodHistory(moods)
+    func cacheMoodHistory(_ moods: [MoodEntry], binding: OfflineOwnerBinding) async {
+        await cacheService.cacheMoodHistory(moods, binding: binding)
     }
 
     /// Get cached mood history
-    func getCachedMoodHistory() async -> [MoodEntry]? {
-        await cacheService.getCachedMoodHistory()
+    func getCachedMoodHistory(binding: OfflineOwnerBinding) async -> [MoodEntry]? {
+        await cacheService.getCachedMoodHistory(binding: binding)
     }
 
     /// Cache exercise library
-    func cacheExerciseLibrary(_ exercises: [Exercise]) async {
-        await cacheService.cacheExerciseLibrary(exercises)
+    func cacheExerciseLibrary(_ exercises: [Exercise], binding: OfflineOwnerBinding) async {
+        await cacheService.cacheExerciseLibrary(exercises, binding: binding)
     }
 
     /// Get cached exercise library
-    func getCachedExerciseLibrary() async -> [Exercise]? {
-        await cacheService.getCachedExerciseLibrary()
+    func getCachedExerciseLibrary(binding: OfflineOwnerBinding) async -> [Exercise]? {
+        await cacheService.getCachedExerciseLibrary(binding: binding)
     }
 
     /// Cache user profile
-    func cacheUserProfile(_ profile: UserProfile) async {
-        await cacheService.cacheUserProfile(profile)
+    func cacheUserProfile(_ profile: UserProfile, binding: OfflineOwnerBinding) async {
+        await cacheService.cacheUserProfile(profile, binding: binding)
     }
 
     /// Get cached user profile
-    func getCachedUserProfile() async -> UserProfile? {
-        await cacheService.getCachedUserProfile()
+    func getCachedUserProfile(binding: OfflineOwnerBinding) async -> UserProfile? {
+        await cacheService.getCachedUserProfile(binding: binding)
     }
 
     /// Invalidate specific cache
-    func invalidateCache(key: OfflineCacheKey) async {
-        await cacheService.invalidate(key: key)
+    func invalidateCache(key: OfflineCacheKey, binding: OfflineOwnerBinding) async {
+        await cacheService.invalidate(key: key, binding: binding)
     }
 
     /// Invalidate all caches
-    func invalidateAllCaches() async {
-        await cacheService.invalidateAll()
+    func invalidateAllCaches(binding: OfflineOwnerBinding) async {
+        await cacheService.invalidateAll(binding: binding)
     }
 
     // MARK: - Storage Management
@@ -443,4 +456,126 @@ enum OfflineFeature {
         case .profile: return "person.circle"
         }
     }
+}
+
+
+// MARK: - Offline scope
+
+/// Single owner of the offline account lifecycle. Binds and unbinds storage,
+/// the sync queue, downloads and the cache together under one owner/epoch, and
+/// unbinds synchronously so nothing outlives the account that created it.
+@MainActor
+final class OfflineScope {
+    static let shared = OfflineScope()
+
+    private(set) var binding: OfflineOwnerBinding?
+    private var generation = 0
+    private var requested: OfflineOwnerBinding?
+    private var bindTask: Task<Void, Error>?
+    private var teardownTask: Task<Void, Never>?
+    private var highestRequestedEpoch: UInt64?
+
+    private init() {}
+
+    func bind(
+        userId: String,
+        epoch: UInt64,
+        moodHandler: @escaping (OfflineMoodEntry) async throws -> Void,
+        questHandler: @escaping (OfflineQuestCompletion) async throws -> Void,
+        exerciseHandler: @escaping (OfflineExerciseSession) async throws -> Void
+    ) async throws {
+        try Task.checkCancellation()
+        let target = OfflineOwnerBinding(userId: userId, epoch: epoch)
+        if requested == target {
+            if let bindTask {
+                try await bindTask.value
+                try Task.checkCancellation()
+                guard requested == target, binding == target else { throw SyncQueueError.lifecycleEnded }
+                return
+            }
+            if binding == target { return }
+        }
+        if let highestRequestedEpoch, epoch <= highestRequestedEpoch { throw OfflineStorageError.staleEpoch }
+        highestRequestedEpoch = epoch
+        requested = target
+        let task = Task { @MainActor in
+            await self.awaitTeardown()
+            guard self.requested == target else { throw SyncQueueError.lifecycleEnded }
+            try await self.performBind(userId: userId, epoch: epoch, moodHandler: moodHandler,
+                                       questHandler: questHandler, exerciseHandler: exerciseHandler)
+        }
+        bindTask = task
+        do {
+            try await task.value
+            try Task.checkCancellation()
+            guard requested == target, binding == target else { throw SyncQueueError.lifecycleEnded }
+        } catch {
+            if requested == target { bindTask = nil }
+            throw error
+        }
+        if requested == target { bindTask = nil }
+    }
+
+    private func performBind(userId: String, epoch: UInt64,
+        moodHandler: @escaping (OfflineMoodEntry) async throws -> Void,
+        questHandler: @escaping (OfflineQuestCompletion) async throws -> Void,
+        exerciseHandler: @escaping (OfflineExerciseSession) async throws -> Void) async throws {
+        generation += 1
+        let mine = generation
+        var acquired: OfflineOwnerBinding?
+        do {
+            let storage = OfflineStorageManager.shared
+            let bound = try await storage.bind(userId: userId, epoch: epoch)
+            acquired = bound
+            guard mine == generation else {
+                throw SyncQueueError.lifecycleEnded
+            }
+            // Record an in-progress bind so synchronous logout can also invalidate it.
+            binding = bound
+            try await SyncQueueManager.shared.bind(
+                userId: userId,
+                epoch: epoch,
+                moodSyncHandler: moodHandler,
+                questSyncHandler: questHandler,
+                exerciseSyncHandler: exerciseHandler
+            )
+            guard mine == generation else { throw SyncQueueError.lifecycleEnded }
+            try await DownloadManager.shared.bind(bound)
+            guard mine == generation else { throw SyncQueueError.lifecycleEnded }
+            try await OfflineCacheService.shared.bind(bound)
+            guard mine == generation else { throw SyncQueueError.lifecycleEnded }
+            binding = bound
+        } catch {
+            if mine == generation, requested == OfflineOwnerBinding(userId: userId, epoch: epoch) { unbind() }
+            if let acquired, requested != acquired {
+                SyncQueueManager.shared.unbind(expected: acquired)
+                DownloadManager.shared.unbind(expected: acquired)
+                await OfflineCacheService.shared.unbind(acquired)
+                await OfflineStorageManager.shared.unbind(acquired)
+            }
+            throw error
+        }
+    }
+
+    /// Synchronous teardown, safe to call from logout before another account can sign in.
+    func unbind() {
+        generation += 1
+        requested = nil
+        bindTask?.cancel()
+        bindTask = nil
+        let ended = binding
+        binding = nil
+        SyncQueueManager.shared.unbind()
+        DownloadManager.shared.unbind()
+        if let ended {
+            let previous = teardownTask
+            teardownTask = Task {
+                await previous?.value
+                await OfflineCacheService.shared.unbind(ended)
+                await OfflineStorageManager.shared.unbind(ended)
+            }
+        }
+    }
+
+    func awaitTeardown() async { await teardownTask?.value }
 }
