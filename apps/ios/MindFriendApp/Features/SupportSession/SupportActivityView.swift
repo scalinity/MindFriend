@@ -140,7 +140,7 @@ struct SupportActivityView: View {
             Button("Make it smaller") { error = "What is the first part you could do? Edit your step above." }
                 .frame(minHeight: 44)
             VStack(spacing: 12) {
-                Button("I did it") { choose(.didIt) }.buttonStyle(.borderedProminent)
+                Button("I did it") { choose(.didIt) }.buttonStyle(.borderedProminent).foregroundStyle(SupportTheme.onAccent)
                 Button("Save for later") { choose(.saveForLater) }.buttonStyle(.bordered)
                 Button("Not now") { choose(.notNow) }
             }
@@ -153,7 +153,7 @@ struct SupportActivityView: View {
     private func progression(_ activity: SupportActivity) -> some View {
         VStack(spacing: 8) {
             Button(promptIndex == activity.templateKey.prompts.count - 1 ? "Finish" : "Next") { advance(skipped: false) }
-                .buttonStyle(.borderedProminent).frame(minHeight: 48)
+                .buttonStyle(.borderedProminent).foregroundStyle(SupportTheme.onAccent).frame(minHeight: 48)
             Button("Skip this prompt") { advance(skipped: true) }.frame(minHeight: 44)
         }
         .disabled(isSaving).frame(maxWidth: .infinity).padding(16).background(SupportTheme.surface)
@@ -169,7 +169,7 @@ struct SupportActivityView: View {
         if let reflection = activity.reflection {
             Text("Your reflection: \(reflection.outcome.displayTitle.lowercased()).")
             Button("Talk about this") { showDiscussion() }.frame(minHeight: 44).disabled(isSaving)
-            Button(returnTitle) { leave() }.buttonStyle(.borderedProminent).frame(minHeight: 48)
+            Button(returnTitle) { leave() }.buttonStyle(.borderedProminent).foregroundStyle(SupportTheme.onAccent).frame(minHeight: 48)
         } else {
             Text("How was that for you?").font(.title2).accessibilityAddTraits(.isHeader)
             TextField("Optional note", text: $note, axis: .vertical).lineLimit(2...6).textFieldStyle(.roundedBorder).disabled(isSaving)

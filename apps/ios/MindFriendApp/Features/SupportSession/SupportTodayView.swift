@@ -87,7 +87,7 @@ struct SupportTodayView: View {
                 Text(Date().timeIntervalSince(session.updatedAt) > 14 * 86_400 ? "Previous session available" : "Continue where you left off")
                     .font(.title2.weight(.semibold)).accessibilityAddTraits(.isHeader)
                 Text(resumeLabel(session)).foregroundStyle(SupportTheme.textSecondary)
-                Button("Continue") { resume(session) }.buttonStyle(.borderedProminent).frame(minHeight: 48)
+                Button("Continue") { resume(session) }.buttonStyle(.borderedProminent).foregroundStyle(SupportTheme.onAccent).frame(minHeight: 48)
                 Button("Start something else") { startConversation() }.frame(minHeight: 44)
                 HStack {
                     NavigationLink("View session") { SupportSessionDetailView(sessionID: session.id) }
@@ -102,7 +102,7 @@ struct SupportTodayView: View {
             } else {
                 Text("What would help right now?").font(.title2.weight(.semibold)).accessibilityAddTraits(.isHeader)
                 Text("We can talk it through or try one small thing.").foregroundStyle(SupportTheme.textSecondary)
-                Button("Start a conversation") { startConversation() }.buttonStyle(.borderedProminent).frame(minHeight: 48)
+                Button("Start a conversation") { startConversation() }.buttonStyle(.borderedProminent).foregroundStyle(SupportTheme.onAccent).frame(minHeight: 48)
                 ForEach(SupportActivityTemplateKey.allCases, id: \.self) { template in
                     SupportActivityChoiceButton(template: template, origin: .today, title: template.intention)
                 }
