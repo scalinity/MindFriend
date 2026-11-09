@@ -472,13 +472,15 @@ struct ProfileView: View {
     }
 
     private func deleteAccount() {
+        guard let owner = appState.currentUser?.id else { return }
         Task {
             do {
-                try await container.supabaseAuthService.deleteAccount()
+                try await container.supabaseAuthService.deleteAccount(expectedOwner: owner)
                 await MainActor.run {
-                    appState.setUnauthenticated()
+                    if container.supabaseAuthService.userId == nil { appState.setUnauthenticated() }
                 }
             } catch {
+                guard appState.currentUser?.id == owner else { return }
                 appState.showError(.apiError(error.localizedDescription))
             }
         }
@@ -971,61 +973,234 @@ struct PrivacySettingsView: View {
     }
 }
 
+/// Owner data export (AC-20 / E01). A deliberate tap builds ONE protected JSON file (never logged), shows visible
+/// loading/failure, offers the native share/save sheet, and discards the file after sharing, on dismissal, or when the
+/// account changes. See Core/SupportSession/SupportDataExport.swift for the owner/epoch, paging and file contract.
 struct DataExportView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var container: DependencyContainer
-    @State private var isExporting = false
-    @State private var exportData: UserDataExport?
+    /// Owns the run/share state. Each run and each share sheet is bound to a generation, so a cancelled run or a delayed
+    /// share-sheet completion from an older generation can never change (or delete) the current export.
+    @StateObject private var export = SupportExportController()
 
     var body: some View {
-        VStack(spacing: 24) {
-            Image(systemName: "square.and.arrow.up")
-                .font(.system(size: 60))
-                .foregroundStyle(Color.accentColor)
-
-            Text("Export Your Data")
-                .font(.title2)
-                .fontWeight(.semibold)
-
-            Text("Download all your MindFriend data including moods, quests, conversations, and more.")
-                .font(.body)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
-
-            Button {
-                performExport()
-            } label: {
-                if isExporting {
-                    ProgressView()
-                } else {
-                    Text("Export Data")
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                VStack(spacing: 12) {
+                    Image(systemName: "square.and.arrow.up")
+                        .font(.system(size: 52))
+                        .foregroundStyle(Color.accentColor)
+                        .accessibilityHidden(true)
+                    Text("Export Your Data")
+                        .font(.title2)
+                        .fontWeight(.semibold)
+                    Text("Create a file with a copy of the records listed below that MindFriend keeps for your account, plus support data saved only on this device. Nothing is created until you tap Export Data.")
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
                 }
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(isExporting)
+                .frame(maxWidth: .infinity)
 
-            Spacer()
+                scopeSection
+                actionSection
+            }
+            .padding()
         }
-        .padding()
         .navigationTitle("Export Data")
+        .sheet(isPresented: $export.showShareSheet) {
+            // The ticket pins this sheet to the exact file and generation it was created for.
+            if let ticket = export.shareTicket {
+                SupportExportShareSheet(url: ticket.result.fileURL) { export.finishSharing(ticket) }
+                    .ignoresSafeArea()
+            }
+        }
+        // A different account or a restarted account scope never keeps (or shares) the previous person's file.
+        .onChange(of: appState.accountEpoch) { _, _ in export.reset() }
+        .onChange(of: appState.currentUser?.id) { _, _ in export.reset() }
+        .onAppear { SupportDataExporter.purgeLeftoverFiles() }
+        // A sheet over this screen doesn't dismiss it; only leaving the screen discards the file.
+        .onDisappear { if !export.showShareSheet { export.reset() } }
     }
 
-    private func performExport() {
-        isExporting = true
-        Task {
-            do {
-                let data = try await container.supabaseDataService.exportUserData()
-                // In real app, would share the data file
-                Log.data.info("Exported: \(String(describing: data), privacy: .private)")
-            } catch {
-                await MainActor.run {
-                    appState.showError(.apiError(error.localizedDescription))
+    // MARK: Sections
+
+    private var scopeSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            DisclosureGroup("What this export includes") {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(SupportExportDataset.allCases, id: \.rawValue) { dataset in
+                        Text("• \(dataset.title)")
+                    }
+                    Text("• Protected support data saved on this device: drafts, transcript lines and changes still waiting to sync, each marked as local or pending.")
                 }
+                .font(.subheadline)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 6)
             }
-            isExporting = false
+            DisclosureGroup("What it does not include") {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(SupportExportScope.notIncluded, id: \.self) { item in
+                        Text("• \(item)")
+                    }
+                    Text(SupportExportScope.statement)
+                    Text(SupportExportScope.consistencyNote)
+                }
+                .font(.subheadline)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 6)
+            }
+            Text("The file contains private details such as conversations and notes. Share it only with people and apps you trust, and delete saved copies you no longer need.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
         }
     }
+
+    @ViewBuilder
+    private var actionSection: some View {
+        switch export.phase {
+        case .idle:
+            exportButton(title: "Export Data")
+        case .running(let status):
+            VStack(spacing: 12) {
+                ProgressView()
+                Text(status)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                Button("Cancel Export", role: .cancel) { export.cancel() }
+                    .buttonStyle(.bordered)
+            }
+            .frame(maxWidth: .infinity)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Exporting your data. \(status)")
+        case .ready(let result):
+            VStack(alignment: .leading, spacing: 12) {
+                Label(result.summary.isComplete ? "Your export is ready" : "Your export is ready, but not everything is in it",
+                      systemImage: result.summary.isComplete ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                    .font(.headline)
+                    .foregroundStyle(result.summary.isComplete ? Color.green : Color.orange)
+                Text("\(result.summary.totalRows) account records from \(result.summary.datasets.filter { $0.status == .included }.count) of \(result.summary.datasets.count) cloud groups\(deviceSummary(result.summary.local)).")
+                    .font(.subheadline)
+                if !result.summary.isComplete {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(result.summary.omissions, id: \.self) { Text("• \($0)").font(.footnote) }
+                        Text("The file itself marks these as unavailable. They are not empty.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Button {
+                    Task { await export.presentShare() }
+                } label: {
+                    Label("Share or Save File", systemImage: "square.and.arrow.up")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                Button("Discard Export", role: .destructive) { export.reset() }
+                    .frame(maxWidth: .infinity)
+            }
+        case .failed(let message):
+            VStack(spacing: 12) {
+                Label("Export didn't finish", systemImage: "exclamationmark.octagon.fill")
+                    .font(.headline)
+                    .foregroundStyle(Color.red)
+                Text(message)
+                    .font(.subheadline)
+                    .multilineTextAlignment(.center)
+                exportButton(title: "Try Again")
+            }
+            .frame(maxWidth: .infinity)
+            .accessibilityElement(children: .combine)
+        }
+    }
+
+    private func exportButton(title: String) -> some View {
+        Button {
+            export.start { makeExporter() }
+        } label: {
+            Text(title).frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.borderedProminent)
+        .disabled(export.isRunning)
+    }
+
+    private func deviceSummary(_ local: SupportExportLocalSummary) -> String {
+        switch local.status {
+        case .included:
+            let pending = local.unsentMutations + local.pendingTranscriptEvents + local.rejectedTranscriptEvents + local.pendingChatRequests + local.unacknowledgedPrivacyChanges
+            return " and your on-device support data (\(local.drafts) draft\(local.drafts == 1 ? "" : "s"), \(pending) item\(pending == 1 ? "" : "s") awaiting sync or attention)"
+        case .unavailable:
+            return " (on-device support data not included)"
+        }
+    }
+
+    // MARK: Wiring (captured owner + epoch; raw token; no ambient SDK session on the wire)
+
+    @MainActor
+    private func makeExporter() -> SupportDataExporter? {
+        guard let ownerID = appState.currentUser?.id else { return nil }
+        let binding = SupportExportBinding(ownerID: ownerID, accountEpoch: appState.accountEpoch)
+        let appState = self.appState
+        let container = self.container
+
+        let proof: SupportExportOwnerProof = { [weak appState, weak container] in
+            guard let appState, let container else { return nil }
+            return await MainActor.run {
+                guard appState.currentUser?.id == binding.ownerID, appState.accountEpoch == binding.accountEpoch,
+                      container.supabaseAuthService.userId == binding.ownerID,
+                      container.supabaseClient.auth.currentSession?.user.id == binding.ownerID else { return nil }
+                return binding
+            }
+        }
+        let tokens: SupportExportTokenSource = { [weak container] in
+            guard let container, await proof() == binding else { throw SupportExportError.ownerChanged }
+            try await container.supabaseAuthService.ensureValidSession()
+            guard await proof() == binding else { throw SupportExportError.ownerChanged }
+            let token: String? = await MainActor.run {
+                guard let session = container.supabaseAuthService.session, session.user.id == binding.ownerID else { return nil }
+                return session.accessToken
+            }
+            guard let token else { throw SupportExportError.ownerChanged }
+            return SupportExportCredential(binding: binding, accessToken: token)
+        }
+        let local: SupportExportLocalSource = { [weak container] requested in
+            guard let container else { return .unavailable(.noSupportScope) }
+            return await DataExportView.readLocalJournal(container: container, binding: requested)
+        }
+        return SupportDataExporter(
+            binding: binding, ownerProof: proof, tokenSource: tokens, local: local,
+            transport: URLSessionSupportExportTransport(session: URLSessionSupportExportTransport.makeSession()),
+            projectURL: SupabaseConfig.projectURL, apiKey: SupabaseConfig.anonKey, appVersion: Bundle.main.appVersion)
+    }
+
+    /// Requires the loaded coordinator's owner AND account epoch to match, then only READS the journal: nothing is
+    /// replayed, sent or changed.
+    @MainActor
+    private static func readLocalJournal(container: DependencyContainer, binding: SupportExportBinding) async -> SupportExportLocalOutcome {
+        if container.supportSessionRecovery != nil { return .unavailable(.journalNeedsRecovery) }
+        guard let coordinator = container.supportSessionCoordinator else { return .unavailable(.noSupportScope) }
+        guard coordinator.identity.ownerID == binding.ownerID else { return .unavailable(.ownerMismatch) }
+        guard container.supportSessionAccountEpoch == binding.accountEpoch else { return .unavailable(.accountEpochMismatch) }
+        do {
+            return .journal(try await coordinator.repository.currentJournal(epoch: coordinator.identity.epochID))
+        } catch {
+            return .unavailable(.journalUnreadable)
+        }
+    }
+}
+
+/// `UIActivityViewController` with a completion callback, so the temporary export file is deleted as soon as the sheet ends.
+private struct SupportExportShareSheet: UIViewControllerRepresentable {
+    let url: URL
+    let onFinish: () -> Void
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        let controller = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+        controller.completionWithItemsHandler = { _, _, _, _ in onFinish() }
+        return controller
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
 // NOTE: BadgesView and BadgeCard are defined in Features/Badges/BadgesView.swift

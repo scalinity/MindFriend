@@ -11,8 +11,11 @@ struct TherapistDiscoveryView: View {
     @EnvironmentObject private var dependencies: DependencyContainer
     @StateObject private var viewModel = TherapistDiscoveryViewModel()
 
+    /// Set by the stable shell so pushed work adds no second NavigationStack; standalone callers keep their own.
+    @Environment(\.supportRootEmbedded) private var supportEmbedded
+
     var body: some View {
-        NavigationStack {
+        SupportRootNavigation(embedded: supportEmbedded) {
             ScrollView {
                 VStack(spacing: 24) {
                     // Search and Filters

@@ -16,19 +16,13 @@ private struct SettingsUpdatePayload: Encodable {
     }
 }
 
-private struct DisconnectPayload: Encodable {
-    let isConnected: Bool
-    let updatedAt: String
-
-    enum CodingKeys: String, CodingKey {
-        case isConnected = "is_connected"
-        case updatedAt = "updated_at"
-    }
-}
-
 struct BiometricsSettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var healthKit: HealthKitService
+    @EnvironmentObject private var appState: AppState
+    @EnvironmentObject private var container: DependencyContainer
+    @State private var loadedOwner: OfflineOwnerProof?
+    @State private var settingsError: String?
 
     @State private var connection: HealthKitConnection?
     @State private var enableInsights = true
@@ -36,9 +30,13 @@ struct BiometricsSettingsView: View {
     @State private var syncFrequency = 6
     @State private var isLoading = true
     @State private var showDisconnectAlert = false
+    @State private var showHealthChoices = false
+
+    /// Set by the stable shell so pushed work adds no second NavigationStack; standalone callers keep their own.
+    @Environment(\.supportRootEmbedded) private var supportEmbedded
 
     var body: some View {
-        NavigationStack {
+        SupportRootNavigation(embedded: supportEmbedded) {
             Form {
                 Section {
                     HStack {
@@ -51,15 +49,23 @@ struct BiometricsSettingsView: View {
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
-                        if healthKit.isAuthorized {
-                            Text("Connected")
-                                .foregroundStyle(.green)
+                        if healthKit.hasCompletedPermissionRequest {
+                            Text(healthKit.syncPaused ? "Sync paused" : "Setup complete")
+                                .foregroundStyle(.secondary)
                         } else {
-                            Text("Not Connected")
+                            Text(healthKit.isHealthKitAvailable ? "Choose data" : "Unavailable")
                                 .foregroundStyle(.secondary)
                         }
                     }
 
+                    if healthKit.isHealthKitAvailable {
+                        Button(healthKit.syncPaused ? "Reconnect Apple Health" : "Choose Health data") { showHealthChoices = true }
+                    }
+                    if let failure = healthKit.connectionError {
+                        Text("Sync is paused on this device, but your account could not be updated: \(failure.localizedDescription)")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
                     if let lastSync = healthKit.lastSyncDate {
                         LabeledContent("Last Synced") {
                             Text(lastSync.formatted(date: .abbreviated, time: .shortened))
@@ -68,7 +74,29 @@ struct BiometricsSettingsView: View {
                 } header: {
                     Text("HealthKit Connection")
                 } footer: {
-                    Text("MindFriend uses Apple's HealthKit framework to read and write data to the Apple Health app.")
+                    Text("MindFriend requests read-only access. Apple keeps your choices private; setup completion does not mean any data was shared. Disconnecting only pauses syncing in MindFriend; it does not change Apple Health permissions.")
+                }
+
+                Section {
+                    LabeledContent("Source", value: HealthQueryOutcome.sourceName)
+                    if let outcome = healthKit.lastQueryOutcome {
+                        LabeledContent("Period") {
+                            Text("\(outcome.interval.start.formatted(date: .abbreviated, time: .omitted)) – \(outcome.interval.end.formatted(date: .abbreviated, time: .omitted))")
+                        }
+                        LabeledContent("Status", value: outcome.statusText)
+                        LabeledContent("Checked") {
+                            Text(outcome.checkedAt.formatted(date: .abbreviated, time: .shortened))
+                        }
+                        if let failure = outcome.failureDescription {
+                            Text(failure).font(.caption).foregroundStyle(.secondary)
+                        }
+                    } else {
+                        LabeledContent("Status", value: "Not checked yet")
+                    }
+                } header: {
+                    Text("Latest Health check")
+                } footer: {
+                    Text("“No recent data available” means Apple Health returned nothing for that period. It does not tell us whether access was changed, and nothing blank is uploaded.")
                 }
 
                 Section {
@@ -79,17 +107,13 @@ struct BiometricsSettingsView: View {
                                 .frame(width: 24)
                             Text(type.displayName)
                             Spacer()
-                            if healthKit.authorizedTypes.contains(type) {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundStyle(.green)
-                            } else {
-                                Image(systemName: "circle")
-                                    .foregroundStyle(.secondary)
-                            }
+                            Text(healthKit.hasCompletedPermissionRequest ? "Requested" : "Optional")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
                     }
                 } header: {
-                    Text("Data Types")
+                    Text("Requested data types")
                 } footer: {
                     Text("You can manage HealthKit permissions in Settings > Privacy & Security > Health.")
                 }
@@ -120,7 +144,7 @@ struct BiometricsSettingsView: View {
                             try? await healthKit.syncBiometrics(days: 7)
                         }
                     }
-                    .disabled(healthKit.isSyncing)
+                    .disabled(healthKit.isSyncing || !healthKit.isSyncEnabled)
 
                     Button("Trigger Analysis") {
                         Task {
@@ -129,7 +153,9 @@ struct BiometricsSettingsView: View {
                     }
                 }
 
-                if healthKit.isAuthorized {
+                if let settingsError { Section { Text(settingsError).foregroundStyle(.secondary) } }
+
+                if healthKit.isSyncEnabled {
                     Section {
                         Button("Disconnect Apple Health", role: .destructive) {
                             showDisconnectAlert = true
@@ -149,13 +175,14 @@ struct BiometricsSettingsView: View {
             .task {
                 await loadSettings()
             }
+            .sheet(isPresented: $showHealthChoices) { HealthKitConnectionSheet(healthKit: healthKit) }
             .alert("Disconnect Apple Health?", isPresented: $showDisconnectAlert) {
                 Button("Cancel", role: .cancel) {}
                 Button("Disconnect", role: .destructive) {
                     disconnect()
                 }
             } message: {
-                Text("This will stop syncing your health data to MindFriend. You can reconnect at any time.")
+                Text("This stops syncing your Health data to MindFriend on this account. It does not change Apple Health permissions or delete data already synced. You can reconnect at any time.")
             }
         }
     }
@@ -164,14 +191,18 @@ struct BiometricsSettingsView: View {
         isLoading = true
         defer { isLoading = false }
 
+        guard let owner = currentOwner else { return }
         do {
             let response: [HealthKitConnection] = try await supabase
                 .from("healthkit_connections")
                 .select()
+                .eq("user_id", value: owner.userId)
                 .limit(1)
                 .execute()
                 .value
 
+            guard currentOwner == owner else { return }
+            loadedOwner = owner
             if let conn = response.first {
                 connection = conn
                 enableInsights = conn.enableInsights
@@ -179,11 +210,18 @@ struct BiometricsSettingsView: View {
                 syncFrequency = conn.syncFrequencyHours
             }
         } catch {
-            Log.biometrics.error("Failed to load settings", error: error)
+            if currentOwner == owner { settingsError = "Couldn’t load your Health settings. Try reopening this screen." }
         }
     }
 
+    private var currentOwner: OfflineOwnerProof? {
+        guard let id = appState.currentUser?.id, container.supabaseAuthService.userId == id,
+              container.supabaseClient.auth.currentSession?.user.id == id else { return nil }
+        return OfflineOwnerProof(userId: id, epoch: appState.accountEpoch)
+    }
+
     private func saveAndDismiss() {
+        guard let owner = loadedOwner, currentOwner == owner else { return }
         Task {
             do {
                 let payload = SettingsUpdatePayload(
@@ -195,32 +233,23 @@ struct BiometricsSettingsView: View {
                 try await supabase
                     .from("healthkit_connections")
                     .update(payload)
+                    .eq("user_id", value: owner.userId)
                     .execute()
+                guard currentOwner == owner else { return }
+                dismiss()
             } catch {
-                Log.biometrics.error("Failed to save settings", error: error)
+                if currentOwner == owner { settingsError = "Couldn’t save your Health settings. Try again." }
             }
         }
-        dismiss()
     }
 
     private func disconnect() {
+        guard let owner = currentOwner else { return }
         Task {
-            do {
-                let payload = DisconnectPayload(
-                    isConnected: false,
-                    updatedAt: Date().ISO8601Format()
-                )
-                try await supabase
-                    .from("healthkit_connections")
-                    .update(payload)
-                    .execute()
-
-                await healthKit.checkAuthorizationStatus()
-            } catch {
-                Log.biometrics.error("Failed to disconnect", error: error)
-            }
+            await healthKit.disconnect()
+            // Keep the screen open if the account could not be told, so the failure is visible.
+            if currentOwner == owner, healthKit.connectionError == nil { dismiss() }
         }
-        dismiss()
     }
 }
 

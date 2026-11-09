@@ -6,6 +6,9 @@ import Supabase
 final class CompanionMemoryService: ObservableObject {
     private let authService: SupabaseAuthService
     private let supabase: SupabaseClient
+    private var binding: OfflineOwnerProof?
+    private var isCurrent: (() -> Bool)?
+    private let requestSession: URLSession
 
     @Published private(set) var memories: [CompanionMemory] = []
     @Published private(set) var dailyIntent: DailyIntent?
@@ -14,9 +17,57 @@ final class CompanionMemoryService: ObservableObject {
     @Published private(set) var totalCount = 0
     @Published private(set) var maxLimit = 20
 
-    init(authService: SupabaseAuthService, supabase: SupabaseClient) {
+    init(authService: SupabaseAuthService, supabase: SupabaseClient, requestSession: URLSession? = nil) {
         self.authService = authService
         self.supabase = supabase
+        self.requestSession = requestSession ?? URLSession(configuration: .ephemeral, delegate: MemoryRequestRedirectDelegate(), delegateQueue: nil)
+    }
+
+    func bind(_ binding: OfflineOwnerProof, isCurrent: @escaping () -> Bool) {
+        if self.binding != binding { unbind() }
+        self.binding = binding
+        self.isCurrent = isCurrent
+    }
+
+    func unbind() {
+        binding = nil; isCurrent = nil
+        memories = []; dailyIntent = nil; totalCount = 0; isLoading = false; error = nil
+    }
+
+    private struct EmptyBody: Encodable {}
+
+    /// Fixed-host raw requests retain the token captured with their owner. The SDK may replace supplied auth headers.
+    private func invoke<Response: Decodable, Body: Encodable>(_ endpoint: String, body: Body) async throws -> Response {
+        guard let captured = binding, isCurrent?() == true, authService.userId == captured.userId else { throw CancellationError() }
+        try await authService.ensureValidSession()
+        guard binding == captured, isCurrent?() == true, let session = authService.session,
+              session.user.id == captured.userId else { throw CancellationError() }
+        let url = SupabaseConfig.projectURL.appendingPathComponent("functions/v1/" + endpoint)
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"; request.timeoutInterval = 30
+        request.setValue("Bearer \(session.accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue(SupabaseConfig.anonKey, forHTTPHeaderField: "apikey")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(body)
+        let data: Data
+        let response: URLResponse
+        do { (data, response) = try await requestSession.data(for: request) }
+        catch {
+            guard binding == captured, isCurrent?() == true else { throw CancellationError() }
+            throw error
+        }
+        guard binding == captured, isCurrent?() == true, authService.userId == captured.userId, !Task.isCancelled else { throw CancellationError() }
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),
+              http.url?.host == url.host, data.count <= 1_048_576 else {
+            throw CompanionMemoryError.serverError("Account context could not be confirmed. Refresh it before trying again.")
+        }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let value = try decoder.singleValueContainer().decode(String.self)
+            guard let date = SupportChatTimestamp.date(value) else { throw DecodingError.dataCorruptedError(in: try decoder.singleValueContainer(), debugDescription: "Invalid account date") }
+            return date
+        }
+        return try decoder.decode(Response.self, from: data)
     }
 
     /// Whether the memory limit has been reached
@@ -33,27 +84,23 @@ final class CompanionMemoryService: ObservableObject {
 
     /// Fetches all companion memories and the current daily intent
     func fetchMemories() async {
+        guard let captured = binding, isCurrent?() == true else { return }
         isLoading = true
         error = nil
 
         do {
-            let response: GetMemoryResponse = try await supabase.functions
-                .invoke(
-                    "get-companion-memory",
-                    options: FunctionInvokeOptions(
-                        headers: authService.authHeaders
-                    )
-                )
+            let response: GetMemoryResponse = try await invoke("get-companion-memory", body: EmptyBody())
 
             memories = response.memories
             dailyIntent = response.dailyIntent
             totalCount = response.totalCount
             maxLimit = response.maxLimit
         } catch {
-            self.error = "Failed to load memories: \(error.localizedDescription)"
+            guard binding == captured, isCurrent?() == true else { return }
+            self.error = "Account context could not be loaded. Try again when ready."
         }
 
-        isLoading = false
+        if binding == captured { isLoading = false }
     }
 
     // MARK: - Create Memory
@@ -79,14 +126,7 @@ final class CompanionMemoryService: ObservableObject {
 
         let request = UpdateMemoryRequest.memory(category: category, content: content)
 
-        let response: UpdateMemoryResponse = try await supabase.functions
-            .invoke(
-                "update-companion-memory",
-                options: FunctionInvokeOptions(
-                    headers: authService.authHeaders,
-                    body: request
-                )
-            )
+        let response: UpdateMemoryResponse = try await invoke("update-companion-memory", body: request)
 
         guard response.success, let memory = response.memory else {
             throw CompanionMemoryError.serverError(response.error ?? "Unknown error")
@@ -119,14 +159,7 @@ final class CompanionMemoryService: ObservableObject {
 
         let request = UpdateMemoryRequest.memory(id: id, category: category, content: content)
 
-        let response: UpdateMemoryResponse = try await supabase.functions
-            .invoke(
-                "update-companion-memory",
-                options: FunctionInvokeOptions(
-                    headers: authService.authHeaders,
-                    body: request
-                )
-            )
+        let response: UpdateMemoryResponse = try await invoke("update-companion-memory", body: request)
 
         guard response.success, let memory = response.memory else {
             throw CompanionMemoryError.serverError(response.error ?? "Unknown error")
@@ -147,14 +180,7 @@ final class CompanionMemoryService: ObservableObject {
     func deleteMemory(id: String) async throws {
         let request = DeleteMemoryRequest.memory(id: id)
 
-        let response: DeleteMemoryResponse = try await supabase.functions
-            .invoke(
-                "delete-companion-memory",
-                options: FunctionInvokeOptions(
-                    headers: authService.authHeaders,
-                    body: request
-                )
-            )
+        let response: DeleteMemoryResponse = try await invoke("delete-companion-memory", body: request)
 
         guard response.success else {
             throw CompanionMemoryError.serverError(response.error ?? "Unknown error")
@@ -182,14 +208,7 @@ final class CompanionMemoryService: ObservableObject {
 
         let request = UpdateMemoryRequest.intent(text)
 
-        let response: UpdateMemoryResponse = try await supabase.functions
-            .invoke(
-                "update-companion-memory",
-                options: FunctionInvokeOptions(
-                    headers: authService.authHeaders,
-                    body: request
-                )
-            )
+        let response: UpdateMemoryResponse = try await invoke("update-companion-memory", body: request)
 
         guard response.success, let intent = response.dailyIntent else {
             throw CompanionMemoryError.serverError(response.error ?? "Unknown error")
@@ -205,14 +224,7 @@ final class CompanionMemoryService: ObservableObject {
     func clearDailyIntent() async throws {
         let request = DeleteMemoryRequest.intent()
 
-        let response: DeleteMemoryResponse = try await supabase.functions
-            .invoke(
-                "delete-companion-memory",
-                options: FunctionInvokeOptions(
-                    headers: authService.authHeaders,
-                    body: request
-                )
-            )
+        let response: DeleteMemoryResponse = try await invoke("delete-companion-memory", body: request)
 
         guard response.success else {
             throw CompanionMemoryError.serverError(response.error ?? "Unknown error")
@@ -261,4 +273,9 @@ enum CompanionMemoryError: LocalizedError {
             return message
         }
     }
+}
+
+private final class MemoryRequestRedirectDelegate: NSObject, URLSessionTaskDelegate {
+    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) { completionHandler(nil) }
 }

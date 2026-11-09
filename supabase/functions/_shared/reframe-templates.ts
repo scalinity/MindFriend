@@ -6,6 +6,22 @@
 
 import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 
+/**
+ * Logging only: a database error object or message can quote row text, and a thrown error's
+ * message can quote a response body. Log a PostgREST/PostgreSQL code or a fixed category, never
+ * the object, message or stack.
+ */
+function failureCode(error: unknown): string {
+  const code = typeof error === "object" && error !== null
+    ? (error as { code?: unknown }).code
+    : undefined;
+  return typeof code === "string" && /^[A-Za-z0-9_]{1,16}$/.test(code)
+    ? code
+    : error instanceof Error
+    ? "exception"
+    : "unknown";
+}
+
 export interface ReframeResult {
   reframeText: string;
   educationalContent: string;
@@ -52,7 +68,7 @@ export async function getReframe(
       .single();
 
     if (distortionError || !distortionData) {
-      console.error(`Distortion not found: ${distortionCode}`, distortionError);
+      console.error(`Distortion not found: ${distortionCode}`, failureCode(distortionError));
       return null;
     }
 
@@ -83,7 +99,7 @@ export async function getReframe(
         .single();
 
       if (englishError || !englishData) {
-        console.error("English fallback also failed", englishError);
+        console.error("English fallback also failed", failureCode(englishError));
         return null;
       }
 
@@ -122,7 +138,7 @@ export async function getReframe(
       shortDescription: shortDesc,
     };
   } catch (error) {
-    console.error("Error fetching reframe:", error);
+    console.error("Error fetching reframe:", failureCode(error));
     return null;
   }
 }

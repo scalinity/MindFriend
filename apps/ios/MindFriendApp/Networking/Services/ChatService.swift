@@ -26,13 +26,14 @@ final class ChatService: ObservableObject {
     }
 
     /// Send a message and get AI response via Edge Function
-    func sendMessage(conversationId: String, content: String, requestId: UUID = UUID(), retryFailed: Bool = false, onDelta: ((String) -> Void)? = nil) async throws -> SendMessageResponse {
+    func sendMessage(conversationId: String, content: String, requestId: UUID = UUID(), retryFailed: Bool = false, supportContext: SupportChatRequestContext? = nil, ownerProof: (@Sendable () async -> OfflineOwnerProof?)? = nil, onDelta: ((String) -> Void)? = nil) async throws -> SendMessageResponse {
         // Call Edge Function which saves both messages and returns AI response
         let response = try await dataService.sendMessage(
             conversationId: conversationId,
             content: content,
             requestId: requestId,
             retryFailed: retryFailed,
+            supportContext: supportContext, ownerProof: ownerProof,
             onDelta: onDelta
         )
 
@@ -61,9 +62,10 @@ final class ChatService: ObservableObject {
             quotaLimit: response.quotaLimit,     // Pass through for UI syncing
             crisisDetected: response.isCrisisResponse,
             conversationTitle: response.conversationTitle,
-            memoryUsed: nil,                     // Not yet available from chat response
-            memoryIdsUsed: nil,                  // Not yet available from chat response
-            coachData: response.coachData
+            memoryUsed: response.memoryUsed,
+            memoryIdsUsed: response.memoryIdsUsed,
+            coachData: response.coachData,
+            support: response.support
         )
     }
 

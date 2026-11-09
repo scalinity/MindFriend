@@ -10,8 +10,11 @@ struct NarrativeListView: View {
         _viewModel = StateObject(wrappedValue: NarrativeListViewModel(dataService: dataService))
     }
 
+    /// Set by the stable shell so pushed work adds no second NavigationStack; standalone callers keep their own.
+    @Environment(\.supportRootEmbedded) private var supportEmbedded
+
     var body: some View {
-        NavigationStack {
+        SupportRootNavigation(embedded: supportEmbedded) {
             ZStack {
                 if viewModel.isLoading && viewModel.stories.isEmpty {
                     ProgressView("Loading your stories...")

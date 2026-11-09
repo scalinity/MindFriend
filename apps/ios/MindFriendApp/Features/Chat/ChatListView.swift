@@ -21,14 +21,21 @@ struct ChatListView: View {
                           !showNewChat && !showVoiceChat && !showChatTutorial)
     }
     @State private var conversations: [Conversation] = []
+    @State private var nextCursor: SupportConversationCursor?
+    @State private var hasMore = false
+    @State private var loadingMore = false
+    @State private var loadGeneration = UUID()
     @State private var isLoading = true
     @State private var showNewChat = false
     @State private var showVoiceChat = false
+    @State private var voiceAccess: SessionVoiceAccess?
+    @State private var voiceTextID: UUID?
+    @State private var voiceTextConversation: Conversation?
+    @State private var showVoiceText = false
     @State private var loadError: String?
     @State private var refreshTrigger = UUID() // Changes to trigger refresh
 
     // Chat tutorial state
-    @AppStorage("chat_tutorial_completed") private var chatTutorialCompleted = false
     @State private var showChatTutorial = false
 
     var body: some View {
@@ -72,6 +79,11 @@ struct ChatListView: View {
                             }
                         }
                         .onDelete(perform: deleteConversations)
+                        if hasMore {
+                            Button("Load older conversations") { Task { await loadConversations(more: true) } }
+                                .disabled(loadingMore)
+                        }
+                        if loadingMore { ProgressView("Loading older conversations") }
                     }
                     .listStyle(.plain)
                 }
@@ -84,18 +96,25 @@ struct ChatListView: View {
                     } label: {
                         Image(systemName: "heart.text.square.fill")
                             .foregroundStyle(.red)
+                            .frame(minWidth: 44, minHeight: 44)
                     }
+                    .accessibilityLabel("Support and crisis resources")
                 }
 
                 ToolbarItemGroup(placement: .topBarTrailing) {
+                    Button { showChatTutorial = true } label: {
+                        Image(systemName: "questionmark.circle").frame(minWidth: 44, minHeight: 44)
+                    }
+                    .accessibilityLabel("How Chat works")
                     Button {
                         if appState.entitlements.tier == .premium {
+                            voiceAccess = SessionVoiceAccess(container: container, appState: appState)
                             showVoiceChat = true
                         } else {
                             appState.showPaywall = true
                         }
                     } label: {
-                        Image(systemName: "mic.fill")
+                        Image(systemName: "mic.fill").frame(minWidth: 44, minHeight: 44)
                     }
                     .accessibilityLabel("Voice mode")
                     .accessibilityHint(appState.entitlements.tier == .premium ? "Start a voice conversation" : "Premium feature - tap to upgrade")
@@ -103,8 +122,9 @@ struct ChatListView: View {
                     Button {
                         showNewChat = true
                     } label: {
-                        Image(systemName: "square.and.pencil")
+                        Image(systemName: "square.and.pencil").frame(minWidth: 44, minHeight: 44)
                     }
+                    .accessibilityLabel("New conversation")
                 }
             }
             .navigationDestination(isPresented: $showNewChat, destination: {
@@ -116,15 +136,25 @@ struct ChatListView: View {
                         .id(request.id)
                 }
             }
+            .navigationDestination(isPresented: $showVoiceText) {
+                if let voiceTextConversation {
+                    ChatView(conversation: voiceTextConversation, supportSessionID: voiceAccess?.selectedSessionID)
+                }
+            }
             .fullScreenCover(isPresented: $showVoiceChat, onDismiss: {
+                let owner = appState.currentUser?.id, epoch = appState.accountEpoch, id = voiceTextID
+                voiceTextID = nil
                 Task {
-                    // Delay to allow title generation API call to complete
-                    // Title generation can take 3-5 seconds with AI reasoning
-                    try? await Task.sleep(for: .seconds(4))
                     await loadConversations()
+                    if let id, let value = try? await container.supabaseDataService.getConversation(id: id.uuidString),
+                       appState.currentUser?.id == owner, appState.accountEpoch == epoch {
+                        voiceTextConversation = value
+                        showVoiceText = true
+                    }
                 }
             }) {
-                VoiceChatView(supabase: container.supabaseClient)
+                VoiceChatView(supabase: container.supabaseClient, supportAccess: voiceAccess,
+                    onUseText: { voiceTextID = voiceAccess?.attachedConversationID })
             }
             .refreshable {
                 await loadConversations()
@@ -157,15 +187,8 @@ struct ChatListView: View {
                 appState.shouldOpenNewChat = false
             }
         }
-        .onChange(of: appState.selectedTab) { _, newTab in
-            // Only show tutorial when chat tab is actually selected
-            if newTab == .chat && !chatTutorialCompleted && deepLinkRouter.pendingRoute == nil {
-                showChatTutorial = true
-            }
-        }
         .fullScreenCover(isPresented: $showChatTutorial) {
             ChatTutorialFlow(onComplete: {
-                chatTutorialCompleted = true
                 showChatTutorial = false
             })
             .environmentObject(container)
@@ -204,64 +227,36 @@ struct ChatListView: View {
         }
     }
 
-    private func loadConversations() async {
-        Log.chat.debug("[ChatList] Starting to load conversations...")
-
-        // Only show loading indicator on initial load, not during refresh
-        let isInitialLoad = conversations.isEmpty && loadError == nil
-        if isInitialLoad {
-            isLoading = true
-        }
+    private func loadConversations(more: Bool = false) async {
+        guard !more || !loadingMore else { return }
+        guard let id = appState.currentUser?.id else { isLoading = false; return }
+        let owner = OfflineOwnerProof(userId: id, epoch: appState.accountEpoch)
+        let generation = more ? loadGeneration : UUID()
+        if !more { loadGeneration = generation }
+        let cursor = more ? nextCursor : nil
+        if more { loadingMore = true } else if conversations.isEmpty { isLoading = true }
         loadError = nil
-
+        let proof: @Sendable () async -> OfflineOwnerProof? = { await MainActor.run {
+            guard appState.currentUser?.id == id, appState.accountEpoch == owner.epoch else { return nil }
+            return owner
+        } }
         defer {
-            if isInitialLoad {
-                isLoading = false
-            }
-            Log.chat.debug("[ChatList] Finished loading, isLoading=false")
+            if loadGeneration == generation { isLoading = false; loadingMore = false }
         }
-
         do {
-            // Check for cancellation before starting
-            try Task.checkCancellation()
-
-            // Add a timeout to prevent infinite waits
-            let result = try await withThrowingTaskGroup(of: [Conversation].self) { group in
-                group.addTask {
-                    try await self.container.chatService.getConversations()
-                }
-
-                group.addTask {
-                    try await Task.sleep(for: .seconds(30))
-                    throw ChatLoadError.timeout
-                }
-
-                // Return whichever finishes first
-                guard let first = try await group.next() else {
-                    throw ChatLoadError.cancelled
-                }
-                group.cancelAll()
-                return first
+            let page = try await container.supabaseDataService.getConversationPage(owner: owner, cursor: cursor, ownerProof: proof)
+            guard !Task.isCancelled, await proof() == owner, loadGeneration == generation else { return }
+            if !more { conversations = [] }
+            for item in page.items {
+                if let index = conversations.firstIndex(where: { $0.id == item.id }) { conversations[index] = item }
+                else { conversations.append(item) }
             }
-
-            // Check for cancellation before updating UI
-            try Task.checkCancellation()
-
-            conversations = result
-            Log.chat.debug("[ChatList] Loaded \(result.count) conversations")
-        } catch is CancellationError {
-            // SwiftUI cancelled the task (e.g., user released pull-to-refresh early)
-            // This is normal behavior, not an error to show the user
-            Log.chat.debug("[ChatList] Task was cancelled by SwiftUI")
-        } catch ChatLoadError.timeout {
-            Log.chat.error("[ChatList] Request timed out after 30s")
-            loadError = "Request timed out. Please check your connection and try again."
-        } catch ChatLoadError.cancelled {
-            Log.chat.warning("[ChatList] Request was cancelled")
-            // Don't show error for internal cancellation either
-        } catch {
-            Log.chat.error("[ChatList] Error loading conversations: \(error.localizedDescription)")
-            loadError = error.localizedDescription
+            nextCursor = page.nextCursor
+            hasMore = page.nextCursor != nil
+        } catch is CancellationError { }
+        catch {
+            guard await proof() == owner, loadGeneration == generation else { return }
+            loadError = "Conversations could not be loaded. Your local drafts and practices remain available."
         }
     }
 
@@ -272,6 +267,8 @@ struct ChatListView: View {
 
     private func deleteConversations(at offsets: IndexSet) {
         let conversationsToDelete = offsets.map { conversations[$0] }
+        let owner = appState.currentUser?.id, epoch = appState.accountEpoch
+        let coordinator = container.supportSessionCoordinator
 
         // Optimistic UI update
         conversations.remove(atOffsets: offsets)
@@ -279,9 +276,16 @@ struct ChatListView: View {
         // Delete from server
         Task {
             for conversation in conversationsToDelete {
+                guard appState.currentUser?.id == owner, appState.accountEpoch == epoch else { return }
                 do {
                     try await container.chatService.deleteConversation(id: conversation.id)
+                    guard appState.currentUser?.id == owner, appState.accountEpoch == epoch else { return }
+                    if let coordinator, coordinator.identity.ownerID == owner,
+                       let id = UUID(uuidString: conversation.id) {
+                        try await coordinator.repository.discardConversationTranscripts(epoch: coordinator.identity.epochID, conversationID: id)
+                    }
                 } catch {
+                    guard appState.currentUser?.id == owner, appState.accountEpoch == epoch else { return }
                     // Reload on error to restore state
                     await loadConversations()
                     appState.showError(.apiError(error.localizedDescription))
@@ -304,8 +308,10 @@ struct ConversationRow: View {
 
                 Spacer()
 
-                Text(conversation.updatedAt, style: .relative)
-                    .font(.caption)
+                Group {
+                    if conversation.dateIsKnown != false { Text(conversation.updatedAt, style: .relative) }
+                    else { Text("Date not supplied") }
+                }.font(.caption)
                     .foregroundStyle(.secondary)
             }
 

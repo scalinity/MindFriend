@@ -26,22 +26,36 @@ final class VoiceWebSocketManager {
     // MARK: - Connection Management
 
     /// Builds the upgrade only from the configured project, never a response-provided host.
-    static func relayRequest(sessionId: String, userToken: String) throws -> URLRequest {
+    ///
+    /// Bound sessions MUST claim the voice-context contract: the query carries `voice_context=1`, and
+    /// the server refuses a legacy claim that lacks it. `requiresVoiceContext` is `true` unless a
+    /// caller deliberately opts out, which no production path does.
+    static func relayRequest(
+        sessionId: String,
+        userToken: String,
+        requiresVoiceContext: Bool = true,
+        projectURL: URL = SupabaseConfig.projectURL,
+        anonKey: String = SupabaseConfig.anonKey
+    ) throws -> URLRequest {
         guard UUID(uuidString: sessionId) != nil, !userToken.isEmpty,
               var components = URLComponents(
-                url: SupabaseConfig.projectURL.appendingPathComponent("functions/v1/test-auth-diagnostic"),
+                url: projectURL.appendingPathComponent("functions/v1/test-auth-diagnostic"),
                 resolvingAgainstBaseURL: false
               ), components.scheme == "https", components.host != nil else {
             throw VoiceError.connectionFailed("Invalid secure voice relay session")
         }
         components.scheme = "wss"
-        components.queryItems = [URLQueryItem(name: "session_id", value: sessionId)]
+        var query = [URLQueryItem(name: "session_id", value: sessionId)]
+        if requiresVoiceContext {
+            query.append(URLQueryItem(name: "voice_context", value: "1"))
+        }
+        components.queryItems = query
         guard let url = components.url else {
             throw VoiceError.connectionFailed("Invalid secure voice relay URL")
         }
         var request = URLRequest(url: url)
         request.setValue("Bearer \(userToken)", forHTTPHeaderField: "Authorization")
-        request.setValue(SupabaseConfig.anonKey, forHTTPHeaderField: "apikey")
+        request.setValue(anonKey, forHTTPHeaderField: "apikey")
         request.timeoutInterval = 30
         return request
     }
