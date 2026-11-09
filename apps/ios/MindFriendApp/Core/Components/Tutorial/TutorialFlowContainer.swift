@@ -26,6 +26,7 @@ struct TutorialFlowContainer<Step: TutorialStepProtocol, Content: View>: View {
     @ViewBuilder let content: (Binding<Step>, @escaping () -> Void, @escaping () -> Void) -> Content
 
     @State private var currentStep: Step
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(
         initialStep: Step,
@@ -42,21 +43,22 @@ struct TutorialFlowContainer<Step: TutorialStepProtocol, Content: View>: View {
     var body: some View {
         VStack(spacing: 0) {
             // Progress bar
+            // One support accent for every tutorial; a feature's own colour stays on its icons.
             ProgressView(value: currentStep.progress)
                 .progressViewStyle(.linear)
-                .tint(accentColor)
+                .tint(SupportTheme.accent)
                 .padding(.horizontal)
                 .padding(.top, 60)
                 .accessibilityLabel("Tutorial progress: \(Int(currentStep.progress * 100)) percent")
 
             // Step content with transitions
             content($currentStep, advanceStep, skipTutorial)
-                .transition(.asymmetric(
+                .transition(reduceMotion ? .opacity : .asymmetric(
                     insertion: .move(edge: .trailing).combined(with: .opacity),
                     removal: .move(edge: .leading).combined(with: .opacity)
                 ))
         }
-        .background(Color(.systemBackground))
+        .background(SupportTheme.canvas.ignoresSafeArea())
         .animation(.easeInOut(duration: 0.3), value: currentStep)
     }
 
