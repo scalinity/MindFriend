@@ -40,7 +40,8 @@ struct TherapistProfileView: View {
             .padding(SupportTheme.Spacing.m)
         }
         .navigationBarTitleDisplayMode(.inline)
-        .overlay(alignment: .bottom) {
+        // An inset, not an overlay: the scroll view reserves the footer's height at every text size.
+        .safeAreaInset(edge: .bottom) {
             bookingButton
         }
     }

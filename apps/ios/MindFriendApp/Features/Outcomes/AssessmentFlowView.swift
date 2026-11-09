@@ -216,7 +216,7 @@ struct AssessmentFlowView: View {
                         }) {
                             Text("Next")
                                 .font(.system(.subheadline, design: .default).weight(.semibold))
-                                .foregroundColor(SupportTheme.textPrimary)
+                                .foregroundColor(answers[currentQuestion?.id ?? ""] != nil ? SupportTheme.onAccent : SupportTheme.textPrimary)
                                 .frame(maxWidth: .infinity)
                                 .padding(SupportTheme.Spacing.s)
                                 .background(
@@ -242,7 +242,7 @@ struct AssessmentFlowView: View {
                             } else {
                                 Text("Submit Assessment")
                                     .font(.system(.subheadline, design: .default).weight(.semibold))
-                                    .foregroundColor(SupportTheme.textPrimary)
+                                    .foregroundColor(canSubmit ? SupportTheme.onAccent : SupportTheme.textPrimary)
                                     .frame(maxWidth: .infinity)
                                     .padding(SupportTheme.Spacing.s)
                                     .background(
