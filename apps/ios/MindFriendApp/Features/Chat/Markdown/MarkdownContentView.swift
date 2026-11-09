@@ -40,8 +40,8 @@ struct MarkdownContentView: View {
             renderMarkdownText(text)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
-                .background(isUserMessage ? Color.accentColor : Color(uiColor: .secondarySystemBackground))
-                .foregroundStyle(isUserMessage ? .white : .primary)
+                .background(isUserMessage ? SupportTheme.accent : SupportTheme.surface)
+                .foregroundStyle(isUserMessage ? SupportTheme.onAccent : SupportTheme.textPrimary)
                 .clipShape(RoundedRectangle(cornerRadius: hasCodeBlocks ? 16 : 20))
 
         case .codeBlock(let language, let code):
@@ -54,7 +54,7 @@ struct MarkdownContentView: View {
                 .font(.system(.callout, design: .monospaced))
                 .padding(.horizontal, 6)
                 .padding(.vertical, 2)
-                .background(isUserMessage ? Color.white.opacity(0.2) : Color(.systemGray5))
+                .background(isUserMessage ? SupportTheme.onAccent.opacity(0.15) : SupportTheme.field)
                 .clipShape(RoundedRectangle(cornerRadius: 4))
         }
     }

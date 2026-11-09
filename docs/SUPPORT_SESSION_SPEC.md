@@ -276,10 +276,13 @@ Preserve MindFriend's established blue family, but use a restrained canvas, read
 | Accent/action | `#3557B7` | `#9BB5FF` | Primary button background, selected controls, links; dark action text uses `#0E1522` |
 | Field | `#FFFFFF` | `#131C2C` | Text entry fill, distinct from canvas and surface |
 | Border | `#76839A` | `#64779A` | 1pt boundary of fields and controls; at least 3:1 against canvas, surface and field |
-| Divider | System separator | System separator | Native adaptive separators |
+| Elevated | `#FFFFFF` | `#22304A` | Toasts, celebration cards and other surfaces raised over content |
+| Separator | `#DDE2EC` | `#26324A` | Decorative row dividers; never the only boundary of a control |
+| Celebration glow | `#C9D7FF` | `#3E5A9E` | Soft light behind reward moments |
+| Celebration gold | `#9A6A12` | `#F2C46D` | Levels and badges; always paired with text or a symbol |
 | Success/caution/destructive | Semantic system colors | Semantic system colors | Always paired with text/icon; never infer wellbeing from traffic-light color |
 
-Use semantic color assets, support Increase Contrast, and verify final composited contrast rather than assuming hex tokens guarantee every combination. Primary text target ≥4.5:1; large text ≥3:1; essential nontext control boundaries ≥3:1. Do not use accent colors for small text on tinted backgrounds without measurement. No physiology score becomes an alarming red Home state by default.
+Under Increase Contrast, secondary text (`#3D4A5E` / `#C9D4E5`), accent (`#26449A` / `#B9CCFF`), border (`#4F5C72` / `#8A9CC0`) and separator (`#8592A6` / `#5C6F8E`) use stronger values. The app's AccentColor asset matches the accent token, and every screen reached from the shell uses the canvas, surface and field tokens rather than system backgrounds. Use semantic color assets, support Increase Contrast, and verify final composited contrast rather than assuming hex tokens guarantee every combination. Primary text target ≥4.5:1; large text ≥3:1; essential nontext control boundaries ≥3:1. Do not use accent colors for small text on tinted backgrounds without measurement. No physiology score becomes an alarming red Home state by default.
 
 Typography uses SF and Dynamic Type: large navigation title 34pt, feature heading 28pt semibold, section heading 22pt semibold, card title 20pt semibold, body 17pt regular, supporting text 15pt, metadata 13pt minimum at default size. Use native text styles/relative metrics rather than fixed point sizes. Body line spacing is modest, with full multiline wrapping. Monospaced digits only for timers. Avoid all-caps paragraph labels and thin text.
 

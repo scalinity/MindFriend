@@ -89,7 +89,15 @@ struct SupportExploreView: View {
                             )
                         }
                     }
-                    pinMenu(for: activePin, name: enrollment.program?.title ?? String(localized: "your program"))
+                    if pins.isPinned(activePin) {
+                        Image(systemName: "pin.fill").font(.caption).foregroundStyle(SupportTheme.accent)
+                            .accessibilityHidden(true)
+                    }
+                }
+                .swipeActions(edge: .trailing) { pinSwipeAction(activePin) }
+                .accessibilityAction(named: pins.isPinned(activePin)
+                                     ? Text("Unpin from Today") : Text("Pin to Today")) {
+                    togglePin(activePin)
                 }
             }
         }
@@ -166,7 +174,10 @@ struct SupportExploreView: View {
             let pin = SupportPin(destination)
             HStack(spacing: SupportTheme.Spacing.xs) {
                 NavigationLink(value: destination) { label }
-                pinMenu(for: pin, name: destination.title)
+                if pins.isPinned(pin) {
+                    Image(systemName: "pin.fill").font(.caption).foregroundStyle(SupportTheme.accent)
+                        .accessibilityHidden(true)
+                }
             }
             .swipeActions(edge: .trailing) { pinSwipeAction(pin) }
             .accessibilityAction(named: pins.isPinned(pin)
@@ -176,30 +187,6 @@ struct SupportExploreView: View {
         } else {
             NavigationLink(value: destination) { label }
         }
-    }
-
-    private func pinMenu(for pin: SupportPin, name: String) -> some View {
-        Menu {
-            if pins.isPinned(pin) {
-                Button(String(localized: "Unpin from Today"), systemImage: "pin.slash") {
-                    pins.unpin(pin)
-                }
-            } else if pins.isFull {
-                Button(String(localized: "Replace a pin…"), systemImage: "pin") {
-                    replaceCandidate = pin
-                }
-            } else {
-                Button(String(localized: "Pin to Today"), systemImage: "pin") {
-                    pins.pin(pin)
-                }
-            }
-        } label: {
-            Image(systemName: pins.isPinned(pin) ? "pin.fill" : "ellipsis.circle")
-                .foregroundStyle(SupportTheme.accent)
-                .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
-        }
-        .buttonStyle(.borderless)
-        .accessibilityLabel(Text("Pin options for \(name)"))
     }
 
     @ViewBuilder
