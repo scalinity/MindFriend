@@ -8,6 +8,7 @@ struct ProactiveSettingsView: View {
     @State private var settings: ProactiveSettings?
     @State private var isLoading = true
     @State private var isSaving = false
+    @State private var loadError: String?
 
     // Local state for edits
     @State private var proactiveEnabled = true
@@ -18,10 +19,16 @@ struct ProactiveSettingsView: View {
         Group {
             if isLoading {
                 ProgressView("Loading settings...")
+            } else if let loadError {
+                SupportUnavailableState(
+                    title: "Check-in settings unavailable", message: loadError,
+                    actionTitle: "Try again", action: { Task { await loadSettings() } })
             } else {
                 settingsList
             }
         }
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle("Proactive Check-ins")
         .task { await loadSettings() }
         .trackScreen("proactive_settings")
@@ -31,17 +38,20 @@ struct ProactiveSettingsView: View {
         List {
             // Info section
             Section {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
+                    HStack(spacing: SupportTheme.Spacing.s) {
                         Image(systemName: "sparkles")
-                            .foregroundStyle(.yellow)
+                            .foregroundStyle(SupportTheme.Celebration.gold)
                             .font(.title2)
+                            .accessibilityAddTraits(.isHeader)
                         Text("MindFriend can proactively reach out to support you based on your patterns and activity.")
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                 }
             }
+
+            .listRowBackground(SupportTheme.surface)
 
             // Main toggle
             Section {
@@ -55,35 +65,40 @@ struct ProactiveSettingsView: View {
                 Text("When enabled, MindFriend will send helpful nudges based on your wellness patterns.")
             }
 
+            .listRowBackground(SupportTheme.surface)
+
             // Trigger types
             if proactiveEnabled {
                 Section("What should we check in about?") {
-                    ForEach(ProactiveTriggerType.allCases, id: \.self) { type in
-                        Toggle(isOn: Binding(
-                            get: { enabledTypes.contains(type) },
-                            set: { isEnabled in
-                                if isEnabled {
-                                    enabledTypes.insert(type)
-                                } else {
-                                    enabledTypes.remove(type)
+                    ForEach(ProactiveTriggerType.allCases.filter { $0 != .streakRisk }, id: \.self) { type in
+                        Toggle(
+                            isOn: Binding(
+                                get: { enabledTypes.contains(type) },
+                                set: { isEnabled in
+                                    if isEnabled {
+                                        enabledTypes.insert(type)
+                                    } else {
+                                        enabledTypes.remove(type)
+                                    }
+                                    saveSettings()
                                 }
-                                saveSettings()
-                            }
-                        )) {
-                            HStack(spacing: 12) {
+                            )
+                        ) {
+                            HStack(spacing: SupportTheme.Spacing.s) {
                                 Image(systemName: type.icon)
                                     .foregroundColor(type.color)
                                     .frame(width: 24)
-                                VStack(alignment: .leading, spacing: 2) {
+                                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                                     Text(type.displayName)
                                     Text(type.description)
                                         .font(.caption)
-                                        .foregroundColor(.secondary)
+                                        .foregroundColor(SupportTheme.textSecondary)
                                 }
                             }
                         }
                     }
                 }
+                .listRowBackground(SupportTheme.surface)
 
                 // Frequency settings
                 Section {
@@ -92,7 +107,7 @@ struct ProactiveSettingsView: View {
                             Text("Max daily")
                             Spacer()
                             Text("\(maxDaily) message\(maxDaily == 1 ? "" : "s")")
-                                .foregroundColor(.secondary)
+                                .foregroundColor(SupportTheme.textSecondary)
                         }
                     }
                     .onChange(of: maxDaily) { _, _ in
@@ -104,6 +119,8 @@ struct ProactiveSettingsView: View {
                     Text("We'll never send more than this many proactive messages per day.")
                 }
 
+                .listRowBackground(SupportTheme.surface)
+
                 // Quiet hours info
                 Section {
                     NavigationLink {
@@ -111,17 +128,19 @@ struct ProactiveSettingsView: View {
                     } label: {
                         HStack {
                             Image(systemName: "moon.fill")
-                                .foregroundColor(.indigo)
+                                .foregroundColor(SupportTheme.accent)
                             Text("Quiet Hours")
                             Spacer()
                             Image(systemName: "chevron.right")
-                                .foregroundColor(.secondary)
+                                .foregroundColor(SupportTheme.textSecondary)
                                 .font(.caption)
                         }
                     }
                 } footer: {
                     Text("Proactive messages respect your notification quiet hours.")
                 }
+
+                .listRowBackground(SupportTheme.surface)
             }
 
             // View patterns link
@@ -134,12 +153,15 @@ struct ProactiveSettingsView: View {
             } footer: {
                 Text("See what behavioral patterns MindFriend has detected in your wellness data.")
             }
+
+            .listRowBackground(SupportTheme.surface)
         }
     }
 
     @MainActor
     private func loadSettings() async {
         isLoading = true
+        loadError = nil
 
         do {
             let fetchedSettings = try await container.supabaseDataService.getProactiveSettings()
@@ -150,7 +172,7 @@ struct ProactiveSettingsView: View {
             maxDaily = fetchedSettings.proactiveMaxDaily
             enabledTypes = Set(fetchedSettings.proactiveTypesEnabled)
         } catch {
-            appState.showError(.apiError(error.localizedDescription))
+            loadError = error.localizedDescription
         }
 
         isLoading = false
@@ -192,31 +214,38 @@ struct QuietHoursInfoView: View {
     var body: some View {
         List {
             Section {
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
+                    HStack(spacing: SupportTheme.Spacing.s) {
                         Image(systemName: "moon.zzz.fill")
-                            .foregroundStyle(.indigo)
+                            .foregroundStyle(SupportTheme.accent)
                             .font(.largeTitle)
+                            .accessibilityAddTraits(.isHeader)
                         VStack(alignment: .leading) {
                             Text("Quiet Hours")
                                 .font(.headline)
+                                .accessibilityAddTraits(.isHeader)
                             Text("Proactive messages are never sent during your quiet hours.")
                                 .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                         }
                     }
                 }
             }
+            .listRowBackground(SupportTheme.surface)
 
             Section {
                 HStack {
                     Image(systemName: "gearshape")
-                        .foregroundColor(.accentColor)
+                        .foregroundColor(SupportTheme.accent)
                     Text("To change quiet hours, go to Settings > Notifications in your main profile settings.")
                         .font(.subheadline)
                 }
             }
+
+            .listRowBackground(SupportTheme.surface)
         }
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle("Quiet Hours")
     }
 }
@@ -227,15 +256,15 @@ extension ProactiveTriggerType {
     var color: Color {
         switch self {
         case .moodDecline:
-            return .pink
+            return SupportTheme.accent
         case .streakRisk:
-            return .orange
+            return SupportTheme.accent
         case .milestoneApproach:
-            return .yellow
+            return SupportTheme.Celebration.gold
         case .reengagement:
-            return .blue
+            return SupportTheme.accent
         case .patternInsight:
-            return .purple
+            return SupportTheme.accent
         }
     }
 }

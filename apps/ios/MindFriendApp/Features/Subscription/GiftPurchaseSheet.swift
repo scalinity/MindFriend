@@ -11,6 +11,8 @@ struct GiftPurchaseSheet: View {
                 systemImage: "gift",
                 description: Text("Please check back later to send or redeem a gift.")
             )
+            .supportScreen()
+            .foregroundStyle(SupportTheme.textPrimary)
             .navigationTitle("Gift a Subscription")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

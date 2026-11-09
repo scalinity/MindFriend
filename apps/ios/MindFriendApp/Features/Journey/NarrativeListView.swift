@@ -1,5 +1,5 @@
-import SwiftUI
 import Supabase
+import SwiftUI
 
 /// List view displaying all weekly stories with favorites filtering
 struct NarrativeListView: View {
@@ -18,12 +18,19 @@ struct NarrativeListView: View {
             ZStack {
                 if viewModel.isLoading && viewModel.stories.isEmpty {
                     ProgressView("Loading your stories...")
+                } else if let error = viewModel.error, viewModel.stories.isEmpty {
+                    SupportUnavailableState(
+                        title: "Stories unavailable", message: error,
+                        actionTitle: "Try again", action: { Task { await viewModel.fetchStories() } })
                 } else if viewModel.stories.isEmpty {
                     emptyStateView
                 } else {
                     storiesList
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .supportScreen()
+            .foregroundStyle(SupportTheme.textPrimary)
             .navigationTitle("My Stories")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -32,6 +39,8 @@ struct NarrativeListView: View {
                     } label: {
                         Image(systemName: "slider.horizontal.3")
                     }
+                    .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                    .accessibilityLabel("Story preferences")
                 }
             }
             .sheet(isPresented: $showingPreferences) {
@@ -48,28 +57,31 @@ struct NarrativeListView: View {
     // MARK: - Empty State
 
     private var emptyStateView: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: SupportTheme.Spacing.l) {
             Image(systemName: "book.closed")
                 .font(.system(size: 60))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
 
             Text(viewModel.showFavoritesOnly ? "No Favorite Stories" : "No Stories Yet")
                 .font(.title2)
+                .accessibilityAddTraits(.isHeader)
                 .fontWeight(.semibold)
 
-            Text(viewModel.showFavoritesOnly
-                 ? "Mark stories as favorites to see them here"
-                 : "Your first weekly story will appear after your first week of activity")
-                .font(.body)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal)
+            Text(
+                viewModel.showFavoritesOnly
+                    ? "Mark stories as favorites to see them here"
+                    : "Your first weekly story will appear after your first week of activity"
+            )
+            .font(.body)
+            .foregroundStyle(SupportTheme.textSecondary)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal)
 
             if viewModel.showFavoritesOnly {
                 Button("Show All Stories") {
                     viewModel.toggleFavoritesFilter()
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.supportPrimary)
             }
         }
         .padding()
@@ -79,13 +91,24 @@ struct NarrativeListView: View {
 
     private var storiesList: some View {
         List {
+            if let error = viewModel.error {
+                Section {
+                    Text(error)
+                    Button("Try again") { Task { await viewModel.refresh() } }
+                }
+                .listRowBackground(SupportTheme.surface)
+            }
             // Filter toggle
             Section {
-                Toggle("Favorites Only", isOn: Binding(
-                    get: { viewModel.showFavoritesOnly },
-                    set: { _ in viewModel.toggleFavoritesFilter() }
-                ))
+                Toggle(
+                    "Favorites Only",
+                    isOn: Binding(
+                        get: { viewModel.showFavoritesOnly },
+                        set: { _ in viewModel.toggleFavoritesFilter() }
+                    ))
             }
+
+            .listRowBackground(SupportTheme.surface)
 
             // Stories
             Section {
@@ -116,18 +139,11 @@ struct NarrativeListView: View {
                     }
                 }
             }
+
+            .listRowBackground(SupportTheme.surface)
         }
         .refreshable {
             await viewModel.refresh()
-        }
-        .alert("Error", isPresented: Binding(get: { viewModel.error != nil }, set: { if !$0 { viewModel.error = nil } })) {
-            Button("OK") {
-                viewModel.error = nil
-            }
-        } message: {
-            if let error = viewModel.error {
-                Text(error)
-            }
         }
     }
 }
@@ -138,42 +154,43 @@ private struct StoryRowView: View {
     let story: WeeklyStory
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             HStack {
                 Text(story.weekRangeFormatted)
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
 
                 Spacer()
 
                 if story.isFavorite {
                     Image(systemName: "star.fill")
-                        .foregroundStyle(.yellow)
+                        .foregroundStyle(SupportTheme.Celebration.gold)
                         .font(.caption)
                 }
 
                 if let rating = story.userRating {
                     Image(systemName: rating == 1 ? "hand.thumbsup.fill" : "hand.thumbsdown.fill")
-                        .foregroundStyle(rating == 1 ? .blue : .secondary)
+                        .foregroundStyle(rating == 1 ? SupportTheme.accent : SupportTheme.textSecondary)
                         .font(.caption)
                 }
             }
 
             Text(story.previewText)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .lineLimit(2)
 
-            HStack(spacing: 12) {
-                Label("\(story.cards.count)", systemImage: "rectangle.stack")
+            HStack(spacing: SupportTheme.Spacing.s) {
+                Label("\(story.cards.filter { $0.cardType != .streak }.count)", systemImage: "rectangle.stack")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
 
                 Text(story.createdAt, style: .relative)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, SupportTheme.Spacing.xxs)
     }
 }
 

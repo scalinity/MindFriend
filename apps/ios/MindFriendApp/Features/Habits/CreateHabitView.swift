@@ -19,9 +19,8 @@ struct CreateHabitView: View {
     @State private var errorMessage = ""
 
     private var isFormValid: Bool {
-        !name.trimmingCharacters(in: .whitespaces).isEmpty &&
-        !anchor.trimmingCharacters(in: .whitespaces).isEmpty &&
-        !behavior.trimmingCharacters(in: .whitespaces).isEmpty
+        !name.trimmingCharacters(in: .whitespaces).isEmpty && !anchor.trimmingCharacters(in: .whitespaces).isEmpty
+            && !behavior.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
     private var habitStatement: String {
@@ -34,17 +33,20 @@ struct CreateHabitView: View {
         Form {
             // Habit statement preview
             Section {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                     Text("Your Habit Statement")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
 
                     Text(habitStatement)
                         .font(.headline)
-                        .foregroundStyle(.primary)
+                        .accessibilityAddTraits(.isHeader)
+                        .foregroundStyle(SupportTheme.textPrimary)
                 }
-                .padding(.vertical, 8)
+                .padding(.vertical, SupportTheme.Spacing.xs)
             }
+
+            .listRowBackground(SupportTheme.surface)
 
             // Basic info
             Section("Habit Details") {
@@ -57,6 +59,8 @@ struct CreateHabitView: View {
                 TextField("I will... (e.g., meditate for 5 minutes)", text: $behavior)
                     .textContentType(.none)
             }
+
+            .listRowBackground(SupportTheme.surface)
 
             // Category
             Section("Category") {
@@ -72,6 +76,8 @@ struct CreateHabitView: View {
                 .pickerStyle(.menu)
             }
 
+            .listRowBackground(SupportTheme.surface)
+
             // Difficulty
             Section {
                 Picker("Difficulty", selection: $selectedDifficulty) {
@@ -83,16 +89,18 @@ struct CreateHabitView: View {
 
                 HStack {
                     Text("Duration")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                     Spacer()
                     Text(formatDuration(selectedDifficulty.defaultDuration))
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(SupportTheme.textPrimary)
                 }
             } header: {
                 Text("Difficulty")
             } footer: {
-                Text("Start easy and build up. After a 7-day streak, you can graduate to the next level.")
+                Text("Start with something manageable. Choose a more challenging level whenever you feel ready.")
             }
+
+            .listRowBackground(SupportTheme.surface)
 
             // Reminder
             Section {
@@ -110,7 +118,11 @@ struct CreateHabitView: View {
             } footer: {
                 Text("Get a gentle nudge to help you stay on track.")
             }
+
+            .listRowBackground(SupportTheme.surface)
         }
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle("Create Habit")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

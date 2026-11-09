@@ -4,8 +4,8 @@
 //  Created by Context-Aware Interventions Feature
 //  User preferences UI for intervention delivery settings
 
-import SwiftUI
 import EventKit
+import SwiftUI
 
 struct InterventionSettingsView: View {
     @EnvironmentObject private var dependencies: DependencyContainer
@@ -28,6 +28,8 @@ struct InterventionSettingsView: View {
                 recentInterventionsSection
             }
         }
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle("Intervention Settings")
         .navigationBarTitleDisplayMode(.large)
         .task {
@@ -110,36 +112,37 @@ struct InterventionSettingsView: View {
     private var interventionDeliverySection: some View {
         Section("Intervention Delivery") {
             Toggle("Enable Smart Interventions", isOn: $viewModel.enabled)
-                .tint(.blue)
+                .tint(SupportTheme.accent)
 
             if viewModel.enabled {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                     HStack {
                         Text("Daily Limit")
                         Spacer()
                         Text("\(viewModel.maxDaily)")
-                            .foregroundColor(.secondary)
+                            .foregroundColor(SupportTheme.textSecondary)
                     }
                     Slider(value: $viewModel.maxDailyDouble, in: 1...10, step: 1)
-                        .tint(.blue)
+                        .tint(SupportTheme.accent)
                     Text("Maximum interventions per day")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(SupportTheme.textSecondary)
                 }
             }
         }
+        .listRowBackground(SupportTheme.surface)
     }
 
     @ViewBuilder
     private var notificationsSection: some View {
         Section("Notifications") {
             HStack {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     Text("Push Notifications")
                         .font(.body)
                     Text(viewModel.notificationStatus)
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(SupportTheme.textSecondary)
                 }
 
                 Spacer()
@@ -147,23 +150,25 @@ struct InterventionSettingsView: View {
                 if !viewModel.hasNotificationPermission {
                     Button("Enable") {
                         Task {
-                            await viewModel.requestNotificationPermission(manager: dependencies.interventionNotificationManager)
+                            await viewModel.requestNotificationPermission(
+                                manager: dependencies.interventionNotificationManager)
                         }
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.supportSecondary)
                 } else {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(.green)
+                        .foregroundColor(SupportTheme.accent)
                 }
             }
         }
+        .listRowBackground(SupportTheme.surface)
     }
 
     @ViewBuilder
     private var calendarTriggersSection: some View {
         Section {
             Toggle("Calendar Event Armor", isOn: $viewModel.calendarTriggersEnabled)
-                .tint(.blue)
+                .tint(SupportTheme.accent)
 
             if viewModel.calendarTriggersEnabled {
                 calendarPermissionContent
@@ -172,30 +177,35 @@ struct InterventionSettingsView: View {
             Text("Calendar Triggers")
         } footer: {
             if viewModel.calendarTriggersEnabled {
-                Text("MindFriend will proactively offer calming interventions before meetings, deadlines, and other stressful calendar events.")
+                Text(
+                    "MindFriend will proactively offer calming interventions before meetings, deadlines, and other stressful calendar events."
+                )
             }
         }
+        .listRowBackground(SupportTheme.surface)
     }
 
     @ViewBuilder
     private var calendarPermissionContent: some View {
         if !viewModel.hasCalendarPermission {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                 if viewModel.calendarPermissionDenied {
                     if viewModel.hasWriteOnlyAccess {
-                        Text("MindFriend needs full calendar access to detect upcoming events. You currently have write-only access.")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                        Text(
+                            "MindFriend needs full calendar access to detect upcoming events. You currently have write-only access."
+                        )
+                        .font(.caption)
+                        .foregroundColor(SupportTheme.textSecondary)
                         Text("Go to: Settings → Privacy & Security → Calendars → MindFriend → Full Access")
                             .font(.caption)
-                            .foregroundColor(.blue)
+                            .foregroundColor(SupportTheme.accent)
                     } else {
                         Text("Calendar access was denied.")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(SupportTheme.textSecondary)
                         Text("Go to: Settings → Privacy & Security → Calendars → MindFriend")
                             .font(.caption)
-                            .foregroundColor(.blue)
+                            .foregroundColor(SupportTheme.accent)
                     }
 
                     Button("Open Settings") {
@@ -203,7 +213,7 @@ struct InterventionSettingsView: View {
                             UIApplication.shared.open(settingsUrl)
                         }
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.supportSecondary)
                 } else {
                     Button("Grant Calendar Access") {
                         print("[Calendar] Button tapped!")
@@ -214,7 +224,7 @@ struct InterventionSettingsView: View {
                             }
                         }
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.supportSecondary)
                 }
             }
         } else {
@@ -224,24 +234,24 @@ struct InterventionSettingsView: View {
 
     @ViewBuilder
     private var calendarConfigContent: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                 HStack {
                     Text("Armor Lead Time")
                     Spacer()
                     Text("\(viewModel.leadTimeMinutes) min")
-                        .foregroundColor(.secondary)
+                        .foregroundColor(SupportTheme.textSecondary)
                 }
                 Slider(value: $viewModel.leadTimeDouble, in: 30...60, step: 5)
-                    .tint(.blue)
+                    .tint(SupportTheme.accent)
                 Text("How early to deliver calming interventions before stressful events")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(SupportTheme.textSecondary)
             }
 
             if viewModel.availableCalendars.isEmpty {
                 Text("No calendars available")
-                    .foregroundColor(.secondary)
+                    .foregroundColor(SupportTheme.textSecondary)
                     .font(.caption)
             } else {
                 NavigationLink {
@@ -254,7 +264,7 @@ struct InterventionSettingsView: View {
                         Text("Monitored Calendars")
                         Spacer()
                         Text("\(viewModel.selectedCalendarIds.count)")
-                            .foregroundColor(.secondary)
+                            .foregroundColor(SupportTheme.textSecondary)
                     }
                 }
             }
@@ -267,41 +277,44 @@ struct InterventionSettingsView: View {
             if viewModel.hasMinimumTimingData {
                 mlTimingDataContent
             } else {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                     Text("Learning your preferences...")
                         .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(SupportTheme.textSecondary)
                     Text("After 2 weeks of intervention history, MindFriend will learn your optimal timing patterns.")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(SupportTheme.textSecondary)
                 }
             }
         } header: {
             Text("ML Timing Insights")
         } footer: {
             if viewModel.hasMinimumTimingData {
-                Text("Based on your completion and rating patterns, interventions are more likely during your best times.")
+                Text(
+                    "Based on your completion and rating patterns, interventions are more likely during your best times."
+                )
             }
         }
+        .listRowBackground(SupportTheme.surface)
     }
 
     @ViewBuilder
     private var mlTimingDataContent: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("Your best times for wellness moments:")
                 .font(.caption)
-                .foregroundColor(.secondary)
+                .foregroundColor(SupportTheme.textSecondary)
 
             if !viewModel.bestHours.isEmpty {
-                HStack(spacing: 8) {
+                HStack(spacing: SupportTheme.Spacing.xs) {
                     ForEach(viewModel.bestHours, id: \.self) { hour in
                         Text(viewModel.formatHour(hour))
                             .font(.caption)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Color.green.opacity(0.2))
-                            .foregroundColor(.green)
-                            .cornerRadius(8)
+                            .padding(.horizontal, SupportTheme.Spacing.xs)
+                            .padding(.vertical, SupportTheme.Spacing.xxs)
+                            .background(SupportTheme.surface)
+                            .foregroundColor(SupportTheme.accent)
+                            .cornerRadius(SupportTheme.controlRadius)
                     }
                 }
             }
@@ -309,18 +322,18 @@ struct InterventionSettingsView: View {
             if !viewModel.worstHours.isEmpty {
                 Text("Times you typically dismiss:")
                     .font(.caption)
-                    .foregroundColor(.secondary)
-                    .padding(.top, 4)
+                    .foregroundColor(SupportTheme.textSecondary)
+                    .padding(.top, SupportTheme.Spacing.xxs)
 
-                HStack(spacing: 8) {
+                HStack(spacing: SupportTheme.Spacing.xs) {
                     ForEach(viewModel.worstHours, id: \.self) { hour in
                         Text(viewModel.formatHour(hour))
                             .font(.caption)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Color.orange.opacity(0.2))
-                            .foregroundColor(.orange)
-                            .cornerRadius(8)
+                            .padding(.horizontal, SupportTheme.Spacing.xs)
+                            .padding(.vertical, SupportTheme.Spacing.xxs)
+                            .background(SupportTheme.surface)
+                            .foregroundColor(SupportTheme.accent)
+                            .cornerRadius(SupportTheme.controlRadius)
                     }
                 }
             }
@@ -331,7 +344,7 @@ struct InterventionSettingsView: View {
     private var quietHoursSection: some View {
         Section("Quiet Hours") {
             Toggle("Enable Quiet Hours", isOn: $viewModel.quietHoursEnabled)
-                .tint(.blue)
+                .tint(SupportTheme.accent)
 
             if viewModel.quietHoursEnabled {
                 DatePicker(
@@ -348,9 +361,10 @@ struct InterventionSettingsView: View {
 
                 Text("No interventions will be delivered during quiet hours")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(SupportTheme.textSecondary)
             }
         }
+        .listRowBackground(SupportTheme.surface)
     }
 
     @ViewBuilder
@@ -358,7 +372,7 @@ struct InterventionSettingsView: View {
         Section("Recent Interventions") {
             if viewModel.recentDeliveries.isEmpty {
                 Text("No recent interventions")
-                    .foregroundColor(.secondary)
+                    .foregroundColor(SupportTheme.textSecondary)
                     .font(.subheadline)
             } else {
                 ForEach(viewModel.recentDeliveries.prefix(10)) { delivery in
@@ -366,6 +380,7 @@ struct InterventionSettingsView: View {
                 }
             }
         }
+        .listRowBackground(SupportTheme.surface)
     }
 }
 
@@ -375,34 +390,35 @@ struct DeliveryHistoryRow: View {
     let delivery: InterventionDelivery
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
             HStack {
                 Text(formattedDate)
                     .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(SupportTheme.textSecondary)
 
                 Spacer()
 
                 if delivery.completed {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(.green)
+                        .foregroundColor(SupportTheme.accent)
                 } else if delivery.dismissedAt != nil {
                     Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(.orange)
+                        .foregroundColor(SupportTheme.accent)
                 }
             }
 
             if let rating = delivery.rating {
-                HStack(spacing: 2) {
+                HStack(spacing: SupportTheme.Spacing.xxs) {
                     ForEach(1...5, id: \.self) { index in
                         Image(systemName: index <= rating ? "star.fill" : "star")
                             .font(.caption)
-                            .foregroundColor(index <= rating ? .yellow : .gray)
+                            .foregroundColor(
+                                index <= rating ? SupportTheme.Celebration.gold : SupportTheme.textSecondary)
                     }
                 }
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, SupportTheme.Spacing.xxs)
     }
 
     private var formattedDate: String {
@@ -435,7 +451,7 @@ final class InterventionSettingsViewModel: ObservableObject {
     // Notifications
     @Published var hasNotificationPermission: Bool = false
     @Published var notificationStatus: String = "Not enabled"
-    
+
     // ML Timing
     @Published var hasMinimumTimingData: Bool = false
     @Published var bestHours: [Int] = []
@@ -446,7 +462,7 @@ final class InterventionSettingsViewModel: ObservableObject {
         get { Double(maxDaily) }
         set { maxDaily = Int(newValue) }
     }
-    
+
     var leadTimeDouble: Double {
         get { Double(leadTimeMinutes) }
         set { leadTimeMinutes = Int(newValue) }
@@ -483,16 +499,16 @@ final class InterventionSettingsViewModel: ObservableObject {
             // Load recent deliveries
             try await service.loadRecentDeliveries()
             self.recentDeliveries = service.recentDeliveries
-            
+
             // Load calendar permissions and config
             self.hasCalendarPermission = calendarMonitor.hasCalendarPermission()
             self.checkCalendarPermissionStatus()
-            
+
             if hasCalendarPermission {
                 // Get available calendars from EventKit
                 let eventStore = EKEventStore()
                 self.availableCalendars = eventStore.calendars(for: .event)
-                
+
                 // Load calendar config
                 let config = try await calendarMonitor.getTriggerConfig()
                 self.calendarTriggersEnabled = !config.enabledCalendarIds.isEmpty
@@ -500,15 +516,15 @@ final class InterventionSettingsViewModel: ObservableObject {
                 self.leadTimeMinutes = config.leadTimeMinutes
                 self.loadedCalendarConfig = config
             }
-            
+
             // Load notification permission
             self.hasNotificationPermission = await notificationManager.hasNotificationPermission()
             self.notificationStatus = hasNotificationPermission ? "Enabled" : "Disabled"
-            
+
             // Load ML timing insights
             do {
                 self.hasMinimumTimingData = try await timingAnalyzer.hasMinimumData()
-                
+
                 if hasMinimumTimingData {
                     self.bestHours = timingAnalyzer.getBestHours()
                     self.worstHours = timingAnalyzer.getWorstHours()
@@ -545,20 +561,20 @@ final class InterventionSettingsViewModel: ObservableObject {
             print("Error saving preferences: \(error)")
         }
     }
-    
+
     func saveCalendarConfig(monitor: CalendarTriggerMonitor) async {
         do {
             var config = loadedCalendarConfig ?? CalendarTriggerConfig.default
             config.enabledCalendarIds = Array(selectedCalendarIds)
             config.leadTimeMinutes = leadTimeMinutes
-            
+
             try await monitor.updateTriggerConfig(config)
             self.loadedCalendarConfig = config
         } catch {
             print("Error saving calendar config: \(error)")
         }
     }
-    
+
     func requestCalendarPermission(monitor: CalendarTriggerMonitor) async {
         let status = EKEventStore.authorizationStatus(for: .event)
 
@@ -586,7 +602,7 @@ final class InterventionSettingsViewModel: ObservableObject {
             self.availableCalendars = eventStore.calendars(for: .event)
         }
     }
-    
+
     func checkCalendarPermissionStatus() {
         let status = EKEventStore.authorizationStatus(for: .event)
         if #available(iOS 17.0, *) {
@@ -599,9 +615,11 @@ final class InterventionSettingsViewModel: ObservableObject {
             self.hasWriteOnlyAccess = false
             self.calendarPermissionDenied = (status == .denied)
         }
-        print("[Calendar] Permission status - hasPermission: \(hasCalendarPermission), writeOnly: \(hasWriteOnlyAccess), denied: \(calendarPermissionDenied), rawStatus: \(status.rawValue)")
+        print(
+            "[Calendar] Permission status - hasPermission: \(hasCalendarPermission), writeOnly: \(hasWriteOnlyAccess), denied: \(calendarPermissionDenied), rawStatus: \(status.rawValue)"
+        )
     }
-    
+
     func refreshCalendarPermission(monitor: CalendarTriggerMonitor) async {
         let previouslyHadPermission = hasCalendarPermission
         self.hasCalendarPermission = monitor.hasCalendarPermission()
@@ -615,7 +633,9 @@ final class InterventionSettingsViewModel: ObservableObject {
             // Load calendars using a fresh event store
             let eventStore = EKEventStore()
             self.availableCalendars = eventStore.calendars(for: .event)
-            print("[Calendar] Permission granted from Settings, refreshed monitor and loaded \(availableCalendars.count) calendars")
+            print(
+                "[Calendar] Permission granted from Settings, refreshed monitor and loaded \(availableCalendars.count) calendars"
+            )
         }
     }
 
@@ -624,7 +644,7 @@ final class InterventionSettingsViewModel: ObservableObject {
         self.hasNotificationPermission = granted
         self.notificationStatus = granted ? "Enabled" : "Denied"
     }
-    
+
     func formatHour(_ hour: Int) -> String {
         return OptimalTimingAnalyzer.formatHour(hour)
     }
@@ -635,7 +655,7 @@ final class InterventionSettingsViewModel: ObservableObject {
 struct CalendarSelectionView: View {
     let availableCalendars: [EKCalendar]
     @Binding var selectedCalendarIds: Set<String>
-    
+
     var body: some View {
         List {
             ForEach(availableCalendars, id: \.calendarIdentifier) { calendar in
@@ -645,30 +665,32 @@ struct CalendarSelectionView: View {
                     HStack {
                         // Calendar color indicator
                         Circle()
-                            .fill(Color(cgColor: calendar.cgColor))
+                            .fill(SupportTheme.accent)
                             .frame(width: 12, height: 12)
-                        
-                        VStack(alignment: .leading, spacing: 2) {
+
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                             Text(calendar.title)
-                                .foregroundColor(.primary)
+                                .foregroundColor(SupportTheme.textPrimary)
                             if !calendar.source.title.isEmpty {
                                 Text(calendar.source.title)
                                     .font(.caption)
-                                    .foregroundColor(.secondary)
+                                    .foregroundColor(SupportTheme.textSecondary)
                             }
                         }
-                        
+
                         Spacer()
-                        
+
                         if selectedCalendarIds.contains(calendar.calendarIdentifier) {
                             Image(systemName: "checkmark")
-                                .foregroundColor(.blue)
+                                .foregroundColor(SupportTheme.accent)
                         }
                     }
                 }
                 .buttonStyle(.plain)
             }
         }
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle("Select Calendars")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -683,7 +705,7 @@ struct CalendarSelectionView: View {
             }
         }
     }
-    
+
     private func toggleCalendar(_ calendar: EKCalendar) {
         if selectedCalendarIds.contains(calendar.calendarIdentifier) {
             selectedCalendarIds.remove(calendar.calendarIdentifier)

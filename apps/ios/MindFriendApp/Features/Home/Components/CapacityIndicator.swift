@@ -9,62 +9,62 @@ struct CapacityIndicator: View {
         Button {
             showDetailSheet = true
         } label: {
-            HStack(spacing: 12) {
+            HStack(spacing: SupportTheme.Spacing.s) {
                 // Circular progress indicator
                 ZStack {
                     Circle()
-                        .stroke(Color.gray.opacity(0.2), lineWidth: 4)
+                        .stroke(SupportTheme.textSecondary.opacity(0.2), lineWidth: 4)
                         .frame(width: 44, height: 44)
 
                     if let capacity = difficultyService.currentCapacity {
                         Circle()
                             .trim(from: 0, to: CGFloat(capacity.score) / 100)
-                            .stroke(capacity.level.color, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                            .stroke(SupportTheme.accent, style: StrokeStyle(lineWidth: 4, lineCap: .round))
                             .frame(width: 44, height: 44)
                             .rotationEffect(.degrees(-90))
 
                         Image(systemName: capacity.level.icon)
                             .font(.system(size: 16, weight: .semibold))
-                            .foregroundColor(capacity.level.color)
+                            .foregroundColor(SupportTheme.accent)
                     } else if difficultyService.isCalculating {
                         ProgressView()
                             .frame(width: 44, height: 44)
                     } else {
                         Image(systemName: "circle.grid.2x2.fill")
                             .font(.system(size: 16, weight: .semibold))
-                            .foregroundColor(.gray)
+                            .foregroundColor(SupportTheme.textSecondary)
                     }
                 }
 
                 // Label (with Dynamic Type support)
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     if let capacity = difficultyService.currentCapacity {
                         Text(capacity.level.displayName)
                             .font(.subheadline)
                             .fontWeight(.medium)
-                            .foregroundColor(.primary)
+                            .foregroundColor(SupportTheme.textPrimary)
                             .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
 
                         if capacity.hasOverride {
                             Text("Manual override")
                                 .font(.caption2)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(SupportTheme.textSecondary)
                                 .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                         } else if capacity.isStale {
                             Text("Updated \(timeAgo(capacity.calculatedAt))")
                                 .font(.caption2)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(SupportTheme.textSecondary)
                                 .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                         }
                     } else if difficultyService.isCalculating {
                         Text("Calculating...")
                             .font(.subheadline)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(SupportTheme.textSecondary)
                             .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                     } else {
                         Text("Tap to calculate")
                             .font(.subheadline)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(SupportTheme.textSecondary)
                             .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                     }
                 }
@@ -73,15 +73,16 @@ struct CapacityIndicator: View {
 
                 Image(systemName: "chevron.right")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(SupportTheme.textSecondary)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .background(Color(.systemBackground))
-            .cornerRadius(12)
-            .shadow(color: .black.opacity(0.05), radius: 8, y: 2)
+            .padding(.horizontal, SupportTheme.Spacing.m)
+            .padding(.vertical, SupportTheme.Spacing.s)
+            .background(SupportTheme.surface)
+            .cornerRadius(SupportTheme.controlRadius)
+            .shadow(color: SupportTheme.canvas.opacity(0.05), radius: 8, y: 2)
         }
         .buttonStyle(.plain)
+        .frame(minHeight: SupportTheme.minimumTarget)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityHint("Double tap to view detailed capacity breakdown")
@@ -138,47 +139,48 @@ struct CapacityDetailSheet: View {
     var body: some View {
         NavigationView {
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: SupportTheme.Spacing.l) {
                     if let capacity = difficultyService.currentCapacity {
                         // Overall score
-                        VStack(spacing: 8) {
+                        VStack(spacing: SupportTheme.Spacing.xs) {
                             ZStack {
                                 Circle()
-                                    .stroke(Color.gray.opacity(0.2), lineWidth: 12)
+                                    .stroke(SupportTheme.textSecondary.opacity(0.2), lineWidth: 12)
                                     .frame(width: 120, height: 120)
 
                                 Circle()
                                     .trim(from: 0, to: CGFloat(capacity.score) / 100)
-                                    .stroke(capacity.level.color, style: StrokeStyle(lineWidth: 12, lineCap: .round))
+                                    .stroke(SupportTheme.accent, style: StrokeStyle(lineWidth: 12, lineCap: .round))
                                     .frame(width: 120, height: 120)
                                     .rotationEffect(.degrees(-90))
 
-                                VStack(spacing: 4) {
+                                VStack(spacing: SupportTheme.Spacing.xxs) {
                                     Text("\(capacity.score)")
                                         .font(.system(size: 36, weight: .bold))
-                                        .foregroundColor(capacity.level.color)
+                                        .foregroundColor(SupportTheme.accent)
                                     Text("Capacity")
                                         .font(.caption)
-                                        .foregroundColor(.secondary)
+                                        .foregroundColor(SupportTheme.textSecondary)
                                 }
                             }
 
                             Text(capacity.level.displayName)
                                 .font(.title3)
+                                .accessibilityAddTraits(.isHeader)
                                 .fontWeight(.semibold)
 
                             if capacity.hasOverride {
-                                HStack(spacing: 4) {
+                                HStack(spacing: SupportTheme.Spacing.xxs) {
                                     Image(systemName: "hand.raised.fill")
                                         .font(.caption2)
                                     Text("Manual override active")
                                         .font(.caption)
                                 }
-                                .foregroundColor(.orange)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 6)
-                                .background(Color.orange.opacity(0.1))
-                                .cornerRadius(8)
+                                .foregroundColor(SupportTheme.accent)
+                                .padding(.horizontal, SupportTheme.Spacing.s)
+                                .padding(.vertical, SupportTheme.Spacing.xs)
+                                .background(SupportTheme.surface)
+                                .cornerRadius(SupportTheme.controlRadius)
                             }
                         }
 
@@ -186,9 +188,10 @@ struct CapacityDetailSheet: View {
                             .padding(.horizontal)
 
                         // Component breakdown
-                        VStack(alignment: .leading, spacing: 16) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
                             Text("Capacity Breakdown")
                                 .font(.headline)
+                                .accessibilityAddTraits(.isHeader)
                                 .padding(.horizontal)
 
                             ForEach(capacity.components.all) { component in
@@ -210,25 +213,26 @@ struct CapacityDetailSheet: View {
                             }
                             .frame(maxWidth: .infinity)
                             .padding()
-                            .background(Color.blue)
-                            .foregroundColor(.white)
-                            .cornerRadius(12)
+                            .background(SupportTheme.accent)
+                            .foregroundColor(SupportTheme.onAccent)
+                            .cornerRadius(SupportTheme.controlRadius)
                         }
                         .padding(.horizontal)
                     } else {
-                        VStack(spacing: 16) {
+                        VStack(spacing: SupportTheme.Spacing.m) {
                             Image(systemName: "chart.line.uptrend.xyaxis")
                                 .font(.system(size: 48))
-                                .foregroundColor(.gray)
+                                .foregroundColor(SupportTheme.textSecondary)
 
                             Text("No capacity data")
                                 .font(.headline)
+                                .accessibilityAddTraits(.isHeader)
 
                             Text("Complete your daily check-in to calculate your capacity")
                                 .font(.subheadline)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(SupportTheme.textSecondary)
                                 .multilineTextAlignment(.center)
-                                .padding(.horizontal, 32)
+                                .padding(.horizontal, SupportTheme.Spacing.xl)
 
                             Button {
                                 Task {
@@ -249,27 +253,29 @@ struct CapacityDetailSheet: View {
                                         .fontWeight(.medium)
                                         .frame(maxWidth: .infinity)
                                         .padding()
-                                        .background(Color.blue)
-                                        .foregroundColor(.white)
-                                        .cornerRadius(12)
+                                        .background(SupportTheme.accent)
+                                        .foregroundColor(SupportTheme.onAccent)
+                                        .cornerRadius(SupportTheme.controlRadius)
                                 }
                             }
                             .disabled(difficultyService.isCalculating)
-                            .padding(.horizontal, 32)
+                            .padding(.horizontal, SupportTheme.Spacing.xl)
 
                             if let errorMessage = errorMessage {
                                 Text(errorMessage)
                                     .font(.caption)
                                     .foregroundColor(.red)
                                     .multilineTextAlignment(.center)
-                                    .padding(.horizontal, 32)
+                                    .padding(.horizontal, SupportTheme.Spacing.xl)
                             }
                         }
-                        .padding(.top, 48)
+                        .padding(.top, SupportTheme.Spacing.xl)
                     }
                 }
                 .padding(.vertical)
             }
+            .supportScreen()
+            .foregroundStyle(SupportTheme.textPrimary)
             .navigationTitle("Your Capacity")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -299,10 +305,10 @@ struct ComponentRow: View {
     let component: ComponentScore
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             HStack {
                 Image(systemName: component.type.icon)
-                    .foregroundColor(.blue)
+                    .foregroundColor(SupportTheme.accent)
                     .frame(width: 24)
 
                 Text(component.type.displayName)
@@ -314,20 +320,20 @@ struct ComponentRow: View {
                 Text("\(component.score)")
                     .font(.subheadline)
                     .fontWeight(.semibold)
-                    .foregroundColor(.primary)
+                    .foregroundColor(SupportTheme.textPrimary)
             }
 
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
                     Rectangle()
-                        .fill(Color.gray.opacity(0.2))
+                        .fill(SupportTheme.textSecondary.opacity(0.2))
                         .frame(height: 8)
-                        .cornerRadius(4)
+                        .cornerRadius(SupportTheme.controlRadius)
 
                     Rectangle()
                         .fill(scoreColor(component.score))
                         .frame(width: geometry.size.width * CGFloat(component.score) / 100, height: 8)
-                        .cornerRadius(4)
+                        .cornerRadius(SupportTheme.controlRadius)
                 }
             }
             .frame(height: 8)
@@ -335,13 +341,13 @@ struct ComponentRow: View {
             HStack {
                 Text("\(Int(component.weight * 100))% weight")
                     .font(.caption2)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(SupportTheme.textSecondary)
 
                 Spacer()
 
                 Text("+\(String(format: "%.1f", component.contribution)) pts")
                     .font(.caption2)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(SupportTheme.textSecondary)
             }
         }
         .padding(.horizontal)
@@ -350,19 +356,20 @@ struct ComponentRow: View {
     private func scoreColor(_ score: Int) -> Color {
         switch score {
         case 0...40:
-            return .blue
+            return SupportTheme.accent
         case 41...70:
-            return .green
+            return SupportTheme.accent
         default:
-            return .orange
+            return SupportTheme.accent
         }
     }
 }
 
 #Preview {
     CapacityIndicator()
-        .environmentObject({
-            let service = DifficultyService(supabase: supabase)
-            return service
-        }())
+        .environmentObject(
+            {
+                let service = DifficultyService(supabase: supabase)
+                return service
+            }())
 }

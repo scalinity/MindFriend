@@ -1,5 +1,5 @@
-import SwiftUI
 import StoreKit
+import SwiftUI
 
 struct PaywallView: View {
     @EnvironmentObject var container: DependencyContainer
@@ -7,10 +7,11 @@ struct PaywallView: View {
 }
 
 struct PaywallContent: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject var billingService: BillingService
     @EnvironmentObject var appState: AppState
     @Environment(\.dismiss) var dismiss
-    
+
     @State private var selectedPlanType: PlanType = .individual
     @State private var selectedBillingPeriod: BillingPeriod = .monthly
     @State private var isPurchasing = false
@@ -18,7 +19,7 @@ struct PaywallContent: View {
     @State private var showError = false
     @State private var showGiftSheet = false
     @State private var showEnterpriseInquiry = false
-    
+
     @State private var purchaseMessage: String?
 
     var selectedPlan: SubscriptionPlan {
@@ -33,24 +34,31 @@ struct PaywallContent: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 32) {
+                VStack(spacing: SupportTheme.Spacing.xl) {
                     headerSection
                     planTypeSection
 
                     if selectedPlanType != .enterprise && selectedPlanType != .gift {
                         billingPeriodSection
-                            .transition(.opacity.combined(with: .move(edge: .top)))
+                            .transition(.opacity)
                     }
 
                     benefitsSection
                     subscribeButton
-                    if let purchaseMessage { Text(purchaseMessage).font(.subheadline).accessibilityAddTraits(.updatesFrequently) }
+                    if let purchaseMessage {
+                        Text(purchaseMessage).font(.subheadline).accessibilityAddTraits(.updatesFrequently)
+                    }
                     if selectedPlanType != .enterprise && selectedPlanType != .gift {
                         if billingService.isLoadingProducts {
                             ProgressView("Loading App Store plans…")
-                        } else if billingService.product(for: selectedPlanType, billingPeriod: selectedBillingPeriod) == nil {
-                            Text(billingService.productLoadError ?? "This plan is currently unavailable from the App Store.")
-                                .font(.subheadline)
+                        } else if billingService.product(for: selectedPlanType, billingPeriod: selectedBillingPeriod)
+                            == nil
+                        {
+                            Text(
+                                billingService.productLoadError
+                                    ?? "This plan is currently unavailable from the App Store."
+                            )
+                            .font(.subheadline)
                             Button("Reload Plans") { Task { await billingService.refreshProducts() } }
                         }
                     }
@@ -61,11 +69,13 @@ struct PaywallContent: View {
                     }
 
                     termsSection
-                    Spacer(minLength: 32)
+                    Spacer(minLength: SupportTheme.Spacing.xl)
                 }
                 .padding()
-                .animation(.easeInOut(duration: 0.25), value: selectedPlanType)
+                .animation(
+                    reduceMotion ? .easeInOut(duration: 0.2) : (.easeInOut(duration: 0.25)), value: selectedPlanType)
             }
+            .supportSheet()
             .navigationTitle("Premium")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -74,8 +84,10 @@ struct PaywallContent: View {
                         dismiss()
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
+                    .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                    .accessibilityLabel("Close")
                 }
             }
             .alert("Purchase Error", isPresented: $showError, presenting: error) { _ in
@@ -94,27 +106,27 @@ struct PaywallContent: View {
             }
         }
     }
-    
+
     // MARK: - View Components
-    
+
     private var headerSection: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "star.circle.fill")
-                .font(.system(size: 80))
-                .foregroundStyle(.yellow)
-            
+        VStack(spacing: SupportTheme.Spacing.m) {
+            CelebrationEmblem(.symbol("sparkles"), tint: SupportTheme.accent, diameter: 80)
+
             Text("MindFriend Premium")
                 .font(.largeTitle)
+                .accessibilityAddTraits(.isHeader)
                 .fontWeight(.bold)
         }
     }
-    
+
     private var planTypeSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("Choose Your Plan")
                 .font(.title3)
+                .accessibilityAddTraits(.isHeader)
                 .fontWeight(.semibold)
-            
+
             // Individual
             PaywallPlanCard(
                 planType: .individual,
@@ -124,7 +136,7 @@ struct PaywallContent: View {
             ) {
                 selectedPlanType = .individual
             }
-            
+
             // Couples
             PaywallPlanCard(
                 planType: .couples,
@@ -134,7 +146,7 @@ struct PaywallContent: View {
             ) {
                 selectedPlanType = .couples
             }
-            
+
             // Family (Best Value)
             PaywallPlanCard(
                 planType: .family,
@@ -145,7 +157,7 @@ struct PaywallContent: View {
             ) {
                 selectedPlanType = .family
             }
-            
+
             // Enterprise
             PaywallPlanCard(
                 planType: .enterprise,
@@ -155,45 +167,45 @@ struct PaywallContent: View {
             ) {
                 selectedPlanType = .enterprise
             }
-            
+
             // Gift
             Button {
                 showGiftSheet = true
             } label: {
-                HStack(spacing: 16) {
+                HStack(spacing: SupportTheme.Spacing.m) {
                     Image(systemName: "gift.fill")
                         .font(.title2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                         .frame(width: 40)
-                    
-                    VStack(alignment: .leading, spacing: 2) {
+
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                         Text("Gift")
                             .font(.headline)
-                            .foregroundStyle(.primary)
+                            .accessibilityAddTraits(.isHeader)
+                            .foregroundStyle(SupportTheme.textPrimary)
                         Text("Gift a subscription")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
-                    
+
                     Spacer()
-                    
+
                     Image(systemName: "chevron.right")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
-                .padding()
-                .background(Color(.secondarySystemBackground))
-                .cornerRadius(12)
+                .supportCard()
             }
         }
     }
-    
+
     private var billingPeriodSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("Billing Period")
                 .font(.title3)
+                .accessibilityAddTraits(.isHeader)
                 .fontWeight(.semibold)
-            
-            HStack(spacing: 12) {
+
+            HStack(spacing: SupportTheme.Spacing.s) {
                 // Monthly
                 BillingPeriodButton(
                     period: .monthly,
@@ -201,7 +213,7 @@ struct PaywallContent: View {
                 ) {
                     selectedBillingPeriod = .monthly
                 }
-                
+
                 // Annual
                 BillingPeriodButton(
                     period: .yearly,
@@ -213,16 +225,17 @@ struct PaywallContent: View {
             }
         }
     }
-    
+
     private var benefitsSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
             BenefitRow(icon: "infinity", title: "Unlimited AI Chat", description: "No daily message limits")
             BenefitRow(icon: "sparkles", title: "Priority Responses", description: "Faster AI response times")
-            BenefitRow(icon: "chart.line.uptrend.xyaxis", title: "Advanced Analytics", description: "Detailed mood insights")
+            BenefitRow(
+                icon: "chart.line.uptrend.xyaxis", title: "Advanced Analytics", description: "Detailed mood insights")
             BenefitRow(icon: "bell.badge.fill", title: "Smart Reminders", description: "Personalized nudges")
         }
     }
-    
+
     private var subscribeButton: some View {
         Button {
             if selectedPlanType == .enterprise {
@@ -235,53 +248,53 @@ struct PaywallContent: View {
         } label: {
             if isPurchasing {
                 ProgressView()
-                    .tint(.white)
+                    .tint(SupportTheme.onAccent)
             } else if selectedPlanType == .enterprise {
                 Text("Contact Sales")
                     .fontWeight(.semibold)
             } else {
-                Text(billingService.product(for: selectedPlanType, billingPeriod: selectedBillingPeriod).map {
-                    "Subscribe for \($0.displayPrice)/\(selectedBillingPeriod == .monthly ? "month" : "year")"
-                } ?? (selectedPlanType == .gift ? "Give a Subscription" : "Subscription Unavailable"))
-                    .fontWeight(.semibold)
+                Text(
+                    billingService.product(for: selectedPlanType, billingPeriod: selectedBillingPeriod).map {
+                        "Subscribe for \($0.displayPrice)/\(selectedBillingPeriod == .monthly ? "month" : "year")"
+                    } ?? (selectedPlanType == .gift ? "Give a Subscription" : "Subscription Unavailable")
+                )
+                .fontWeight(.semibold)
             }
         }
-        .font(.headline)
-        .frame(maxWidth: .infinity)
-        .padding()
-        .background(Color.accentColor)
-        .foregroundStyle(.white)
-        .cornerRadius(12)
-        .disabled(isPurchasing || billingService.isPurchasing || billingService.isLoadingProducts ||
-            (selectedPlanType != .enterprise && selectedPlanType != .gift &&
-             billingService.product(for: selectedPlanType, billingPeriod: selectedBillingPeriod) == nil))
+        .buttonStyle(.supportPrimary)
+        .disabled(
+            isPurchasing || billingService.isPurchasing || billingService.isLoadingProducts
+                || (selectedPlanType != .enterprise && selectedPlanType != .gift
+                    && billingService.product(for: selectedPlanType, billingPeriod: selectedBillingPeriod) == nil)
+        )
     }
-    
+
     private var restoreButton: some View {
         Button("Restore Purchases") {
             restorePurchases()
         }
-        .font(.subheadline)
-        .foregroundStyle(.secondary)
+        .buttonStyle(.supportSecondary)
         .disabled(isPurchasing || billingService.isPurchasing)
     }
-    
-    private var termsSection: some View {
-        VStack(spacing: 12) {
-            Text("Subscription automatically renews unless cancelled at least 24 hours before the end of the current period. Manage subscriptions in Settings.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
 
-            HStack(spacing: 16) {
+    private var termsSection: some View {
+        VStack(spacing: SupportTheme.Spacing.s) {
+            Text(
+                "Subscription automatically renews unless cancelled at least 24 hours before the end of the current period. Manage subscriptions in Settings."
+            )
+            .font(.caption)
+            .foregroundStyle(SupportTheme.textSecondary)
+            .multilineTextAlignment(.center)
+
+            HStack(spacing: SupportTheme.Spacing.m) {
                 Link("Terms of Use (EULA)", destination: AppURLs.termsOfUse)
-                Text("•").foregroundStyle(.secondary)
+                Text("•").foregroundStyle(SupportTheme.textSecondary)
                 Link("Privacy Policy", destination: AppURLs.privacyPolicy)
             }
             .font(.caption)
         }
     }
-    
+
     // MARK: - Helpers
 
     private func priceForPlanType(_ planType: PlanType) -> String? {
@@ -300,7 +313,8 @@ struct PaywallContent: View {
 
     private func purchase() {
         guard !isPurchasing, !billingService.isPurchasing,
-              let storeProduct = billingService.product(for: selectedPlanType, billingPeriod: selectedBillingPeriod) else { return }
+            let storeProduct = billingService.product(for: selectedPlanType, billingPeriod: selectedBillingPeriod)
+        else { return }
         isPurchasing = true
         purchaseMessage = nil
         Task {
@@ -311,7 +325,8 @@ struct PaywallContent: View {
                     appState.updateEntitlements(billingService.entitlements)
                     dismiss()
                 case .pending:
-                    purchaseMessage = "Awaiting App Store approval. Your access will update after the purchase is approved."
+                    purchaseMessage =
+                        "Awaiting App Store approval. Your access will update after the purchase is approved."
                 }
             } catch let error as BillingError where error == .cancelled {
                 // Cancellation leaves the current entitlement unchanged.
@@ -345,6 +360,7 @@ struct PaywallContent: View {
 // MARK: - Supporting Views
 
 struct PaywallPlanCard: View {
+    @Environment(\.dynamicTypeSize) private var typeSize
     let planType: PlanType
     let isSelected: Bool
     var price: String?
@@ -354,68 +370,72 @@ struct PaywallPlanCard: View {
 
     var body: some View {
         Button(action: onSelect) {
-            HStack(spacing: 12) {
-                // Icon
-                Image(systemName: iconForPlanType(planType))
-                    .font(.title2)
-                    .foregroundStyle(isSelected ? Color.accentColor : .secondary)
-                    .frame(width: 36)
+            (typeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: SupportTheme.Spacing.s))
+                : AnyLayout(HStackLayout(spacing: SupportTheme.Spacing.s))) {
+                    // Icon
+                    Image(systemName: iconForPlanType(planType))
+                        .font(.title2)
+                        .foregroundStyle(isSelected ? SupportTheme.accent : SupportTheme.textSecondary)
+                        .frame(width: 36)
 
-                // Plan info
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(planType.displayName)
-                        .font(.headline)
-                        .foregroundStyle(.primary)
+                    // Plan info
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
+                        Text(planType.displayName)
+                            .font(.headline)
+                            .accessibilityAddTraits(.isHeader)
+                            .foregroundStyle(SupportTheme.textPrimary)
 
-                    Text(planType.description)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                // Price display (not for enterprise/gift)
-                if let price = price {
-                    VStack(alignment: .trailing, spacing: 2) {
-                        if showBestValue {
-                            Text("Best Value")
-                                .font(.caption2)
-                                .fontWeight(.semibold)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(Color.green)
-                                .foregroundStyle(.white)
-                                .cornerRadius(4)
-                        }
-                        Text(price)
-                            .font(.system(size: 17, weight: .bold))
-                            .foregroundStyle(.primary)
-                        Text(billingPeriod == .monthly ? "/month" : "/year")
+                        Text(planType.description)
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
-                }
 
-                // Selection indicator
-                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(isSelected ? Color.accentColor : .secondary)
-                    .font(.title3)
-            }
-            .padding()
-            .background(
-                isSelected
-                    ? Color.accentColor.opacity(0.1)
-                    : Color(.secondarySystemBackground)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
-            )
-            .cornerRadius(12)
+                    Spacer()
+
+                    // Price display (not for enterprise/gift)
+                    if let price = price {
+                        VStack(alignment: .trailing, spacing: SupportTheme.Spacing.xxs) {
+                            if showBestValue {
+                                Text("Best Value")
+                                    .font(.caption2)
+                                    .fontWeight(.semibold)
+                                    .padding(.horizontal, SupportTheme.Spacing.xs)
+                                    .padding(.vertical, SupportTheme.Spacing.xxs)
+                                    .background(SupportTheme.field)
+                                    .foregroundStyle(SupportTheme.accent)
+                                    .cornerRadius(SupportTheme.controlRadius)
+                            }
+                            Text(price)
+                                .font(.headline.weight(.bold))
+                                .foregroundStyle(SupportTheme.textPrimary)
+                            Text(billingPeriod == .monthly ? "/month" : "/year")
+                                .font(.caption)
+                                .foregroundStyle(SupportTheme.textSecondary)
+                        }
+                    }
+
+                    // Selection indicator
+                    Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                        .foregroundStyle(isSelected ? SupportTheme.accent : SupportTheme.textSecondary)
+                        .font(.title3)
+                        .accessibilityAddTraits(.isHeader)
+                }
+                .padding()
+                .background(
+                    isSelected
+                        ? SupportTheme.elevated
+                        : SupportTheme.surface
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: SupportTheme.cardRadius)
+                        .stroke(isSelected ? SupportTheme.accent : Color.clear, lineWidth: 2)
+                )
+                .cornerRadius(SupportTheme.controlRadius)
         }
         .buttonStyle(.plain)
     }
-    
+
     private func iconForPlanType(_ type: PlanType) -> String {
         switch type {
         case .individual: return "person.fill"
@@ -432,34 +452,35 @@ struct BillingPeriodButton: View {
     let isSelected: Bool
     var savings: String?
     let onSelect: () -> Void
-    
+
     var body: some View {
         Button(action: onSelect) {
-            VStack(spacing: 4) {
+            VStack(spacing: SupportTheme.Spacing.xxs) {
                 Text(period.displayName)
                     .font(.headline)
-                    .foregroundStyle(isSelected ? .primary : .secondary)
+                    .accessibilityAddTraits(.isHeader)
+                    .foregroundStyle(isSelected ? SupportTheme.textPrimary : SupportTheme.textSecondary)
 
                 if let savings = savings {
                     Text(savings)
                         .font(.caption)
                         .fontWeight(.semibold)
-                        .foregroundStyle(.green)
+                        .foregroundStyle(SupportTheme.accent)
                 }
             }
-            .frame(maxWidth: .infinity, minHeight: 44)
-            .padding(.vertical, 16)
+            .frame(maxWidth: .infinity, minHeight: SupportTheme.minimumTarget)
+            .padding(.vertical, SupportTheme.Spacing.m)
             .padding(.horizontal)
             .background(
                 isSelected
-                    ? Color.accentColor.opacity(0.1)
-                    : Color(.secondarySystemBackground)
+                    ? SupportTheme.elevated
+                    : SupportTheme.surface
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
+                RoundedRectangle(cornerRadius: SupportTheme.cardRadius)
+                    .stroke(isSelected ? SupportTheme.accent : Color.clear, lineWidth: 2)
             )
-            .cornerRadius(12)
+            .cornerRadius(SupportTheme.controlRadius)
         }
         .buttonStyle(.plain)
     }
@@ -471,18 +492,19 @@ struct BenefitRow: View {
     let description: String
 
     var body: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: SupportTheme.Spacing.m) {
             Image(systemName: icon)
                 .font(.title2)
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(SupportTheme.accent)
                 .frame(width: 40)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text(title)
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
                 Text(description)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
         }
     }

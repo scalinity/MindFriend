@@ -10,80 +10,76 @@ struct MedicationDetailView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
                 // Header
-                HStack(spacing: 12) {
+                HStack(spacing: SupportTheme.Spacing.s) {
                     Image(systemName: medication.icon.systemImage)
                         .font(.system(size: 32))
 
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                         Text(medication.name)
                             .font(.headline)
+                            .accessibilityAddTraits(.isHeader)
 
                         if let dosage = medication.dosage {
                             Text(dosage)
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(SupportTheme.textSecondary)
                         }
                     }
 
                     Spacer()
                 }
                 .padding()
-                .background(Color(.systemBackground))
+                .background(SupportTheme.canvas)
 
                 // Adherence Section
                 if let stats = adherenceStats {
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                         Text("Adherence This Month")
                             .font(.headline)
+                            .accessibilityAddTraits(.isHeader)
 
                         HStack {
-                            VStack(alignment: .leading, spacing: 4) {
+                            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                                 Text(stats.displayPercentage)
                                     .font(.title2)
+                                    .accessibilityAddTraits(.isHeader)
                                     .fontWeight(.bold)
 
                                 Text("\(stats.takenCount)/\(stats.totalScheduled) doses taken")
                                     .font(.caption)
-                                    .foregroundColor(.secondary)
+                                    .foregroundColor(SupportTheme.textSecondary)
                             }
 
                             Spacer()
 
-                            VStack(alignment: .trailing, spacing: 4) {
-                                Text("Streak")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-
-                                Text("\(stats.streakDays) days")
-                                    .font(.headline)
-                            }
                         }
 
                         ProgressView(value: stats.percentage)
-                            .tint(.green)
+                            .tint(SupportTheme.accent)
                     }
                     .padding()
-                    .background(Color(.systemBackground))
+                    .background(SupportTheme.canvas)
                 }
 
                 // Recent Activity Section
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                     Text("Recent Activity")
                         .font(.headline)
+                        .accessibilityAddTraits(.isHeader)
 
                     if logs.isEmpty {
                         Text("No activity yet")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(SupportTheme.textSecondary)
                     } else {
                         ForEach(logs.prefix(7)) { log in
                             HStack {
-                                VStack(alignment: .leading, spacing: 2) {
+                                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                                     Text(log.scheduledAt.formatted(date: .abbreviated, time: .omitted))
                                         .font(.caption)
-                                        .foregroundColor(.secondary)
+                                        .foregroundColor(SupportTheme.textSecondary)
 
                                     Text(log.status.rawValue.capitalized)
                                         .font(.caption)
@@ -94,20 +90,25 @@ struct MedicationDetailView: View {
                                 Image(systemName: statusIcon(log.status))
                                     .foregroundColor(statusColor(log.status))
                             }
-                            .padding(.vertical, 4)
+                            .padding(.vertical, SupportTheme.Spacing.xxs)
                         }
                     }
                 }
                 .padding()
-                .background(Color(.systemBackground))
+                .background(SupportTheme.canvas)
             }
         }
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle(medication.name)
         .navigationBarTitleDisplayMode(.inline)
-        .alert("Error", isPresented: Binding(
-            get: { errorMessage != nil },
-            set: { if !$0 { errorMessage = nil } }
-        )) {
+        .alert(
+            "Error",
+            isPresented: Binding(
+                get: { errorMessage != nil },
+                set: { if !$0 { errorMessage = nil } }
+            )
+        ) {
             Button("OK") { errorMessage = nil }
         } message: {
             Text(errorMessage ?? "")
@@ -135,7 +136,8 @@ struct MedicationDetailView: View {
                     .value
 
                 if let stat = stats.first {
-                    let percentage = stat.total_scheduled > 0
+                    let percentage =
+                        stat.total_scheduled > 0
                         ? Double(stat.taken_count) / Double(stat.total_scheduled)
                         : 0.0
                     adherenceStats = MedicationAdherenceStats(
@@ -174,9 +176,10 @@ struct MedicationDetailView: View {
 
                 logs = dbLogs.compactMap { log in
                     guard let status = MedicationStatus(rawValue: log.status),
-                          let id = UUID(uuidString: log.id),
-                          let userId = UUID(uuidString: log.user_id),
-                          let medicationId = UUID(uuidString: log.medication_id) else {
+                        let id = UUID(uuidString: log.id),
+                        let userId = UUID(uuidString: log.user_id),
+                        let medicationId = UUID(uuidString: log.medication_id)
+                    else {
                         return nil
                     }
                     return MedicationLog(
@@ -210,10 +213,10 @@ struct MedicationDetailView: View {
 
     private func statusColor(_ status: MedicationStatus) -> Color {
         switch status {
-        case .taken: return .green
+        case .taken: return SupportTheme.accent
         case .skipped: return .red
-        case .late: return .orange
-        case .pending: return .gray
+        case .late: return SupportTheme.accent
+        case .pending: return SupportTheme.textSecondary
         }
     }
 }

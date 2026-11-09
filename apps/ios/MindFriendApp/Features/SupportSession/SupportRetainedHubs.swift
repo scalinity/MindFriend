@@ -56,7 +56,10 @@ struct SupportPlansHub: View {
             }
             .padding(SupportTheme.Spacing.m)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(SupportTheme.canvas.ignoresSafeArea())
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle(SupportDestination.plans.title)
         .navigationBarTitleDisplayMode(.inline)
         .task(id: retry) { await load() }
@@ -92,7 +95,10 @@ struct SupportDailyBriefingHub: View {
             DailyBriefingCard(viewModel: container.dailyBriefingViewModel)
                 .padding(SupportTheme.Spacing.m)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(SupportTheme.canvas.ignoresSafeArea())
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle(SupportDestination.dailyBriefing.title)
         .navigationBarTitleDisplayMode(.inline)
         .task { await container.dailyBriefingViewModel.loadTodaysBriefing() }
@@ -118,145 +124,28 @@ struct SupportWeeklyRecapHub: View {
             }
             .padding(SupportTheme.Spacing.m)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(SupportTheme.canvas.ignoresSafeArea())
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle(SupportDestination.weeklyRecap.title)
         .navigationBarTitleDisplayMode(.inline)
     }
 }
 
-// MARK: - Streaks and shields (You → Progress)
+// MARK: - Retained progress route
 
-/// Status, history, vacation mode and recovery in one calm place. Nothing here counts down or warns;
-/// the recovery check is something you ask for.
 struct SupportStreaksHub: View {
-    @EnvironmentObject private var appState: AppState
-    @EnvironmentObject private var container: DependencyContainer
-    @State private var showVacation = false
-    @State private var recoveryItem: RecoveryQuestItem?
-    @State private var isChecking = false
-    @State private var recoveryMessage: String?
-    @State private var pendingStreakToRecover = 0
-    @State private var isStartingRecovery = false
-
-    private var stats: UserStats? { appState.currentUser?.stats }
-
     var body: some View {
-        List {
-            Section(String(localized: "Current status")) {
-                statusRow(String(localized: "Current streak"), value: appState.currentStreak > 0
-                          ? appState.currentStreak : (stats?.currentStreakDays ?? 0))
-                statusRow(String(localized: "Longest streak"), value: stats?.longestStreakDays ?? 0)
-                if let remaining = stats?.streakShieldsRemaining, let max = stats?.streakShieldsMax {
-                    statusRow(String(localized: "Shields available"), text: "\(remaining) / \(max)")
-                }
-            }
-            Section {
-                NavigationLink {
-                    ShieldHistoryView().environmentObject(container)
-                } label: {
-                    SupportRowLabel(title: String(localized: "Shield history"), icon: "shield.lefthalf.filled")
-                }
-                Button {
-                    showVacation = true
-                } label: {
-                    SupportRowLabel(title: String(localized: "Vacation mode"), icon: "airplane")
-                }
-                .buttonStyle(.plain)
-            }
-            Section {
-                Button {
-                    Task { await checkForRecovery() }
-                } label: {
-                    SupportRowLabel(
-                        title: String(localized: "Check for a recovery quest"),
-                        subtitle: String(localized: "Only if your streak was interrupted"),
-                        icon: "arrow.counterclockwise"
-                    )
-                }
-                .buttonStyle(.plain)
-                .disabled(isChecking)
-                if let recoveryMessage {
-                    Text(recoveryMessage).foregroundStyle(SupportTheme.textSecondary)
-                }
-                if pendingStreakToRecover > 0 {
-                    Button {
-                        Task { await startRecovery() }
-                    } label: {
-                        SupportRowLabel(
-                            title: String(localized: "Start recovery quest"),
-                            subtitle: String(localized: "Restore a streak of \(pendingStreakToRecover)"),
-                            icon: "figure.walk"
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(isStartingRecovery)
-                }
-            } header: {
-                Text("Recovery")
-            }
-        }
-        .supportCanvas()
-        .navigationTitle(SupportDestination.streaks.title)
+        SupportUnavailableState(
+            title: "Your progress is in You",
+            message: "Explore your levels, completed quests and badges from the Progress section."
+        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
+        .navigationTitle("Progress")
         .navigationBarTitleDisplayMode(.inline)
-        .sheet(isPresented: $showVacation) {
-            VacationModeSheet().environmentObject(container)
-        }
-        .sheet(item: $recoveryItem) { item in
-            RecoveryQuestView(streakToRecover: pendingStreakToRecover, attemptId: item.attemptId, quest: item.quest)
-                .environmentObject(appState)
-                .environmentObject(container)
-        }
-    }
-
-    private func statusRow(_ title: String, value: Int) -> some View {
-        statusRow(title, text: "\(value)")
-    }
-
-    private func statusRow(_ title: String, text: String) -> some View {
-        HStack {
-            Text(title)
-            Spacer()
-            Text(text).foregroundStyle(SupportTheme.textSecondary)
-        }
-        .frame(minHeight: SupportTheme.minimumTarget)
-        .accessibilityElement(children: .combine)
-    }
-
-    private func checkForRecovery() async {
-        guard let userID = appState.currentUser?.id, !isChecking else { return }
-        isChecking = true
-        defer { isChecking = false }
-        do {
-            let protection = try await container.supabaseDataService.checkStreakProtection()
-            guard appState.currentUser?.id == userID else { return }
-            let expiry = protection.recoveryExpiresAt.flatMap { $0 > Date() ? $0 : nil }
-            if protection.recoveryAvailable, expiry != nil {
-                pendingStreakToRecover = max(0, protection.streakBeforeBreak ?? 0)
-                recoveryMessage = String(localized: "A recovery quest is available.")
-            } else {
-                pendingStreakToRecover = 0
-                recoveryMessage = String(localized: "No recovery quest is needed right now.")
-            }
-        } catch {
-            recoveryMessage = String(localized: "Couldn't check right now. Try again later.")
-        }
-    }
-
-    private func startRecovery() async {
-        guard let userID = appState.currentUser?.id, !isStartingRecovery else { return }
-        isStartingRecovery = true
-        defer { isStartingRecovery = false }
-        do {
-            let result = try await container.supabaseDataService.startRecoveryQuest()
-            guard appState.currentUser?.id == userID else { return }
-            if result.success, let quest = result.quest {
-                recoveryItem = RecoveryQuestItem(attemptId: result.attemptId ?? "", quest: quest)
-            } else {
-                recoveryMessage = result.error ?? String(localized: "Couldn't start the recovery quest.")
-            }
-        } catch {
-            recoveryMessage = String(localized: "Couldn't start the recovery quest.")
-        }
     }
 }
 
@@ -269,13 +158,18 @@ struct SupportCapacityHub: View {
         ScrollView {
             VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
                 CapacityIndicator().environmentObject(container.difficultyService)
-                Text("Capacity is an estimate used to adjust how demanding suggestions are. It isn't a measure of you, and what you say about how you feel comes first.")
-                    .font(.footnote)
-                    .foregroundStyle(SupportTheme.textSecondary)
+                Text(
+                    "Capacity is an estimate used to adjust how demanding suggestions are. It isn't a measure of you, and what you say about how you feel comes first."
+                )
+                .font(.footnote)
+                .foregroundStyle(SupportTheme.textSecondary)
             }
             .padding(SupportTheme.Spacing.m)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(SupportTheme.canvas.ignoresSafeArea())
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle(SupportDestination.capacity.title)
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -310,9 +204,11 @@ private struct SupportMoodOutlookContent: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
-                Text("An interpretation of recent patterns. It is not a diagnosis and may be wrong. How you say you feel always comes first.")
-                    .font(.footnote)
-                    .foregroundStyle(SupportTheme.textSecondary)
+                Text(
+                    "An interpretation of recent patterns. It is not a diagnosis and may be wrong. How you say you feel always comes first."
+                )
+                .font(.footnote)
+                .foregroundStyle(SupportTheme.textSecondary)
                 if let prediction = predictive.todayPrediction, prediction.userId == appState.currentUser?.id {
                     MoodPredictionCard(prediction: prediction)
                 } else {
@@ -334,7 +230,10 @@ private struct SupportMoodOutlookContent: View {
             }
             .padding(SupportTheme.Spacing.m)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(SupportTheme.canvas.ignoresSafeArea())
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle(SupportDestination.moodPrediction.title)
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showIntervention) {

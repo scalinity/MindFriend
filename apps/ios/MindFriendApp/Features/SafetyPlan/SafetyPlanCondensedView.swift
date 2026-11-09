@@ -14,7 +14,7 @@ struct SafetyPlanCondensedView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: SupportTheme.Spacing.l) {
                     // Header
                     headerView
 
@@ -43,6 +43,8 @@ struct SafetyPlanCondensedView: View {
                 .padding()
             }
             .background(Color.red.opacity(0.05))
+            .supportScreen()
+            .foregroundStyle(SupportTheme.textPrimary)
             .navigationTitle("I Need Help Now")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -61,54 +63,56 @@ struct SafetyPlanCondensedView: View {
     // MARK: - Header View
 
     private var headerView: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: SupportTheme.Spacing.s) {
             Image(systemName: "heart.shield.fill")
                 .font(.system(size: 48))
                 .foregroundStyle(.red)
 
             Text("It's okay to ask for help.")
                 .font(.title2)
+                .accessibilityAddTraits(.isHeader)
                 .fontWeight(.semibold)
                 .multilineTextAlignment(.center)
 
             Text("Take it one step at a time. Your safety plan is here to help.")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .multilineTextAlignment(.center)
         }
         .padding(.vertical)
     }
 
     private var staleBanner: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: SupportTheme.Spacing.s) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.orange)
+                .foregroundStyle(SupportTheme.accent)
             Text("This safety plan may be outdated. Connect to refresh.")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
             Spacer()
         }
-        .padding(12)
-        .background(Color.orange.opacity(0.1))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .padding(SupportTheme.Spacing.s)
+        .background(SupportTheme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
     }
 
     // MARK: - Warning Signs Section
 
     private var warningSignsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             HStack {
                 Image(systemName: "eye.fill")
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(SupportTheme.accent)
                 Text("Recognizing What's Happening")
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
             }
 
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                 ForEach(payload.warningSigns.prefix(3)) { sign in
-                    HStack(spacing: 8) {
+                    HStack(spacing: SupportTheme.Spacing.xs) {
                         Circle()
-                            .fill(Color.orange.opacity(0.3))
+                            .fill(SupportTheme.accent.opacity(0.3))
                             .frame(width: 8, height: 8)
                         Text(sign.text)
                             .font(.subheadline)
@@ -118,25 +122,26 @@ struct SafetyPlanCondensedView: View {
                 if payload.warningSigns.count > 3 {
                     Text("+\(payload.warningSigns.count - 3) more signs")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
             }
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.orange.opacity(0.1))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .background(SupportTheme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
     }
 
     // MARK: - Coping Section
 
     private var copingSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             HStack {
                 Image(systemName: "leaf.fill")
-                    .foregroundStyle(.green)
+                    .foregroundStyle(SupportTheme.accent)
                 Text("Quick Actions You Can Take")
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
             }
 
             // Top favorites first
@@ -151,24 +156,25 @@ struct SafetyPlanCondensedView: View {
             if payload.coping.count > 3 {
                 Text("+\(payload.coping.count - 3) more strategies")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.green.opacity(0.1))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .background(SupportTheme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
     }
 
     // MARK: - Contacts Section
 
     private var contactsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             HStack {
                 Image(systemName: "person.2.fill")
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(SupportTheme.accent)
                 Text("People Who Can Help")
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
             }
 
             // Primary contact first
@@ -182,30 +188,31 @@ struct SafetyPlanCondensedView: View {
             if payload.contacts.count > 2 {
                 Text("+\(payload.contacts.count - 2) more contacts")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.blue.opacity(0.1))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .background(SupportTheme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
     }
 
     // MARK: - Crisis Hotline Section
 
     private var crisisHotlineSection: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             HStack {
                 Image(systemName: "phone.fill")
-                    .foregroundStyle(.white)
+                    .foregroundStyle(SupportTheme.textPrimary)
                 Text("Crisis Hotline")
                     .font(.headline)
-                    .foregroundStyle(.white)
+                    .accessibilityAddTraits(.isHeader)
+                    .foregroundStyle(SupportTheme.textPrimary)
             }
 
             Text("Professional support is available 24/7")
                 .font(.subheadline)
-                .foregroundStyle(.white.opacity(0.9))
+                .foregroundStyle(SupportTheme.textPrimary.opacity(0.9))
 
             // Primary crisis number
             let crisisNumber = payload.resources.first { $0.type == .hotline || $0.type == .crisisLine }?.phone ?? "988"
@@ -217,13 +224,14 @@ struct SafetyPlanCondensedView: View {
                     Image(systemName: "phone.fill")
                     Text(crisisNumber)
                         .font(.title2)
+                        .accessibilityAddTraits(.isHeader)
                         .fontWeight(.bold)
                 }
                 .frame(maxWidth: .infinity)
                 .padding()
-                .background(Color.white)
+                .background(SupportTheme.textPrimary)
                 .foregroundStyle(.red)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
             }
 
             Button {
@@ -231,13 +239,13 @@ struct SafetyPlanCondensedView: View {
             } label: {
                 Text("Call \(crisisNumber)")
                     .font(.subheadline)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(SupportTheme.textPrimary)
             }
         }
         .padding()
         .frame(maxWidth: .infinity)
         .background(Color.red)
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
     }
 }
 
@@ -252,28 +260,28 @@ struct CopingActionRow: View {
         } label: {
             HStack {
                 Image(systemName: coping.category.icon)
-                    .foregroundStyle(.green)
+                    .foregroundStyle(SupportTheme.accent)
                     .frame(width: 24)
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     Text(coping.label)
                         .font(.subheadline)
                         .fontWeight(.medium)
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(SupportTheme.textPrimary)
 
                     if let duration = coping.duration {
                         Text("\(duration) min")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                 }
 
                 Spacer()
 
                 Image(systemName: "play.circle.fill")
-                    .foregroundStyle(.green)
+                    .foregroundStyle(SupportTheme.accent)
             }
-            .padding(.vertical, 8)
+            .padding(.vertical, SupportTheme.Spacing.xs)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -293,14 +301,14 @@ struct ContactActionRow: View {
 
     var body: some View {
         HStack {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text(contact.name)
                     .font(.subheadline)
                     .fontWeight(.medium)
 
                 Text(contact.relationship.displayName)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
 
             Spacer()
@@ -312,19 +320,19 @@ struct ContactActionRow: View {
                     textContact()
                 }
             } label: {
-                HStack(spacing: 4) {
+                HStack(spacing: SupportTheme.Spacing.xxs) {
                     Image(systemName: contact.preferredMethod.icon)
                     Text(contact.preferredMethod.displayName)
                 }
                 .font(.caption)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(Color.blue)
-                .foregroundStyle(.white)
+                .padding(.horizontal, SupportTheme.Spacing.s)
+                .padding(.vertical, SupportTheme.Spacing.xs)
+                .background(SupportTheme.accent)
+                .foregroundStyle(SupportTheme.onAccent)
                 .clipShape(Capsule())
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, SupportTheme.Spacing.xxs)
     }
 
     private func callContact() {
@@ -351,7 +359,7 @@ struct CrisisCallView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 24) {
+            VStack(spacing: SupportTheme.Spacing.l) {
                 Spacer()
 
                 Image(systemName: "phone.circle.fill")
@@ -360,21 +368,23 @@ struct CrisisCallView: View {
 
                 Text("Calling 988")
                     .font(.title)
+                    .accessibilityAddTraits(.isHeader)
                     .fontWeight(.bold)
 
                 Text("Suicide & Crisis Lifeline")
                     .font(.headline)
-                    .foregroundStyle(.secondary)
+                    .accessibilityAddTraits(.isHeader)
+                    .foregroundStyle(SupportTheme.textSecondary)
 
                 Text("You'll be connected to a trained counselor who can help.")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal)
 
                 Spacer()
 
-                VStack(spacing: 12) {
+                VStack(spacing: SupportTheme.Spacing.s) {
                     Button {
                         callNumber(crisisNumber)
                         dismiss()
@@ -384,8 +394,8 @@ struct CrisisCallView: View {
                             .frame(maxWidth: .infinity)
                             .padding()
                             .background(Color.red)
-                            .foregroundStyle(.white)
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .foregroundStyle(SupportTheme.textPrimary)
+                            .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
                     }
 
                     Button {
@@ -393,11 +403,11 @@ struct CrisisCallView: View {
                     } label: {
                         Text("Not ready to call")
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                 }
-                .padding(.horizontal, 24)
-                .padding(.bottom, 32)
+                .padding(.horizontal, SupportTheme.Spacing.l)
+                .padding(.bottom, SupportTheme.Spacing.xl)
             }
             .navigationBarHidden(true)
         }
@@ -423,27 +433,30 @@ private func callNumber(_ number: String) {
 // MARK: - Preview
 
 #if DEBUG
-#Preview {
-    SafetyPlanCondensedView(
-        payload: SafetyPlanPayload(
-            warningSigns: [
-                SafetyPlanItem(text: "Withdrawing from others"),
-                SafetyPlanItem(text: "Sleep quality decreases"),
-                SafetyPlanItem(text: "Racing thoughts")
-            ],
-            coping: [
-                CopingStrategy(type: .exercise, label: "Box Breathing", duration: 2, category: .breathing, isFavorite: true),
-                CopingStrategy(type: .custom, label: "Take a walk", category: .movement, isFavorite: false)
-            ],
-            contacts: [
-                TrustedContact(name: "Mom", phone: "+1234567890", relationship: .family, preferredMethod: .call, isPrimary: true)
-            ],
-            resources: [
-                ProfessionalResource(type: .hotline, name: "988", phone: "988", country: "US")
-            ]
-        ),
-        settings: SafetyPlanSettings(),
-        isStale: false
-    )
-}
+    #Preview {
+        SafetyPlanCondensedView(
+            payload: SafetyPlanPayload(
+                warningSigns: [
+                    SafetyPlanItem(text: "Withdrawing from others"),
+                    SafetyPlanItem(text: "Sleep quality decreases"),
+                    SafetyPlanItem(text: "Racing thoughts"),
+                ],
+                coping: [
+                    CopingStrategy(
+                        type: .exercise, label: "Box Breathing", duration: 2, category: .breathing, isFavorite: true),
+                    CopingStrategy(type: .custom, label: "Take a walk", category: .movement, isFavorite: false),
+                ],
+                contacts: [
+                    TrustedContact(
+                        name: "Mom", phone: "+1234567890", relationship: .family, preferredMethod: .call,
+                        isPrimary: true)
+                ],
+                resources: [
+                    ProfessionalResource(type: .hotline, name: "988", phone: "988", country: "US")
+                ]
+            ),
+            settings: SafetyPlanSettings(),
+            isStale: false
+        )
+    }
 #endif

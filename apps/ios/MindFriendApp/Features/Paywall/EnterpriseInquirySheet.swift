@@ -1,5 +1,5 @@
-import SwiftUI
 import Supabase
+import SwiftUI
 
 // MARK: - Request/Response Types
 
@@ -48,7 +48,7 @@ struct EnterpriseInquirySheet: View {
         NavigationStack {
             Form {
                 Section {
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                         TextField("Full Name", text: $name)
                             .textContentType(.name)
                             .autocorrectionDisabled()
@@ -67,7 +67,7 @@ struct EnterpriseInquirySheet: View {
                         }
                     }
 
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                         TextField("Work Email", text: $email)
                             .textContentType(.emailAddress)
                             .keyboardType(.emailAddress)
@@ -85,7 +85,7 @@ struct EnterpriseInquirySheet: View {
                         }
                     }
 
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                         TextField("Company Name", text: $companyName)
                             .autocorrectionDisabled()
                             .onChange(of: companyName) { _, newValue in
@@ -111,9 +111,10 @@ struct EnterpriseInquirySheet: View {
                 } header: {
                     Text("Contact Information")
                 }
+                .listRowBackground(SupportTheme.surface)
 
                 Section {
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                         TextEditor(text: $message)
                             .frame(minHeight: 100)
                             .accessibilityLabel("Message")
@@ -128,7 +129,7 @@ struct EnterpriseInquirySheet: View {
                             Spacer()
                             Text("\(message.count)/\(maxMessageLength)")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                         }
                     }
                 } header: {
@@ -137,15 +138,17 @@ struct EnterpriseInquirySheet: View {
                     Text("Tell us about your team's mental health needs and any specific requirements.")
                 }
 
+                .listRowBackground(SupportTheme.surface)
+
                 Section {
                     Button(action: submitInquiry) {
                         if isSubmitting {
                             HStack {
                                 Spacer()
                                 ProgressView()
-                                    .tint(.white)
+                                    .tint(SupportTheme.textPrimary)
                                 Text("Submitting...")
-                                    .foregroundStyle(.white)
+                                    .foregroundStyle(SupportTheme.textPrimary)
                                 Spacer()
                             }
                         } else {
@@ -157,11 +160,15 @@ struct EnterpriseInquirySheet: View {
                             }
                         }
                     }
-                    .listRowBackground(Color.accentColor)
-                    .foregroundStyle(.white)
+                    .listRowBackground(SupportTheme.accent)
+                    .foregroundStyle(SupportTheme.textPrimary)
                     .disabled(isSubmitting)
                 }
+
+                .listRowBackground(SupportTheme.surface)
             }
+            .supportScreen()
+            .foregroundStyle(SupportTheme.textPrimary)
             .navigationTitle("Contact Sales")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -255,11 +262,13 @@ struct EnterpriseInquirySheet: View {
                 }
             } catch {
                 await MainActor.run {
-                    if error.localizedDescription.contains("network") ||
-                       error.localizedDescription.contains("connection") {
+                    if error.localizedDescription.contains("network")
+                        || error.localizedDescription.contains("connection")
+                    {
                         errorMessage = "Unable to submit inquiry. Please check your connection and try again."
                     } else {
-                        errorMessage = "Something went wrong. Please try again or email support@getmindfriend.app directly."
+                        errorMessage =
+                            "Something went wrong. Please try again or email support@getmindfriend.app directly."
                     }
                     showError = true
                     isSubmitting = false
@@ -270,7 +279,7 @@ struct EnterpriseInquirySheet: View {
 }
 
 #if DEBUG
-#Preview {
-    EnterpriseInquirySheet()
-}
+    #Preview {
+        EnterpriseInquirySheet()
+    }
 #endif

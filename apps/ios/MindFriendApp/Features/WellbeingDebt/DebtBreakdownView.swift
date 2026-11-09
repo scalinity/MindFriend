@@ -56,13 +56,13 @@ struct DebtBreakdownView: View {
                 if let window = displayedWindow {
                     Text("\(window.start) – \(window.end)").accessibilityIdentifier("debt.breakdown.window")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                         .padding(.horizontal)
                 }
 
                 if isLoading {
                     ProgressView("Loading transactions...")
-                        .padding(.top, 100)
+                        .padding(.top, SupportTheme.Spacing.xl)
                 } else if let error = errorMessage {
                     errorView(error)
                 } else if transactions.isEmpty {
@@ -71,6 +71,8 @@ struct DebtBreakdownView: View {
                     transactionsList
                 }
             }
+            .supportScreen()
+            .foregroundStyle(SupportTheme.textPrimary)
             .navigationTitle("Transaction Breakdown")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -80,7 +82,10 @@ struct DebtBreakdownView: View {
                     }
                 }
             }
-            .task(id: "\(selectedDateRange.days)-\(appState.currentUser?.id.uuidString ?? "signed-out")-\(debtScore.date)-\(debtScore.trend.timeZone ?? "legacy")") {
+            .task(
+                id:
+                    "\(selectedDateRange.days)-\(appState.currentUser?.id.uuidString ?? "signed-out")-\(debtScore.date)-\(debtScore.trend.timeZone ?? "legacy")"
+            ) {
                 await loadTransactions()
             }
         }
@@ -92,14 +97,19 @@ struct DebtBreakdownView: View {
     private var transactionsList: some View {
         List {
             Section {
-                Text("Missing circle activity is not treated as social isolation. Historical inferred penalties are excluded.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Text(
+                    "Missing circle activity is not treated as social isolation. Historical inferred penalties are excluded."
+                )
+                .font(.caption)
+                .foregroundStyle(SupportTheme.textSecondary)
             }
+            .listRowBackground(SupportTheme.surface)
             // Summary section
             Section {
                 summaryStats
             }
+
+            .listRowBackground(SupportTheme.surface)
 
             // Deposits section
             if !deposits.isEmpty {
@@ -108,6 +118,7 @@ struct DebtBreakdownView: View {
                         transactionRow(transaction)
                     }
                 }
+                .listRowBackground(SupportTheme.surface)
             }
 
             // Withdrawals section
@@ -117,15 +128,16 @@ struct DebtBreakdownView: View {
                         transactionRow(transaction)
                     }
                 }
+                .listRowBackground(SupportTheme.surface)
             }
         }
     }
 
     @ViewBuilder
     private var summaryStats: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             HStack {
-                statCard("Deposits", value: totalDeposits, color: .green)
+                statCard("Deposits", value: totalDeposits, color: SupportTheme.accent)
                 statCard("Withdrawals", value: totalWithdrawals, color: .red)
             }
 
@@ -134,100 +146,108 @@ struct DebtBreakdownView: View {
             HStack {
                 Text("Net Balance")
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
 
                 Spacer()
 
                 Text("\(netBalance > 0 ? "+" : "")\(NSDecimalNumber(decimal: netBalance).stringValue)")
                     .font(.title2.bold())
-                    .foregroundStyle(netBalance >= 0 ? .green : .red)
+                    .accessibilityAddTraits(.isHeader)
+                    .foregroundStyle(netBalance >= 0 ? SupportTheme.accent : .red)
             }
         }
     }
 
     @ViewBuilder
     private func statCard(_ label: String, value: Decimal, color: Color) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
             Text(label)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
 
             Text("\(value > 0 ? "+" : "")\(NSDecimalNumber(decimal: value).stringValue)")
                 .font(.title3.bold())
+                .accessibilityAddTraits(.isHeader)
                 .foregroundStyle(color)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
-        .background(Color(.systemGray6))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .background(SupportTheme.field)
+        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
     }
 
     @ViewBuilder
     private func transactionRow(_ transaction: WellbeingTransaction) -> some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: SupportTheme.Spacing.s) {
             // Icon
             Image(systemName: transaction.type == .deposit ? "arrow.up.circle.fill" : "arrow.down.circle.fill")
-                .foregroundStyle(transaction.type == .deposit ? .green : .red)
+                .foregroundStyle(transaction.type == .deposit ? SupportTheme.accent : .red)
                 .font(.title3)
+                .accessibilityAddTraits(.isHeader)
 
             // Details
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text(formatCategory(transaction.category))
                     .font(.subheadline.bold())
 
                 if let description = transaction.description {
                     Text(description)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
 
                 Text("\(transaction.source.rawValue) • \(transaction.date)")
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
 
             Spacer()
 
             // Amount
-            Text("\(transaction.type == .deposit ? "+" : "-")\(NSDecimalNumber(decimal: transaction.amount).stringValue)")
-                .font(.subheadline.bold())
-                .foregroundStyle(transaction.type == .deposit ? .green : .red)
+            Text(
+                "\(transaction.type == .deposit ? "+" : "-")\(NSDecimalNumber(decimal: transaction.amount).stringValue)"
+            )
+            .font(.subheadline.bold())
+            .foregroundStyle(transaction.type == .deposit ? SupportTheme.accent : .red)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, SupportTheme.Spacing.xxs)
     }
 
     // MARK: - Empty View
 
     @ViewBuilder
     private var emptyView: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             Image(systemName: "tray")
                 .font(.system(size: 60))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
 
             Text("No Transactions")
                 .font(.title2.bold())
+                .accessibilityAddTraits(.isHeader)
 
             Text("No transactions recorded for this period.")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .multilineTextAlignment(.center)
         }
-        .padding(.top, 100)
+        .padding(.top, SupportTheme.Spacing.xl)
     }
 
     @ViewBuilder
     private func errorView(_ error: String) -> some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             Image(systemName: "exclamationmark.triangle")
                 .font(.system(size: 60))
                 .foregroundStyle(.red)
 
             Text("Error Loading Transactions")
                 .font(.title2.bold())
+                .accessibilityAddTraits(.isHeader)
 
             Text(error)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
 
@@ -236,9 +256,9 @@ struct DebtBreakdownView: View {
                     await loadTransactions()
                 }
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.supportSecondary)
         }
-        .padding(.top, 100)
+        .padding(.top, SupportTheme.Spacing.xl)
     }
 
     // MARK: - Computed Properties
@@ -281,8 +301,10 @@ struct DebtBreakdownView: View {
             let loaded: [WellbeingTransaction]
             if let snapshot = debtScore.calculationTransactions {
                 guard debtScore.isSourceCalculation(for: window.end, requireSnapshot: true, timeZone: window.timezone),
-                      debtScore.userId.lowercased() == owner.lowercased() else {
-                    throw WellbeingDebtError.needsMoreData("This calculation is out of date. Refresh the debt dashboard to view a current breakdown.")
+                    debtScore.userId.lowercased() == owner.lowercased()
+                else {
+                    throw WellbeingDebtError.needsMoreData(
+                        "This calculation is out of date. Refresh the debt dashboard to view a current breakdown.")
                 }
                 loaded = snapshot
             } else {

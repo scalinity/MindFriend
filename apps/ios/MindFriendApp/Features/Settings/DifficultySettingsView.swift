@@ -16,71 +16,75 @@ struct DifficultySettingsView: View {
                     // Current capacity display
                     if let capacity = difficultyService.currentCapacity {
                         HStack {
-                            VStack(alignment: .leading, spacing: 4) {
+                            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                                 Text("Current Capacity")
                                     .font(.subheadline)
-                                    .foregroundColor(.secondary)
+                                    .foregroundColor(SupportTheme.textSecondary)
                                 Text(capacity.level.displayName)
                                     .font(.headline)
-                                    .foregroundColor(capacity.level.color)
+                                    .accessibilityAddTraits(.isHeader)
+                                    .foregroundColor(SupportTheme.accent)
                             }
 
                             Spacer()
 
                             ZStack {
                                 Circle()
-                                    .stroke(Color.gray.opacity(0.2), lineWidth: 3)
+                                    .stroke(SupportTheme.textSecondary.opacity(0.2), lineWidth: 3)
                                     .frame(width: 36, height: 36)
 
                                 Circle()
                                     .trim(from: 0, to: CGFloat(capacity.score) / 100)
-                                    .stroke(capacity.level.color, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                                    .stroke(SupportTheme.accent, style: StrokeStyle(lineWidth: 3, lineCap: .round))
                                     .frame(width: 36, height: 36)
                                     .rotationEffect(.degrees(-90))
 
                                 Text("\(capacity.score)")
                                     .font(.caption2)
                                     .fontWeight(.semibold)
-                                    .foregroundColor(capacity.level.color)
+                                    .foregroundColor(SupportTheme.accent)
                             }
                         }
-                        .padding(.vertical, 4)
+                        .padding(.vertical, SupportTheme.Spacing.xxs)
                     }
                 } header: {
                     Text("Automatic Calculation")
                 }
+                .listRowBackground(SupportTheme.surface)
 
                 Section {
-                    ForEach([
-                        CapacityOverride.OverrideLevel.rest,
-                        CapacityOverride.OverrideLevel.normal,
-                        CapacityOverride.OverrideLevel.challenge
-                    ], id: \.self) { level in
+                    ForEach(
+                        [
+                            CapacityOverride.OverrideLevel.rest,
+                            CapacityOverride.OverrideLevel.normal,
+                            CapacityOverride.OverrideLevel.challenge,
+                        ], id: \.self
+                    ) { level in
                         Button {
                             selectedOverride = level
                         } label: {
-                            HStack(spacing: 12) {
+                            HStack(spacing: SupportTheme.Spacing.s) {
                                 Image(systemName: level.icon)
                                     .font(.title3)
                                     .foregroundColor(iconColor(for: level))
                                     .frame(width: 32)
 
-                                VStack(alignment: .leading, spacing: 4) {
+                                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                                     Text(level.displayName)
                                         .font(.subheadline)
                                         .fontWeight(.medium)
-                                        .foregroundColor(.primary)
+                                        .foregroundColor(SupportTheme.textPrimary)
 
                                     Text(description(for: level))
                                         .font(.caption)
-                                        .foregroundColor(.secondary)
+                                        .foregroundColor(SupportTheme.textSecondary)
                                 }
 
                                 Spacer()
 
                                 if isActiveOverride(level) {
                                     Image(systemName: "checkmark.circle.fill")
-                                        .foregroundColor(.blue)
+                                        .foregroundColor(SupportTheme.accent)
                                 }
                             }
                             .contentShape(Rectangle())
@@ -91,14 +95,14 @@ struct DifficultySettingsView: View {
                     Text("Manual Override")
                 } footer: {
                     if difficultyService.activeOverride != nil {
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack(spacing: 4) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
+                            HStack(spacing: SupportTheme.Spacing.xxs) {
                                 Image(systemName: "info.circle.fill")
                                     .font(.caption2)
                                 Text("Override active until midnight")
                                     .font(.caption)
                             }
-                            .foregroundColor(.orange)
+                            .foregroundColor(SupportTheme.accent)
 
                             Button("Clear Override") {
                                 Task {
@@ -123,34 +127,40 @@ struct DifficultySettingsView: View {
                     }
                 }
 
+                .listRowBackground(SupportTheme.surface)
+
                 Section {
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                         DifficultyInfoRow(
                             icon: "leaf.fill",
                             title: "Rest Mode",
                             description: "Shorter, gentler activities",
-                            color: .blue
+                            color: SupportTheme.accent
                         )
 
                         DifficultyInfoRow(
                             icon: "circle.grid.2x2.fill",
                             title: "Normal Mode",
                             description: "Standard difficulty and duration",
-                            color: .green
+                            color: SupportTheme.accent
                         )
 
                         DifficultyInfoRow(
                             icon: "flame.fill",
                             title: "Challenge Mode",
                             description: "Longer, more intensive activities",
-                            color: .orange
+                            color: SupportTheme.accent
                         )
                     }
-                    .padding(.vertical, 8)
+                    .padding(.vertical, SupportTheme.Spacing.xs)
                 } header: {
                     Text("About Difficulty Levels")
                 }
+
+                .listRowBackground(SupportTheme.surface)
             }
+            .supportScreen()
+            .foregroundStyle(SupportTheme.textPrimary)
             .navigationTitle("Difficulty Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -165,7 +175,7 @@ struct DifficultySettingsView: View {
                 }
             }
             .alert("Error", isPresented: $showError) {
-                Button("OK") { }
+                Button("OK") {}
             } message: {
                 Text(errorMessage)
             }
@@ -202,11 +212,11 @@ struct DifficultySettingsView: View {
     private func iconColor(for level: CapacityOverride.OverrideLevel) -> Color {
         switch level {
         case .rest:
-            return .blue
+            return SupportTheme.accent
         case .normal:
-            return .green
+            return SupportTheme.accent
         case .challenge:
-            return .orange
+            return SupportTheme.accent
         }
     }
 
@@ -229,20 +239,20 @@ struct DifficultyInfoRow: View {
     let color: Color
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: SupportTheme.Spacing.s) {
             Image(systemName: icon)
                 .font(.title3)
                 .foregroundColor(color)
                 .frame(width: 32)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text(title)
                     .font(.subheadline)
                     .fontWeight(.medium)
 
                 Text(description)
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(SupportTheme.textSecondary)
             }
         }
     }
@@ -250,8 +260,9 @@ struct DifficultyInfoRow: View {
 
 #Preview {
     DifficultySettingsView()
-        .environmentObject({
-            let service = DifficultyService(supabase: supabase)
-            return service
-        }())
+        .environmentObject(
+            {
+                let service = DifficultyService(supabase: supabase)
+                return service
+            }())
 }

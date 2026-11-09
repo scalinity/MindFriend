@@ -18,54 +18,68 @@ struct StoryCardView: View {
                 // Background gradient based on variant
                 backgroundGradient
 
-                // Content
-                VStack(spacing: 0) {
-                    Spacer()
-
-                    // Icon (if available)
-                    cardIcon
-                        .padding(.bottom, 24)
-
-                    // Stat (if available)
-                    if let stat = card.data.stat, !stat.isEmpty {
-                        statView(stat: stat, label: card.data.statLabel)
-                            .padding(.bottom, 16)
+                if card.cardType == .streak {
+                    VStack(spacing: SupportTheme.Spacing.m) {
+                        CelebrationEmblem(.symbol("leaf.fill"))
+                        Text("Time for yourself")
+                            .font(.title.bold())
+                            .accessibilityAddTraits(.isHeader)
+                        Text("Every moment of care has a place in your journey.")
+                            .font(.body)
+                            .multilineTextAlignment(.center)
                     }
+                    .foregroundStyle(SupportTheme.textPrimary)
+                    .padding(SupportTheme.Spacing.l)
+                } else {
+                    // Content
+                    VStack(spacing: 0) {
+                        Spacer()
 
-                    // Headline
-                    Text(card.data.headline)
-                        .font(.system(size: isExport ? 72 : 36, weight: .bold))
-                        .foregroundStyle(.white)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 32)
-                        .padding(.bottom, 16)
+                        // Icon (if available)
+                        cardIcon
+                            .padding(.bottom, SupportTheme.Spacing.l)
 
-                    // Message
-                    Text(displayMessage)
-                        .font(.system(size: isExport ? 36 : 18, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.9))
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 40)
-                        .lineLimit(4)
+                        // Stat (if available)
+                        if let stat = card.data.stat, !stat.isEmpty {
+                            statView(stat: stat, label: card.data.statLabel)
+                                .padding(.bottom, SupportTheme.Spacing.m)
+                        }
 
-                    // Call to action (for minimal cards)
-                    if let cta = card.data.callToAction, !cta.isEmpty {
-                        ctaButton(title: cta)
-                            .padding(.top, 24)
+                        // Headline
+                        Text(card.data.headline)
+                            .font(isExport ? .system(size: 72, weight: .bold) : .largeTitle.bold())
+                            .foregroundStyle(SupportTheme.textPrimary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, SupportTheme.Spacing.xl)
+                            .padding(.bottom, SupportTheme.Spacing.m)
+
+                        // Message
+                        Text(displayMessage)
+                            .font(isExport ? .system(size: 36, weight: .medium) : .body.weight(.medium))
+                            .foregroundStyle(SupportTheme.textPrimary.opacity(0.9))
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, SupportTheme.Spacing.xl)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        // Call to action (for minimal cards)
+                        if let cta = card.data.callToAction, !cta.isEmpty {
+                            ctaButton(title: cta)
+                                .padding(.top, SupportTheme.Spacing.l)
+                        }
+
+                        Spacer()
+
+                        // Card type indicator (bottom)
+                        cardTypeIndicator
+                            .padding(.bottom, SupportTheme.Spacing.xl)
                     }
-
-                    Spacer()
-
-                    // Card type indicator (bottom)
-                    cardTypeIndicator
-                        .padding(.bottom, 40)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .frame(width: geometry.size.width, height: geometry.size.height)
         }
-        .aspectRatio(9/16, contentMode: .fit)
-        .clipShape(RoundedRectangle(cornerRadius: isExport ? 0 : 24))
+        .aspectRatio(9 / 16, contentMode: .fit)
+        .clipShape(RoundedRectangle(cornerRadius: isExport ? 0 : SupportTheme.cardRadius))
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityDescription)
     }
@@ -74,33 +88,19 @@ struct StoryCardView: View {
 
     @ViewBuilder
     private var backgroundGradient: some View {
-        LinearGradient(
-            gradient: Gradient(colors: card.variant.gradientColors),
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-        .overlay(
-            // Add subtle pattern overlay for celebration/milestone variants
-            patternOverlay
-        )
+        SupportTheme.surface
+            .overlay(
+                // Add subtle pattern overlay for celebration/milestone variants
+                patternOverlay
+            )
     }
 
     @ViewBuilder
     private var patternOverlay: some View {
         switch card.variant {
         case .celebration, .milestone:
-            // Confetti-like dots pattern
-            GeometryReader { geo in
-                ForEach(0..<20, id: \.self) { i in
-                    Circle()
-                        .fill(.white.opacity(0.1))
-                        .frame(width: CGFloat.random(in: 20...60))
-                        .position(
-                            x: CGFloat.random(in: 0...geo.size.width),
-                            y: CGFloat.random(in: 0...geo.size.height)
-                        )
-                }
-            }
+            CelebrationParticles()
+
         default:
             EmptyView()
         }
@@ -112,8 +112,8 @@ struct StoryCardView: View {
     private var cardIcon: some View {
         Image(systemName: resolvedIconName)
             .font(.system(size: isExport ? 120 : 60, weight: .medium))
-            .foregroundStyle(.white)
-            .shadow(color: .black.opacity(0.2), radius: 8, x: 0, y: 4)
+            .foregroundStyle(SupportTheme.textPrimary)
+            .shadow(color: SupportTheme.canvas.opacity(0.2), radius: 8, x: 0, y: 4)
     }
 
     private var resolvedIconName: String {
@@ -140,16 +140,16 @@ struct StoryCardView: View {
     private func statView(stat: String, label: String?) -> some View {
         let displayStat = privacyMode ? "•••" : stat
 
-        VStack(spacing: 4) {
+        VStack(spacing: SupportTheme.Spacing.xxs) {
             Text(displayStat)
-                .font(.system(size: isExport ? 144 : 72, weight: .heavy))
-                .foregroundStyle(.white)
+                .font(isExport ? .system(size: 144, weight: .heavy) : .largeTitle.weight(.heavy))
+                .foregroundStyle(SupportTheme.textPrimary)
 
             if let label = label, !label.isEmpty {
                 Text(label)
                     .font(.system(size: isExport ? 28 : 14, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.8))
-                    .textCase(.uppercase)
+                    .foregroundStyle(SupportTheme.textPrimary.opacity(0.8))
+
                     .tracking(2)
             }
         }
@@ -163,12 +163,12 @@ struct StoryCardView: View {
         if isExport || onCTAAction == nil {
             Text(title)
                 .font(.system(size: isExport ? 32 : 16, weight: .semibold))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 32)
-                .padding(.vertical, 16)
+                .foregroundStyle(SupportTheme.textPrimary)
+                .padding(.horizontal, SupportTheme.Spacing.xl)
+                .padding(.vertical, SupportTheme.Spacing.m)
                 .background(
                     Capsule()
-                        .fill(.white.opacity(0.2))
+                        .fill(SupportTheme.textPrimary.opacity(0.2))
                 )
         } else {
             Button {
@@ -176,12 +176,12 @@ struct StoryCardView: View {
             } label: {
                 Text(title)
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 32)
-                    .padding(.vertical, 16)
+                    .foregroundStyle(SupportTheme.textPrimary)
+                    .padding(.horizontal, SupportTheme.Spacing.xl)
+                    .padding(.vertical, SupportTheme.Spacing.m)
                     .background(
                         Capsule()
-                            .fill(.white.opacity(0.2))
+                            .fill(SupportTheme.textPrimary.opacity(0.2))
                     )
             }
             .buttonStyle(.plain)
@@ -192,14 +192,14 @@ struct StoryCardView: View {
 
     @ViewBuilder
     private var cardTypeIndicator: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: SupportTheme.Spacing.xs) {
             Image(systemName: card.cardType.iconName)
                 .font(.system(size: isExport ? 24 : 12))
 
             Text(card.cardType.displayName)
                 .font(.system(size: isExport ? 24 : 12, weight: .medium))
         }
-        .foregroundStyle(.white.opacity(0.6))
+        .foregroundStyle(SupportTheme.textPrimary.opacity(0.6))
     }
 
     // MARK: - Privacy-Aware Message
@@ -232,6 +232,7 @@ struct StoryCardView: View {
     // MARK: - Accessibility
 
     private var accessibilityDescription: String {
+        if card.cardType == .streak { return "Time for yourself. Every moment of care has a place in your journey." }
         var parts: [String] = []
 
         parts.append("\(card.cardType.displayName) card")
@@ -253,17 +254,17 @@ struct StoryCardView: View {
 
 // MARK: - Preview Provider
 
-#Preview("Streak Card - Celebration") {
+#Preview("Progress card") {
     StoryCardView(
         card: StoryCard(
             id: UUID(),
-            cardType: .streak,
+            cardType: .quest,
             variant: .celebration,
             data: StoryCardData(
-                headline: "Unstoppable!",
+                headline: "Time for yourself",
                 message: "You're crushing it! 28 days of consistent check-ins.",
                 stat: "28",
-                statLabel: "Day Streak",
+                statLabel: "Completed quests",
                 icon: nil,
                 callToAction: nil,
                 streakDays: 28,

@@ -1,5 +1,5 @@
-import SwiftUI
 import PhotosUI
+import SwiftUI
 
 struct ProfilePictureEditorView: View {
     @Environment(\.dismiss) private var dismiss
@@ -17,7 +17,7 @@ struct ProfilePictureEditorView: View {
     @State private var loadPhotoTask: Task<Void, Never>?
     @State private var uploadTask: Task<Void, Never>?
     @State private var removeTask: Task<Void, Never>?
-    
+
     // History
     @State private var pictureHistory: [SupabaseDataService.ProfilePictureHistoryEntry] = []
     @State private var isLoadingHistory = false
@@ -25,112 +25,117 @@ struct ProfilePictureEditorView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: SupportTheme.Spacing.l) {
                     // Current avatar or placeholder
-                if let avatarUrl = appState.currentUser?.avatarUrl, !avatarUrl.isEmpty {
-                    AsyncImage(url: URL(string: avatarUrl)) { phase in
-                        switch phase {
-                        case .success(let image):
-                            image
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                                .frame(width: 150, height: 150)
-                                .clipShape(Circle())
-                        case .failure:
-                            Image(systemName: "person.circle.fill")
-                                .font(.system(size: 150))
-                                .foregroundStyle(.gray)
-                        case .empty:
-                            ProgressView()
-                                .frame(width: 150, height: 150)
-                        @unknown default:
-                            Image(systemName: "person.circle.fill")
-                                .font(.system(size: 150))
-                                .foregroundStyle(.gray)
+                    if let avatarUrl = appState.currentUser?.avatarUrl, !avatarUrl.isEmpty {
+                        AsyncImage(url: URL(string: avatarUrl)) { phase in
+                            switch phase {
+                            case .success(let image):
+                                image
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fill)
+                                    .frame(width: 150, height: 150)
+                                    .clipShape(Circle())
+                            case .failure:
+                                Image(systemName: "person.circle.fill")
+                                    .font(.system(size: 150))
+                                    .foregroundStyle(SupportTheme.textSecondary)
+                            case .empty:
+                                ProgressView()
+                                    .frame(width: 150, height: 150)
+                            @unknown default:
+                                Image(systemName: "person.circle.fill")
+                                    .font(.system(size: 150))
+                                    .foregroundStyle(SupportTheme.textSecondary)
+                            }
                         }
+                    } else {
+                        Image(systemName: "person.circle.fill")
+                            .font(.system(size: 150))
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
-                } else {
-                    Image(systemName: "person.circle.fill")
-                        .font(.system(size: 150))
-                        .foregroundStyle(.gray)
-                }
 
-                if isUploading {
-                    ProgressView("Uploading...")
-                        .padding()
-                } else {
-                    VStack(spacing: 12) {
-                        Button {
-                            showPhotoPicker = true
-                        } label: {
-                            Label("Upload Photo", systemImage: "photo")
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .accessibilityLabel("Upload photo from library")
-                        .accessibilityHint("Double tap to select a photo from your device")
-
-                        Button {
-                            showAIGenerator = true
-                        } label: {
-                            Label("Generate with AI", systemImage: "sparkles")
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.bordered)
-                        .accessibilityLabel("Generate AI profile picture")
-                        .accessibilityHint("Double tap to create an AI-generated profile picture")
-
-                        if appState.currentUser?.avatarUrl != nil {
-                            Button(role: .destructive) {
-                                showRemoveConfirm = true
+                    if isUploading {
+                        ProgressView("Uploading...")
+                            .padding()
+                    } else {
+                        VStack(spacing: SupportTheme.Spacing.s) {
+                            Button {
+                                showPhotoPicker = true
                             } label: {
-                                Label("Remove Photo", systemImage: "trash")
+                                Label("Upload Photo", systemImage: "photo")
                                     .frame(maxWidth: .infinity)
                             }
-                            .buttonStyle(.bordered)
-                        }
-                    }
-                    .padding(.horizontal)
-                }
+                            .buttonStyle(.supportPrimary)
+                            .accessibilityLabel("Upload photo from library")
+                            .accessibilityHint("Double tap to select a photo from your device")
 
-                if let error = errorMessage {
-                    Text(error)
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal)
-                }
+                            Button {
+                                showAIGenerator = true
+                            } label: {
+                                Label("Generate with AI", systemImage: "sparkles")
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.supportSecondary)
+                            .accessibilityLabel("Generate AI profile picture")
+                            .accessibilityHint("Double tap to create an AI-generated profile picture")
 
-                // Picture History Section
-                if !pictureHistory.isEmpty {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Previous Pictures")
-                            .font(.headline)
-                            .padding(.horizontal)
-                        
-                        LazyVGrid(columns: [
-                            GridItem(.flexible(), spacing: 12),
-                            GridItem(.flexible(), spacing: 12),
-                            GridItem(.flexible(), spacing: 12)
-                        ], spacing: 12) {
-                            ForEach(pictureHistory) { entry in
-                                HistoryPictureCell(
-                                    entry: entry,
-                                    isCurrentAvatar: appState.currentUser?.avatarUrl == entry.publicUrl,
-                                    onSelect: { selectFromHistory(entry) }
-                                )
+                            if appState.currentUser?.avatarUrl != nil {
+                                Button(role: .destructive) {
+                                    showRemoveConfirm = true
+                                } label: {
+                                    Label("Remove Photo", systemImage: "trash")
+                                        .frame(maxWidth: .infinity)
+                                }
+                                .buttonStyle(.supportSecondary)
                             }
                         }
                         .padding(.horizontal)
                     }
-                    .padding(.top, 8)
-                } else if isLoadingHistory {
-                    ProgressView("Loading history...")
-                        .padding()
+
+                    if let error = errorMessage {
+                        Text(error)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                    }
+
+                    // Picture History Section
+                    if !pictureHistory.isEmpty {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
+                            Text("Previous Pictures")
+                                .font(.headline)
+                                .accessibilityAddTraits(.isHeader)
+                                .padding(.horizontal)
+
+                            LazyVGrid(
+                                columns: [
+                                    GridItem(.flexible(), spacing: SupportTheme.Spacing.s),
+                                    GridItem(.flexible(), spacing: SupportTheme.Spacing.s),
+                                    GridItem(.flexible(), spacing: SupportTheme.Spacing.s),
+                                ], spacing: SupportTheme.Spacing.s
+                            ) {
+                                ForEach(pictureHistory) { entry in
+                                    HistoryPictureCell(
+                                        entry: entry,
+                                        isCurrentAvatar: appState.currentUser?.avatarUrl == entry.publicUrl,
+                                        onSelect: { selectFromHistory(entry) }
+                                    )
+                                }
+                            }
+                            .padding(.horizontal)
+                        }
+                        .padding(.top, SupportTheme.Spacing.xs)
+                    } else if isLoadingHistory {
+                        ProgressView("Loading history...")
+                            .padding()
+                    }
                 }
+                .padding()
             }
-            .padding()
-            }
+            .supportScreen()
+            .foregroundStyle(SupportTheme.textPrimary)
             .navigationTitle("Profile Picture")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -188,7 +193,7 @@ struct ProfilePictureEditorView: View {
                 Button("Remove", role: .destructive) {
                     removePhoto()
                 }
-                Button("Cancel", role: .cancel) { }
+                Button("Cancel", role: .cancel) {}
             } message: {
                 Text("This will remove your profile picture and show the default placeholder.")
             }
@@ -197,18 +202,19 @@ struct ProfilePictureEditorView: View {
             }
         }
     }
-    
+
     private func loadHistory() async {
         isLoadingHistory = true
         do {
             var history = try await container.supabaseDataService.getProfilePictureHistory()
-            
+
             // Backfill: If current avatar exists but isn't in history, add it
             if let avatarUrl = appState.currentUser?.avatarUrl,
-               !avatarUrl.isEmpty,
-               !history.contains(where: { $0.publicUrl == avatarUrl }),
-               let url = URL(string: avatarUrl),
-               let storagePath = extractStoragePath(from: url) {
+                !avatarUrl.isEmpty,
+                !history.contains(where: { $0.publicUrl == avatarUrl }),
+                let url = URL(string: avatarUrl),
+                let storagePath = extractStoragePath(from: url)
+            {
                 // Add current avatar to history
                 do {
                     try await container.supabaseDataService.saveProfilePictureToHistory(
@@ -222,7 +228,7 @@ struct ProfilePictureEditorView: View {
                     print("[ProfilePicture] Failed to backfill current avatar: \(error.localizedDescription)")
                 }
             }
-            
+
             pictureHistory = history
         } catch {
             // Silently fail - history is a nice-to-have feature
@@ -230,17 +236,17 @@ struct ProfilePictureEditorView: View {
         }
         isLoadingHistory = false
     }
-    
+
     private func selectFromHistory(_ entry: SupabaseDataService.ProfilePictureHistoryEntry) {
         guard !isUploading else { return }
-        
+
         isUploading = true
         errorMessage = nil
-        
+
         Task {
             do {
                 try await container.supabaseDataService.setAvatarFromHistory(historyEntry: entry)
-                
+
                 await MainActor.run {
                     if let user = appState.currentUser {
                         appState.currentUser = UserProfile(
@@ -275,7 +281,8 @@ struct ProfilePictureEditorView: View {
 
         do {
             guard let data = try await item.loadTransferable(type: Data.self),
-                  let uiImage = UIImage(data: data) else {
+                let uiImage = UIImage(data: data)
+            else {
                 guard !Task.isCancelled else { return }
                 await MainActor.run {
                     errorMessage = "Failed to load image"
@@ -305,7 +312,7 @@ struct ProfilePictureEditorView: View {
 
         // Cancel any existing upload
         uploadTask?.cancel()
-        
+
         isUploading = true
         errorMessage = nil
 
@@ -313,17 +320,17 @@ struct ProfilePictureEditorView: View {
             do {
                 // Check for cancellation
                 guard !Task.isCancelled else { return }
-                
+
                 // Validate image before upload
                 try croppedImage.validateForAvatar()
-                
+
                 guard !Task.isCancelled else { return }
-                
+
                 // Use shared upload pipeline
                 let publicUrl = try await container.supabaseDataService.uploadAndSetAvatar(croppedImage, userId: userId)
 
                 guard !Task.isCancelled else { return }
-                
+
                 // Update AppState with new UserProfile instance
                 await MainActor.run {
                     if let user = appState.currentUser {
@@ -344,7 +351,7 @@ struct ProfilePictureEditorView: View {
                     }
                     isUploading = false
                 }
-                
+
                 // Reload history to show new picture
                 await loadHistory()
             } catch {
@@ -365,28 +372,29 @@ struct ProfilePictureEditorView: View {
 
         // Cancel any existing remove operation
         removeTask?.cancel()
-        
+
         isUploading = true
         errorMessage = nil
 
         removeTask = Task {
             do {
                 guard !Task.isCancelled else { return }
-                
+
                 // Delete from Storage (if path exists)
                 if let avatarUrl = appState.currentUser?.avatarUrl,
-                   let url = URL(string: avatarUrl),
-                   let path = extractStoragePath(from: url) {
+                    let url = URL(string: avatarUrl),
+                    let path = extractStoragePath(from: url)
+                {
                     try? await container.supabaseDataService.deleteProfilePicture(path: path)
                 }
 
                 guard !Task.isCancelled else { return }
-                
+
                 // Update avatar_url to NULL in database
                 try await container.supabaseDataService.updateAvatarUrl("", userId: userId)
 
                 guard !Task.isCancelled else { return }
-                
+
                 // Update AppState with new UserProfile instance
                 await MainActor.run {
                     if let user = appState.currentUser {
@@ -434,7 +442,7 @@ private struct HistoryPictureCell: View {
     let entry: SupabaseDataService.ProfilePictureHistoryEntry
     let isCurrentAvatar: Bool
     let onSelect: () -> Void
-    
+
     var body: some View {
         Button(action: onSelect) {
             ZStack {
@@ -447,23 +455,23 @@ private struct HistoryPictureCell: View {
                     case .failure:
                         Image(systemName: "photo")
                             .font(.title2)
-                            .foregroundStyle(.gray)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     case .empty:
                         ProgressView()
                     @unknown default:
-                        Color.gray.opacity(0.2)
+                        SupportTheme.textSecondary.opacity(0.2)
                     }
                 }
                 .frame(width: 90, height: 90)
                 .clipShape(Circle())
-                
+
                 // Current avatar indicator
                 if isCurrentAvatar {
                     Circle()
-                        .stroke(Color.accentColor, lineWidth: 3)
+                        .stroke(SupportTheme.accent, lineWidth: 3)
                         .frame(width: 94, height: 94)
                 }
-                
+
                 // AI badge for generated pictures
                 if entry.source == "ai_generated" {
                     VStack {
@@ -472,9 +480,9 @@ private struct HistoryPictureCell: View {
                             Spacer()
                             Image(systemName: "sparkles")
                                 .font(.caption2)
-                                .foregroundStyle(.white)
-                                .padding(4)
-                                .background(Circle().fill(Color.purple))
+                                .foregroundStyle(SupportTheme.onAccent)
+                                .padding(SupportTheme.Spacing.xxs)
+                                .background(Circle().fill(SupportTheme.accent))
                         }
                     }
                     .frame(width: 90, height: 90)

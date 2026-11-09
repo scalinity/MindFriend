@@ -1,29 +1,34 @@
-import SwiftUI
 import Charts
+import SwiftUI
 
 struct MoodHistoryView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var container: DependencyContainer
     @State private var moods: [MoodEntry] = []
     @State private var isLoading = true
+    @State private var loadError: String?
     @State private var selectedDays = 14
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 24) {
+            VStack(spacing: SupportTheme.Spacing.l) {
                 // Period selector
                 Picker("Period", selection: $selectedDays) {
                     Text("7 Days").tag(7)
                     Text("14 Days").tag(14)
                     Text("30 Days").tag(30)
                 }
-                .pickerStyle(.segmented)
+                .pickerStyle(.menu)
                 .padding(.horizontal)
 
                 // Chart
                 if isLoading {
                     ProgressView()
                         .frame(height: 200)
+                } else if let loadError {
+                    SupportUnavailableState(
+                        title: "Mood history unavailable", message: loadError,
+                        actionTitle: "Try again", action: { Task { await loadMoods() } })
                 } else if moods.isEmpty {
                     EmptyMoodHistoryView()
                 } else {
@@ -36,9 +41,10 @@ struct MoodHistoryView: View {
                         .padding(.horizontal)
 
                     // List
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                         Text("Recent Entries")
                             .font(.headline)
+                            .accessibilityAddTraits(.isHeader)
                             .padding(.horizontal)
 
                         ForEach(moods.prefix(10)) { mood in
@@ -49,6 +55,8 @@ struct MoodHistoryView: View {
             }
             .padding(.vertical)
         }
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle("Mood History")
         .task {
             await loadMoods()
@@ -60,12 +68,13 @@ struct MoodHistoryView: View {
 
     private func loadMoods() async {
         isLoading = true
+        loadError = nil
         defer { isLoading = false }
 
         do {
             moods = try await container.supabaseDataService.getMoodsForPast(days: selectedDays)
         } catch {
-            appState.showError(.apiError(error.localizedDescription))
+            loadError = error.localizedDescription
         }
     }
 }
@@ -89,14 +98,14 @@ struct MoodChart: View {
                 x: .value("Date", item.date),
                 y: .value("Mood", item.mood.moodScore)
             )
-            .foregroundStyle(Color.accentColor)
+            .foregroundStyle(SupportTheme.accent)
             .interpolationMethod(.catmullRom)
 
             PointMark(
                 x: .value("Date", item.date),
                 y: .value("Mood", item.mood.moodScore)
             )
-            .foregroundStyle(Color.accentColor)
+            .foregroundStyle(SupportTheme.accent)
         }
         .chartYScale(domain: 1...5)
         .chartXAxis {
@@ -155,7 +164,7 @@ struct MoodStatsCard: View {
     }
 
     var body: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: SupportTheme.Spacing.m) {
             StatBox(
                 title: "Average",
                 value: String(format: "%.1f", averageMood),
@@ -193,21 +202,20 @@ private struct StatBox: View {
     let icon: String
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: SupportTheme.Spacing.xs) {
             Image(systemName: icon)
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(SupportTheme.accent)
 
             Text(value)
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
             Text(title)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
         .frame(maxWidth: .infinity)
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .cornerRadius(12)
+        .supportCard()
     }
 }
 
@@ -229,8 +237,9 @@ struct MoodHistoryRow: View {
         HStack {
             Text(moodEmoji)
                 .font(.title2)
+                .accessibilityAddTraits(.isHeader)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text(mood.localDate)
                     .font(.subheadline)
                     .fontWeight(.medium)
@@ -238,41 +247,40 @@ struct MoodHistoryRow: View {
                 if let note = mood.note {
                     Text(note)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                        .foregroundStyle(SupportTheme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
 
             Spacer()
 
-            HStack(spacing: 4) {
+            HStack(spacing: SupportTheme.Spacing.xxs) {
                 ForEach(1...5, id: \.self) { index in
                     Circle()
-                        .fill(index <= mood.moodScore ? Color.accentColor : Color.secondary.opacity(0.3))
+                        .fill(index <= mood.moodScore ? SupportTheme.accent : SupportTheme.textSecondary.opacity(0.3))
                         .frame(width: 8, height: 8)
                 }
             }
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .cornerRadius(12)
+        .supportCard()
         .padding(.horizontal)
     }
 }
 
 struct EmptyMoodHistoryView: View {
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             Image(systemName: "chart.line.uptrend.xyaxis")
                 .font(.system(size: 50))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
 
             Text("No mood entries yet")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
             Text("Start tracking your mood to see patterns")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
         .frame(height: 200)
     }

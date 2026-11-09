@@ -5,6 +5,7 @@ import SwiftUI
 
 /// 5-4-3-2-1 sensory grounding exercise
 struct SOSGroundingView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject var container: DependencyContainer
 
     var sosCoordinator: SOSCoordinator {
@@ -18,8 +19,7 @@ struct SOSGroundingView: View {
     @State private var showingExamples = false
 
     private var step: (count: Int, sense: GroundingSense, prompt: String, examples: [String]) {
-        GroundingExercise.steps.first { $0.sense == currentSense } ??
-        (5, .see, "Name 5 things you can SEE", [])
+        GroundingExercise.steps.first { $0.sense == currentSense } ?? (5, .see, "Name 5 things you can SEE", [])
     }
 
     private var progress: CGFloat {
@@ -31,64 +31,66 @@ struct SOSGroundingView: View {
     var body: some View {
         VStack(spacing: 0) {
             // Header
-            VStack(spacing: 8) {
+            VStack(spacing: SupportTheme.Spacing.xs) {
                 Text("5-4-3-2-1 Grounding")
                     .font(.title2)
+                    .accessibilityAddTraits(.isHeader)
                     .fontWeight(.bold)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(SupportTheme.textPrimary)
 
                 Text("Let's anchor you to the present moment")
                     .font(.body)
-                    .foregroundStyle(.white.opacity(0.8))
+                    .foregroundStyle(SupportTheme.textPrimary.opacity(0.8))
             }
-            .padding(.top, 40)
+            .padding(.top, SupportTheme.Spacing.xl)
 
             // Progress bar
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
                     Rectangle()
-                        .fill(Color.white.opacity(0.2))
+                        .fill(SupportTheme.textPrimary.opacity(0.2))
                         .frame(height: 4)
 
                     Rectangle()
-                        .fill(Color.white)
+                        .fill(SupportTheme.textPrimary)
                         .frame(width: geometry.size.width * progress, height: 4)
                 }
             }
             .frame(height: 4)
-            .padding(.horizontal, 24)
-            .padding(.top, 24)
+            .padding(.horizontal, SupportTheme.Spacing.l)
+            .padding(.top, SupportTheme.Spacing.l)
 
             Spacer()
 
             // Main content
-            VStack(spacing: 32) {
+            VStack(spacing: SupportTheme.Spacing.xl) {
                 // Sense icon
                 ZStack {
                     Circle()
-                        .fill(currentSense.color.opacity(0.2))
+                        .fill(SupportTheme.accent.opacity(0.2))
                         .frame(width: 120, height: 120)
 
                     Image(systemName: currentSense.icon)
                         .font(.system(size: 48))
-                        .foregroundStyle(currentSense.color)
+                        .foregroundStyle(SupportTheme.accent)
                 }
                 .accessibilityHidden(true)
 
                 // Step info
-                VStack(spacing: 12) {
+                VStack(spacing: SupportTheme.Spacing.s) {
                     Text("Step \(6 - currentSense.rawValue) of 5")
                         .font(.caption)
-                        .foregroundStyle(.white.opacity(0.6))
+                        .foregroundStyle(SupportTheme.textPrimary.opacity(0.6))
                         .textCase(.uppercase)
                         .tracking(1)
 
                     Text(step.prompt)
                         .font(.title2)
+                        .accessibilityAddTraits(.isHeader)
                         .fontWeight(.medium)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(SupportTheme.textPrimary)
                         .multilineTextAlignment(.center)
-                        .padding(.horizontal, 24)
+                        .padding(.horizontal, SupportTheme.Spacing.l)
                 }
 
                 // Examples button
@@ -100,28 +102,28 @@ struct SOSGroundingView: View {
                         Text(showingExamples ? "Hide examples" : "Need ideas?")
                     }
                     .font(.subheadline)
-                    .foregroundStyle(.white.opacity(0.7))
+                    .foregroundStyle(SupportTheme.textPrimary.opacity(0.7))
                 }
 
                 // Examples
                 if showingExamples {
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                         ForEach(step.examples, id: \.self) { example in
-                            HStack(spacing: 8) {
+                            HStack(spacing: SupportTheme.Spacing.xs) {
                                 Circle()
-                                    .fill(Color.white.opacity(0.5))
+                                    .fill(SupportTheme.textPrimary.opacity(0.5))
                                     .frame(width: 6, height: 6)
                                 Text(example)
                                     .font(.body)
-                                    .foregroundStyle(.white.opacity(0.8))
+                                    .foregroundStyle(SupportTheme.textPrimary.opacity(0.8))
                             }
                         }
                     }
-                    .padding(16)
-                    .background(Color.white.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-                    .animation(.easeInOut, value: showingExamples)
+                    .padding(SupportTheme.Spacing.m)
+                    .background(SupportTheme.textPrimary.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
+                    .transition(.opacity)
+                    .animation(reduceMotion ? .easeInOut(duration: 0.2) : (.easeInOut), value: showingExamples)
                 }
             }
 
@@ -130,9 +132,9 @@ struct SOSGroundingView: View {
             // Navigation hint
             Text("Take your time. When you're ready, tap to continue.")
                 .font(.caption)
-                .foregroundStyle(.white.opacity(0.5))
+                .foregroundStyle(SupportTheme.textPrimary.opacity(0.5))
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 40)
+                .padding(.horizontal, SupportTheme.Spacing.xl)
 
             Spacer()
 
@@ -142,16 +144,16 @@ struct SOSGroundingView: View {
                     onSkip()
                 }
                 .font(.body)
-                .foregroundStyle(.white.opacity(0.7))
-                .padding(.horizontal, 24)
-                .padding(.vertical, 12)
+                .foregroundStyle(SupportTheme.textPrimary.opacity(0.7))
+                .padding(.horizontal, SupportTheme.Spacing.l)
+                .padding(.vertical, SupportTheme.Spacing.s)
 
                 Spacer()
 
                 Button {
                     sosCoordinator.triggerHaptic(.groundingTap)
 
-                    if let _ = currentSense.next {
+                    if currentSense.next != nil {
                         // More senses to go
                         sosCoordinator.advanceGrounding()
                     } else {
@@ -164,33 +166,26 @@ struct SOSGroundingView: View {
                         Image(systemName: "arrow.right")
                     }
                     .font(.body.weight(.semibold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 24)
-                    .padding(.vertical, 12)
-                    .background(Color.white.opacity(0.2))
+                    .foregroundStyle(SupportTheme.textPrimary)
+                    .padding(.horizontal, SupportTheme.Spacing.l)
+                    .padding(.vertical, SupportTheme.Spacing.s)
+                    .background(SupportTheme.textPrimary.opacity(0.2))
                     .clipShape(Capsule())
                 }
             }
-            .padding(.horizontal, 24)
-            .padding(.bottom, 40)
+            .padding(.horizontal, SupportTheme.Spacing.l)
+            .padding(.bottom, SupportTheme.Spacing.xl)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(
-            LinearGradient(
-                colors: [
-                    Color(red: 0.1, green: 0.25, blue: 0.35),
-                    Color(red: 0.1, green: 0.15, blue: 0.25)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
+            SupportTheme.surface
         )
         .contentShape(Rectangle())
         .onTapGesture {
             // Tap anywhere to advance
             sosCoordinator.triggerHaptic(.groundingTap)
 
-            if let _ = currentSense.next {
+            if currentSense.next != nil {
                 sosCoordinator.advanceGrounding()
             } else {
                 onComplete()

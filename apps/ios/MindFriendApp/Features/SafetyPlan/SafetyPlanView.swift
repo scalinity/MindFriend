@@ -30,6 +30,8 @@ struct SafetyPlanView: View {
                     wizardIntroView
                 }
             }
+            .supportScreen()
+            .foregroundStyle(SupportTheme.textPrimary)
             .navigationTitle("Safety Plan")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -39,7 +41,7 @@ struct SafetyPlanView: View {
                             showingEditMode = true
                         } label: {
                             Text("Edit")
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                         }
                     }
                 }
@@ -70,48 +72,51 @@ struct SafetyPlanView: View {
     // MARK: - Wizard Intro View
 
     private var wizardIntroView: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: SupportTheme.Spacing.l) {
             Spacer()
 
             Image(systemName: "shield.checkered")
                 .font(.system(size: 80))
-                .foregroundStyle(.blue)
+                .foregroundStyle(SupportTheme.accent)
 
-            VStack(spacing: 12) {
+            VStack(spacing: SupportTheme.Spacing.s) {
                 Text("Create Your Safety Plan")
                     .font(.title2)
+                    .accessibilityAddTraits(.isHeader)
                     .fontWeight(.semibold)
 
-                Text("A personal safety plan helps you take safe actions during difficult moments. It's private, stored securely, and available offline.")
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
+                Text(
+                    "A personal safety plan helps you take safe actions during difficult moments. It's private, stored securely, and available offline."
+                )
+                .font(.body)
+                .foregroundStyle(SupportTheme.textSecondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, SupportTheme.Spacing.xl)
             }
 
-            VStack(spacing: 8) {
-                HStack(spacing: 12) {
+            VStack(spacing: SupportTheme.Spacing.xs) {
+                HStack(spacing: SupportTheme.Spacing.s) {
                     Image(systemName: "clock.fill")
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(SupportTheme.accent)
                     Text("5-8 minutes to create")
                         .font(.subheadline)
                 }
 
-                HStack(spacing: 12) {
+                HStack(spacing: SupportTheme.Spacing.s) {
                     Image(systemName: "lock.fill")
-                        .foregroundStyle(.green)
+                        .foregroundStyle(SupportTheme.accent)
                     Text("Private and protected")
                         .font(.subheadline)
                 }
 
-                HStack(spacing: 12) {
+                HStack(spacing: SupportTheme.Spacing.s) {
                     Image(systemName: "wifi.slash")
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(SupportTheme.accent)
                     Text("Available offline")
                         .font(.subheadline)
                 }
             }
-            .foregroundStyle(.secondary)
+            .foregroundStyle(SupportTheme.textSecondary)
 
             Spacer()
 
@@ -120,14 +125,15 @@ struct SafetyPlanView: View {
             } label: {
                 Text("Get Started")
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
                     .frame(maxWidth: .infinity)
                     .padding()
-                    .background(Color.blue)
-                    .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .background(SupportTheme.accent)
+                    .foregroundStyle(SupportTheme.onAccent)
+                    .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
             }
-            .padding(.horizontal, 24)
-            .padding(.bottom, 32)
+            .padding(.horizontal, SupportTheme.Spacing.l)
+            .padding(.bottom, SupportTheme.Spacing.xl)
         }
     }
 
@@ -144,24 +150,26 @@ struct SafetyPlanView: View {
                             .font(.title2)
                             .foregroundStyle(.red)
 
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                             Text("I Need Help Now")
                                 .font(.headline)
-                                .foregroundStyle(.primary)
+                                .accessibilityAddTraits(.isHeader)
+                                .foregroundStyle(SupportTheme.textPrimary)
 
                             Text("Quick access to your safety resources")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                         }
 
                         Spacer()
 
                         Image(systemName: "chevron.right")
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
-                    .padding(.vertical, 8)
+                    .padding(.vertical, SupportTheme.Spacing.xs)
                 }
             }
+            .listRowBackground(SupportTheme.surface)
 
             Section("Your Plan") {
                 if !viewModel.payload.warningSigns.isEmpty {
@@ -189,6 +197,8 @@ struct SafetyPlanView: View {
                 }
             }
 
+            .listRowBackground(SupportTheme.surface)
+
             Section("Settings") {
                 Toggle("Allow AI to reference my Safety Plan", isOn: $viewModel.settings.allowAiReference)
                     .onChange(of: viewModel.settings.allowAiReference) { _, newValue in
@@ -205,6 +215,8 @@ struct SafetyPlanView: View {
                     }
             }
 
+            .listRowBackground(SupportTheme.surface)
+
             Section {
                 Button(role: .destructive) {
                     Task {
@@ -215,6 +227,8 @@ struct SafetyPlanView: View {
                         .foregroundStyle(.red)
                 }
             }
+
+            .listRowBackground(SupportTheme.surface)
         }
     }
 }
@@ -222,6 +236,7 @@ struct SafetyPlanView: View {
 // MARK: - Safety Plan Wizard View
 
 struct SafetyPlanWizardView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject var container: DependencyContainer
     @Environment(\.dismiss) private var dismiss
 
@@ -269,6 +284,8 @@ struct SafetyPlanWizardView: View {
                 navigationButtons
                     .padding()
             }
+            .supportScreen()
+            .foregroundStyle(SupportTheme.textPrimary)
             .navigationTitle(currentStep.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -280,13 +297,13 @@ struct SafetyPlanWizardView: View {
             }
             .overlay {
                 if isSaving {
-                    Color.black.opacity(0.3)
+                    SupportTheme.canvas.opacity(0.3)
                         .ignoresSafeArea()
                         .overlay {
                             ProgressView("Saving...")
                                 .padding()
-                                .background(.regularMaterial)
-                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .background(SupportTheme.surface)
+                                .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
                         }
                 }
             }
@@ -301,16 +318,22 @@ struct SafetyPlanWizardView: View {
     }
 
     private var progressView: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: SupportTheme.Spacing.xxs) {
             ForEach(SafetyPlanWizardStep.allCases, id: \.self) { step in
                 Circle()
-                    .fill(step.rawValue <= currentStep.rawValue ? Color.blue : Color.gray.opacity(0.3))
+                    .fill(
+                        step.rawValue <= currentStep.rawValue
+                            ? SupportTheme.accent : SupportTheme.textSecondary.opacity(0.3)
+                    )
                     .frame(width: 8, height: 8)
-                    .scaleEffect(step == currentStep ? 1.2 : 1.0)
+                    .scaleEffect(reduceMotion ? 1 : (step == currentStep ? 1.2 : 1.0))
 
                 if step != SafetyPlanWizardStep.allCases.last {
                     Rectangle()
-                        .fill(step.rawValue < currentStep.rawValue ? Color.blue : Color.gray.opacity(0.3))
+                        .fill(
+                            step.rawValue < currentStep.rawValue
+                                ? SupportTheme.accent : SupportTheme.textSecondary.opacity(0.3)
+                        )
                         .frame(height: 2)
                 }
             }
@@ -318,18 +341,18 @@ struct SafetyPlanWizardView: View {
     }
 
     private var navigationButtons: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: SupportTheme.Spacing.m) {
             if currentStep != .warningSigns {
                 Button {
-                    withAnimation {
+                    withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .default) {
                         currentStep = currentStep.previous
                     }
                 } label: {
                     Text("Back")
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(Color.gray.opacity(0.2))
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .background(SupportTheme.surface)
+                        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
                 }
             }
 
@@ -339,25 +362,27 @@ struct SafetyPlanWizardView: View {
                 } label: {
                     Text("Save Plan")
                         .font(.headline)
+                        .accessibilityAddTraits(.isHeader)
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(Color.blue)
-                        .foregroundStyle(.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .background(SupportTheme.accent)
+                        .foregroundStyle(SupportTheme.onAccent)
+                        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
                 }
             } else {
                 Button {
-                    withAnimation {
+                    withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .default) {
                         currentStep = currentStep.next
                     }
                 } label: {
                     Text("Continue")
                         .font(.headline)
+                        .accessibilityAddTraits(.isHeader)
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(Color.blue)
-                        .foregroundStyle(.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .background(SupportTheme.accent)
+                        .foregroundStyle(SupportTheme.onAccent)
+                        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
                 }
             }
         }
@@ -424,20 +449,23 @@ struct WarningSignsStepView: View {
         "Racing thoughts",
         "Irritability increases",
         "Loss of interest in activities",
-        "Feeling overwhelmed"
+        "Feeling overwhelmed",
     ]
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                Text("What signs indicate your stress is increasing? These are early warnings that help you take action before a crisis.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.l) {
+                Text(
+                    "What signs indicate your stress is increasing? These are early warnings that help you take action before a crisis."
+                )
+                .font(.subheadline)
+                .foregroundStyle(SupportTheme.textSecondary)
 
                 // Default items
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                     Text("Common Warning Signs")
                         .font(.headline)
+                        .accessibilityAddTraits(.isHeader)
 
                     ForEach(defaultSigns, id: \.self) { sign in
                         WarningSignRow(
@@ -453,20 +481,23 @@ struct WarningSignsStepView: View {
                 Divider()
 
                 // Custom items
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                     Text("Add Your Own")
                         .font(.headline)
+                        .accessibilityAddTraits(.isHeader)
 
                     HStack {
                         TextField("Describe your warning sign...", text: $newItemText)
-                            .textFieldStyle(.roundedBorder)
+                            .supportField()
 
                         Button {
                             addCustomSign()
                         } label: {
                             Image(systemName: "plus.circle.fill")
-                                .foregroundStyle(.blue)
+                                .foregroundStyle(SupportTheme.accent)
                         }
+                        .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                        .accessibilityLabel("Add item")
                         .disabled(newItemText.trimmingCharacters(in: .whitespaces).isEmpty)
                     }
 
@@ -474,7 +505,7 @@ struct WarningSignsStepView: View {
                         ForEach(payload.warningSigns.filter({ $0.isCustom })) { item in
                             HStack {
                                 Image(systemName: "checkmark.circle.fill")
-                                    .foregroundStyle(.blue)
+                                    .foregroundStyle(SupportTheme.accent)
                                 Text(item.text)
                                     .font(.subheadline)
                                 Spacer()
@@ -482,8 +513,10 @@ struct WarningSignsStepView: View {
                                     removeCustomSign(item)
                                 } label: {
                                     Image(systemName: "xmark.circle.fill")
-                                        .foregroundStyle(.secondary)
+                                        .foregroundStyle(SupportTheme.textSecondary)
                                 }
+                                .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                                .accessibilityLabel("Close")
                             }
                         }
                     }
@@ -521,13 +554,13 @@ struct WarningSignRow: View {
 
     var body: some View {
         Button(action: onToggle) {
-            HStack(spacing: 12) {
+            HStack(spacing: SupportTheme.Spacing.s) {
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(isSelected ? .blue : .secondary)
+                    .foregroundStyle(isSelected ? SupportTheme.accent : SupportTheme.textSecondary)
 
                 Text(text)
                     .font(.subheadline)
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(SupportTheme.textPrimary)
 
                 Spacer()
             }
@@ -548,10 +581,12 @@ struct CopingStepView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                Text("What actions can you take alone to manage distress? You can link to in-app exercises or add your own strategies.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.l) {
+                Text(
+                    "What actions can you take alone to manage distress? You can link to in-app exercises or add your own strategies."
+                )
+                .font(.subheadline)
+                .foregroundStyle(SupportTheme.textSecondary)
 
                 // Exercise picker button
                 Button {
@@ -564,21 +599,24 @@ struct CopingStepView: View {
                         Image(systemName: "chevron.right")
                     }
                     .padding()
-                    .background(Color.blue.opacity(0.1))
-                    .foregroundStyle(.blue)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .background(SupportTheme.surface)
+                    .foregroundStyle(SupportTheme.accent)
+                    .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
                 }
 
                 // Favorites section
                 if !payload.coping.filter({ $0.isFavorite }).isEmpty {
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                         Text("Top Favorites")
                             .font(.headline)
+                            .accessibilityAddTraits(.isHeader)
 
                         ForEach(payload.coping.filter({ $0.isFavorite })) { coping in
-                            CopingRowView(coping: coping, onRemove: {
-                                removeCoping(coping)
-                            })
+                            CopingRowView(
+                                coping: coping,
+                                onRemove: {
+                                    removeCoping(coping)
+                                })
                         }
                     }
                 }
@@ -586,23 +624,27 @@ struct CopingStepView: View {
                 Divider()
 
                 // All coping strategies
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                     Text("All Strategies")
                         .font(.headline)
+                        .accessibilityAddTraits(.isHeader)
 
                     ForEach(payload.coping) { coping in
-                        CopingRowView(coping: coping, onRemove: {
-                            removeCoping(coping)
-                        })
+                        CopingRowView(
+                            coping: coping,
+                            onRemove: {
+                                removeCoping(coping)
+                            })
                     }
                 }
 
                 Divider()
 
                 // Add custom coping
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                     Text("Add Custom Strategy")
                         .font(.headline)
+                        .accessibilityAddTraits(.isHeader)
 
                     Picker("Category", selection: $selectedCategory) {
                         ForEach(CopingCategory.allCases, id: \.self) { category in
@@ -613,14 +655,16 @@ struct CopingStepView: View {
 
                     HStack {
                         TextField("Describe your coping strategy...", text: $newCustomCoping)
-                            .textFieldStyle(.roundedBorder)
+                            .supportField()
 
                         Button {
                             addCustomCoping()
                         } label: {
                             Image(systemName: "plus.circle.fill")
-                                .foregroundStyle(.blue)
+                                .foregroundStyle(SupportTheme.accent)
                         }
+                        .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                        .accessibilityLabel("Add item")
                         .disabled(newCustomCoping.trimmingCharacters(in: .whitespaces).isEmpty)
                     }
                 }
@@ -629,13 +673,14 @@ struct CopingStepView: View {
         }
         .sheet(isPresented: $showingExercisePicker) {
             ExercisePickerView { exercise in
-                payload.coping.append(CopingStrategy(
-                    type: .exercise,
-                    label: exercise.title,
-                    duration: exercise.durationSeconds / 60,
-                    category: categoryFromExerciseType(exercise.type),
-                    exerciseId: exercise.id
-                ))
+                payload.coping.append(
+                    CopingStrategy(
+                        type: .exercise,
+                        label: exercise.title,
+                        duration: exercise.durationSeconds / 60,
+                        category: categoryFromExerciseType(exercise.type),
+                        exerciseId: exercise.id
+                    ))
             }
         }
     }
@@ -668,19 +713,19 @@ struct CopingRowView: View {
     let onRemove: () -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: SupportTheme.Spacing.s) {
             Image(systemName: coping.category.icon)
-                .foregroundStyle(.blue)
+                .foregroundStyle(SupportTheme.accent)
                 .frame(width: 24)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text(coping.label)
                     .font(.subheadline)
 
                 if let duration = coping.duration {
                     Text("\(duration) min")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
             }
 
@@ -693,10 +738,10 @@ struct CopingRowView: View {
 
             Button(action: onRemove) {
                 Image(systemName: "xmark.circle.fill")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, SupportTheme.Spacing.xs)
     }
 }
 
@@ -734,22 +779,25 @@ struct ExercisePickerView: View {
                                             .font(.subheadline)
                                         Text("\(exercise.durationSeconds / 60) min")
                                             .font(.caption)
-                                            .foregroundStyle(.secondary)
+                                            .foregroundStyle(SupportTheme.textSecondary)
                                     }
 
                                     Spacer()
 
                                     Image(systemName: type.icon)
-                                        .foregroundStyle(.blue)
+                                        .foregroundStyle(SupportTheme.accent)
                                 }
                             }
-                            .foregroundStyle(.primary)
+                            .foregroundStyle(SupportTheme.textPrimary)
                         }
                     } header: {
                         Label(type.displayName, systemImage: type.icon)
                     }
+                    .listRowBackground(SupportTheme.surface)
                 }
             }
+            .supportScreen()
+            .foregroundStyle(SupportTheme.textPrimary)
             .navigationTitle("Add Exercise")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -775,10 +823,10 @@ struct ContactsStepView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.l) {
                 Text("Who can you reach out to during difficult moments? Add up to 3 trusted contacts.")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
 
                 if payload.contacts.count < 3 {
                     Button {
@@ -790,9 +838,9 @@ struct ContactsStepView: View {
                         }
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(Color.blue)
-                        .foregroundStyle(.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .background(SupportTheme.accent)
+                        .foregroundStyle(SupportTheme.onAccent)
+                        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
                     }
                 }
 
@@ -804,9 +852,11 @@ struct ContactsStepView: View {
                     )
                 } else {
                     ForEach(payload.contacts) { contact in
-                        ContactRowView(contact: contact, onRemove: {
-                            payload.contacts.removeAll { $0.id == contact.id }
-                        })
+                        ContactRowView(
+                            contact: contact,
+                            onRemove: {
+                                payload.contacts.removeAll { $0.id == contact.id }
+                            })
                     }
                 }
             }
@@ -826,18 +876,19 @@ struct ContactRowView: View {
     let onRemove: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             HStack {
                 Text(contact.name)
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
 
                 if contact.isPrimary {
                     Text("Primary")
                         .font(.caption)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 2)
-                        .background(Color.blue)
-                        .foregroundStyle(.white)
+                        .padding(.horizontal, SupportTheme.Spacing.xs)
+                        .padding(.vertical, SupportTheme.Spacing.xxs)
+                        .background(SupportTheme.accent)
+                        .foregroundStyle(SupportTheme.onAccent)
                         .clipShape(Capsule())
                 }
 
@@ -849,26 +900,26 @@ struct ContactRowView: View {
                 }
             }
 
-            HStack(spacing: 16) {
+            HStack(spacing: SupportTheme.Spacing.m) {
                 Label(contact.formattedPhone, systemImage: "phone.fill")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
 
                 Label(contact.relationship.displayName, systemImage: "person.fill")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
 
             if let whatToSay = contact.whatToSay {
                 Text("\"\(whatToSay)\"")
                     .font(.caption)
                     .italic()
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
         }
         .padding()
-        .background(Color.gray.opacity(0.1))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .background(SupportTheme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
     }
 }
 
@@ -912,18 +963,25 @@ struct AddContactView: View {
                         Text("Text").tag(ContactMethod.text)
                     }
                 }
+                .listRowBackground(SupportTheme.surface)
 
                 Section("What to Say (Optional)") {
                     TextField("Guidance for how they can help...", text: $whatToSay, axis: .vertical)
                         .lineLimit(3...6)
                 }
 
+                .listRowBackground(SupportTheme.surface)
+
                 Section {
                     Text("This contact will only be visible to you and accessible during emergencies.")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
+
+                .listRowBackground(SupportTheme.surface)
             }
+            .supportScreen()
+            .foregroundStyle(SupportTheme.textPrimary)
             .navigationTitle("Add Contact")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -963,20 +1021,23 @@ struct ResourcesStepView: View {
     private let defaultResources: [ProfessionalResource] = [
         ProfessionalResource(type: .hotline, name: "988 Suicide & Crisis Lifeline", phone: "988", country: "US"),
         ProfessionalResource(type: .crisisLine, name: "Crisis Text Line", phone: "741741", country: "US"),
-        ProfessionalResource(type: .hotline, name: "International Association for Suicide Prevention", phone: "+442329516889", country: "International")
+        ProfessionalResource(
+            type: .hotline, name: "International Association for Suicide Prevention", phone: "+442329516889",
+            country: "International"),
     ]
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.l) {
                 Text("Crisis hotlines and professional resources. These are always available.")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
 
                 // Default crisis resources
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                     Text("Crisis Resources")
                         .font(.headline)
+                        .accessibilityAddTraits(.isHeader)
 
                     ForEach(defaultResources) { resource in
                         ResourceRowView(resource: resource)
@@ -986,10 +1047,11 @@ struct ResourcesStepView: View {
                 Divider()
 
                 // Custom resources
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                     HStack {
                         Text("My Professional Resources")
                             .font(.headline)
+                            .accessibilityAddTraits(.isHeader)
 
                         Spacer()
 
@@ -998,17 +1060,21 @@ struct ResourcesStepView: View {
                         } label: {
                             Image(systemName: "plus.circle.fill")
                         }
+                        .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                        .accessibilityLabel("Add item")
                     }
 
                     if payload.resources.isEmpty {
                         Text("No custom resources added. Add your therapist or other professionals.")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     } else {
                         ForEach(payload.resources) { resource in
-                            ResourceRowView(resource: resource, onRemove: {
-                                payload.resources.removeAll { $0.id == resource.id }
-                            })
+                            ResourceRowView(
+                                resource: resource,
+                                onRemove: {
+                                    payload.resources.removeAll { $0.id == resource.id }
+                                })
                         }
                     }
                 }
@@ -1030,7 +1096,7 @@ struct ResourceRowView: View {
 
     var body: some View {
         HStack {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text(resource.name)
                     .font(.subheadline)
                     .fontWeight(.medium)
@@ -1038,7 +1104,7 @@ struct ResourceRowView: View {
                 if !resource.phone.isEmpty {
                     Text(resource.phone)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
             }
 
@@ -1047,20 +1113,20 @@ struct ResourceRowView: View {
             if !resource.phone.isEmpty {
                 Link(destination: URL(string: "tel://\(resource.phone.replacingOccurrences(of: "+", with: ""))")!) {
                     Image(systemName: "phone.fill")
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(SupportTheme.accent)
                 }
             }
 
             if let onRemove = onRemove {
                 Button(action: onRemove) {
                     Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
             }
         }
         .padding()
-        .background(Color.gray.opacity(0.1))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .background(SupportTheme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
     }
 }
 
@@ -1084,12 +1150,17 @@ struct AddTherapistView: View {
                         .textContentType(.telephoneNumber)
                         .keyboardType(.phonePad)
                 }
+                .listRowBackground(SupportTheme.surface)
 
                 Section("Notes (Optional)") {
                     TextField("Notes...", text: $notes, axis: .vertical)
                         .lineLimit(3...6)
                 }
+
+                .listRowBackground(SupportTheme.surface)
             }
+            .supportScreen()
+            .foregroundStyle(SupportTheme.textPrimary)
             .navigationTitle("Add Therapist")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -1128,17 +1199,19 @@ struct EnvironmentStepView: View {
         "Go to a safe place",
         "Put on calming music",
         "Adjust the lighting",
-        "Open a window for fresh air"
+        "Open a window for fresh air",
     ]
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                Text("What actions can you take to create physical safety? Simple steps to make your environment safer.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.l) {
+                Text(
+                    "What actions can you take to create physical safety? Simple steps to make your environment safer."
+                )
+                .font(.subheadline)
+                .foregroundStyle(SupportTheme.textSecondary)
 
-                VStack(spacing: 12) {
+                VStack(spacing: SupportTheme.Spacing.s) {
                     ForEach(defaultSteps, id: \.self) { step in
                         EnvironmentStepRow(
                             text: step,
@@ -1170,13 +1243,13 @@ struct EnvironmentStepRow: View {
 
     var body: some View {
         Button(action: onToggle) {
-            HStack(spacing: 12) {
+            HStack(spacing: SupportTheme.Spacing.s) {
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(isSelected ? .green : .secondary)
+                    .foregroundStyle(isSelected ? SupportTheme.accent : SupportTheme.textSecondary)
 
                 Text(text)
                     .font(.subheadline)
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(SupportTheme.textPrimary)
 
                 Spacer()
             }
@@ -1195,22 +1268,26 @@ struct AnchorsStepView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                Text("What motivates you to stay safe? Personal reasons, future plans, or values that anchor you. This section is optional.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.l) {
+                Text(
+                    "What motivates you to stay safe? Personal reasons, future plans, or values that anchor you. This section is optional."
+                )
+                .font(.subheadline)
+                .foregroundStyle(SupportTheme.textSecondary)
 
-                VStack(spacing: 12) {
+                VStack(spacing: SupportTheme.Spacing.s) {
                     HStack {
                         TextField("What are you protecting?", text: $newAnchor)
-                            .textFieldStyle(.roundedBorder)
+                            .supportField()
 
                         Button {
                             addAnchor()
                         } label: {
                             Image(systemName: "plus.circle.fill")
-                                .foregroundStyle(.blue)
+                                .foregroundStyle(SupportTheme.accent)
                         }
+                        .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                        .accessibilityLabel("Add item")
                         .disabled(newAnchor.trimmingCharacters(in: .whitespaces).isEmpty)
                     }
 
@@ -1218,7 +1295,7 @@ struct AnchorsStepView: View {
                         ForEach(payload.anchors) { anchor in
                             HStack {
                                 Image(systemName: "heart.fill")
-                                    .foregroundStyle(.pink)
+                                    .foregroundStyle(SupportTheme.accent)
 
                                 Text(anchor.text)
                                     .font(.subheadline)
@@ -1229,8 +1306,10 @@ struct AnchorsStepView: View {
                                     payload.anchors.removeAll { $0.id == anchor.id }
                                 } label: {
                                     Image(systemName: "xmark.circle.fill")
-                                        .foregroundStyle(.secondary)
+                                        .foregroundStyle(SupportTheme.textSecondary)
                                 }
+                                .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                                .accessibilityLabel("Close")
                             }
                         }
                     }
@@ -1256,16 +1335,22 @@ struct ReviewStepView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.l) {
                 Text("Review your safety plan before saving.")
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
 
-                ReviewSection(title: "Warning Signs (\(payload.warningSigns.count))", items: payload.warningSigns.map(\.text))
+                ReviewSection(
+                    title: "Warning Signs (\(payload.warningSigns.count))", items: payload.warningSigns.map(\.text))
                 ReviewSection(title: "Coping Strategies (\(payload.coping.count))", items: payload.coping.map(\.label))
-                ReviewSection(title: "Trusted Contacts (\(payload.contacts.count))", items: payload.contacts.map(\.name))
-                ReviewSection(title: "Environment Steps (\(payload.environmentSteps.count))", items: payload.environmentSteps.map(\.text))
+                ReviewSection(
+                    title: "Trusted Contacts (\(payload.contacts.count))", items: payload.contacts.map(\.name))
+                ReviewSection(
+                    title: "Environment Steps (\(payload.environmentSteps.count))",
+                    items: payload.environmentSteps.map(\.text))
                 if !payload.anchors.isEmpty {
-                    ReviewSection(title: "Reasons/Anchors (\(payload.anchors.count))", items: payload.anchors.map(\.text))
+                    ReviewSection(
+                        title: "Reasons/Anchors (\(payload.anchors.count))", items: payload.anchors.map(\.text))
                 }
             }
             .padding()
@@ -1278,12 +1363,13 @@ struct ReviewSection: View {
     let items: [String]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             Text(title)
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
             ForEach(items, id: \.self) { item in
-                HStack(spacing: 8) {
+                HStack(spacing: SupportTheme.Spacing.xs) {
                     Image(systemName: "circle.fill")
                         .font(.system(size: 4))
                     Text(item)
@@ -1297,9 +1383,9 @@ struct ReviewSection: View {
 // MARK: - Preview
 
 #if DEBUG
-#Preview {
-    SafetyPlanView()
-        .environmentObject(DependencyContainer.shared)
-        .environmentObject(AppState())
-}
+    #Preview {
+        SafetyPlanView()
+            .environmentObject(DependencyContainer.shared)
+            .environmentObject(AppState())
+    }
 #endif

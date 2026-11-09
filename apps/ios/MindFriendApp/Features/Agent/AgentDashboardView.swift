@@ -11,18 +11,26 @@ struct AgentDashboardView: View {
     var body: some View {
         SupportRootNavigation(embedded: supportEmbedded) {
             ScrollView {
-                VStack(spacing: 20) {
+                VStack(spacing: SupportTheme.Spacing.l) {
+                    if let error = viewModel.errorMessage {
+                        SupportUnavailableState(
+                            title: "Wellness agent unavailable", message: error,
+                            actionTitle: "Try again",
+                            action: { Task { await viewModel.loadData(service: dependencies.agentService) } })
+                    }
                     // Agent Status Header
                     agentStatusHeader
 
                     if let dashboardData = viewModel.dashboardData {
                         // Active Signals Section
                         if !dashboardData.activeSignals.isEmpty {
-                            activeSignalsSection(signals: dashboardData.activeSignals)
+                            activeSignalsSection(
+                                signals: dashboardData.activeSignals.filter { $0.signalType != .streakRisk })
                         }
 
                         // Recent Actions Section
-                        recentActionsSection(actions: dashboardData.recentActions)
+                        recentActionsSection(
+                            actions: dashboardData.recentActions.filter { $0.actionType != .streakReminder })
 
                         // Learnings Summary (if available)
                         if !viewModel.learnings.isEmpty {
@@ -32,6 +40,8 @@ struct AgentDashboardView: View {
                 }
                 .padding()
             }
+            .supportScreen()
+            .foregroundStyle(SupportTheme.textPrimary)
             .navigationTitle("Wellness Agent")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -40,13 +50,18 @@ struct AgentDashboardView: View {
                     } label: {
                         Image(systemName: "gearshape")
                     }
+                    .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                    .accessibilityLabel("Wellness agent settings")
                 }
             }
-            .sheet(isPresented: $showSettings, onDismiss: {
-                Task {
-                    await viewModel.loadData(service: dependencies.agentService)
+            .sheet(
+                isPresented: $showSettings,
+                onDismiss: {
+                    Task {
+                        await viewModel.loadData(service: dependencies.agentService)
+                    }
                 }
-            }) {
+            ) {
                 AgentSettingsView()
                     .environmentObject(dependencies)
             }
@@ -61,49 +76,47 @@ struct AgentDashboardView: View {
                     ProgressView("Loading...")
                 }
             }
-            .alert("Error", isPresented: Binding(get: { viewModel.errorMessage != nil }, set: { if !$0 { viewModel.errorMessage = nil } })) {
-                Button("OK") {
-                    viewModel.errorMessage = nil
-                }
-            } message: {
-                Text(viewModel.errorMessage ?? "")
-            }
         }
     }
 
     // MARK: - Agent Status Header
 
     private var agentStatusHeader: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
+                    HStack(spacing: SupportTheme.Spacing.xs) {
                         Circle()
-                            .fill(viewModel.dashboardData?.isAgentActive == true ? Color.green : Color.gray)
+                            .fill(
+                                viewModel.dashboardData?.isAgentActive == true
+                                    ? SupportTheme.accent : SupportTheme.textSecondary
+                            )
                             .frame(width: 12, height: 12)
 
                         Text(viewModel.dashboardData?.isAgentActive == true ? "Agent Active" : "Agent Paused")
                             .font(.headline)
+                            .accessibilityAddTraits(.isHeader)
                     }
 
                     if let settings = viewModel.dashboardData?.settings {
                         Text(settings.autonomyLevel.description)
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                 }
 
                 Spacer()
 
                 if let data = viewModel.dashboardData {
-                    VStack(alignment: .trailing, spacing: 4) {
+                    VStack(alignment: .trailing, spacing: SupportTheme.Spacing.xxs) {
                         Text("\(data.actionsToday)/\(data.settings.maxDailyOutreach)")
                             .font(.title2)
+                            .accessibilityAddTraits(.isHeader)
                             .fontWeight(.semibold)
 
                         Text("Actions Today")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                 }
             }
@@ -120,47 +133,43 @@ struct AgentDashboardView: View {
                     }
                     .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.supportPrimary)
             }
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .shadow(color: .black.opacity(0.05), radius: 5, y: 2)
+        .supportCard()
     }
 
     // MARK: - Active Signals Section
 
     private func activeSignalsSection(signals: [AgentSignal]) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             HStack {
                 Text("Active Signals")
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
 
                 Spacer()
 
                 Text("\(signals.count)")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
 
             ForEach(signals) { signal in
                 SignalIndicatorView(signal: signal)
             }
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .shadow(color: .black.opacity(0.05), radius: 5, y: 2)
+        .supportCard()
     }
 
     // MARK: - Recent Actions Section
 
     private func recentActionsSection(actions: [AgentAction]) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             HStack {
                 Text("Recent Actions")
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
 
                 Spacer()
 
@@ -176,9 +185,9 @@ struct AgentDashboardView: View {
             if actions.isEmpty {
                 Text("No actions yet")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 20)
+                    .padding(.vertical, SupportTheme.Spacing.l)
             } else {
                 ForEach(actions.prefix(5)) { action in
                     AgentActionCard(
@@ -196,27 +205,25 @@ struct AgentDashboardView: View {
                 }
             }
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .shadow(color: .black.opacity(0.05), radius: 5, y: 2)
+        .supportCard()
     }
 
     // MARK: - Learning Summary Section
 
     private var learningSummarySection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("Agent Learnings")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
             Text("Your agent has learned from \(viewModel.totalSamples) interactions")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
 
             ForEach(viewModel.learnings.prefix(3)) { learning in
                 HStack {
                     Image(systemName: "brain")
-                        .foregroundStyle(.purple)
+                        .foregroundStyle(SupportTheme.accent)
 
                     VStack(alignment: .leading) {
                         Text(learning.learningType.displayName)
@@ -224,22 +231,19 @@ struct AgentDashboardView: View {
 
                         Text("Confidence: \(Int(learning.confidence * 100))%")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
 
                     Spacer()
 
                     Text("\(learning.sampleCount) samples")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
-                .padding(.vertical, 4)
+                .padding(.vertical, SupportTheme.Spacing.xxs)
             }
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .shadow(color: .black.opacity(0.05), radius: 5, y: 2)
+        .supportCard()
     }
 }
 

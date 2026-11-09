@@ -3,6 +3,7 @@ import UIKit
 
 /// Full-screen swipeable story viewer for weekly progress recaps
 struct ProgressStoryViewer: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.supportRootEmbedded) private var supportRootEmbedded
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var container: DependencyContainer
@@ -28,12 +29,12 @@ struct ProgressStoryViewer: View {
         SupportRootNavigation(embedded: supportRootEmbedded) {
             ZStack {
                 // Dark background
-                Color.black.ignoresSafeArea()
+                SupportTheme.canvas.ignoresSafeArea()
 
                 if let vm = viewModel {
                     if vm.isLoading && vm.story == nil {
                         loadingView
-                    } else if let story = vm.story, !story.cards.isEmpty {
+                    } else if let story = vm.story, !vm.visibleCards.isEmpty {
                         storyContentView(story: story, vm: vm)
                     } else if let error = vm.error {
                         errorView(error: error)
@@ -56,15 +57,17 @@ struct ProgressStoryViewer: View {
                 }
             }
             .toolbarBackground(.hidden, for: .navigationBar)
-            .toolbarColorScheme(.dark, for: .navigationBar)
         }
         .task {
             await initializeAndLoad()
         }
-        .alert("Error", isPresented: .init(
-            get: { viewModel?.showError ?? false },
-            set: { viewModel?.showError = $0 }
-        )) {
+        .alert(
+            "Error",
+            isPresented: .init(
+                get: { viewModel?.showError ?? false },
+                set: { viewModel?.showError = $0 }
+            )
+        ) {
             Button("OK") {
                 viewModel?.showError = false
             }
@@ -81,10 +84,12 @@ struct ProgressStoryViewer: View {
                 StoryShareSheet(items: [image])
             }
         }
-        .sheet(isPresented: .init(
-            get: { viewModel?.showCircleShare ?? false },
-            set: { viewModel?.showCircleShare = $0 }
-        )) {
+        .sheet(
+            isPresented: .init(
+                get: { viewModel?.showCircleShare ?? false },
+                set: { viewModel?.showCircleShare = $0 }
+            )
+        ) {
             if let vm = viewModel {
                 CircleShareSheet(
                     viewModel: vm,
@@ -105,16 +110,18 @@ struct ProgressStoryViewer: View {
     private func storyContentView(story: WeeklyStory, vm: ProgressStoryViewModel) -> some View {
         VStack(spacing: 0) {
             // Progress indicator
-            progressIndicator(current: vm.currentIndex, total: story.cards.count)
-                .padding(.top, 16)
-                .padding(.horizontal, 16)
+            progressIndicator(current: vm.currentIndex, total: vm.visibleCards.count)
+                .padding(.top, SupportTheme.Spacing.m)
+                .padding(.horizontal, SupportTheme.Spacing.m)
 
             // Swipeable cards - use safe binding from non-optional vm parameter
-            TabView(selection: Binding(
-                get: { vm.currentIndex },
-                set: { vm.currentIndex = $0 }
-            )) {
-                ForEach(Array(story.cards.enumerated()), id: \.offset) { index, card in
+            TabView(
+                selection: Binding(
+                    get: { vm.currentIndex },
+                    set: { vm.currentIndex = $0 }
+                )
+            ) {
+                ForEach(Array(vm.visibleCards.enumerated()), id: \.offset) { index, card in
                     StoryCardView(
                         card: card,
                         privacyMode: privacyMode,
@@ -123,17 +130,19 @@ struct ProgressStoryViewer: View {
                         }
                     )
                     .tag(index)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 32)
+                    .padding(.horizontal, SupportTheme.Spacing.m)
+                    .padding(.vertical, SupportTheme.Spacing.xl)
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
-            .animation(.spring(response: 0.4, dampingFraction: 0.8), value: vm.currentIndex)
+            .animation(
+                reduceMotion ? nil : (.spring(response: 0.4, dampingFraction: 0.8)),
+                value: vm.currentIndex)
 
             // Action buttons
             actionButtons
-                .padding(.horizontal, 16)
-                .padding(.bottom, 32)
+                .padding(.horizontal, SupportTheme.Spacing.m)
+                .padding(.bottom, SupportTheme.Spacing.xl)
         }
     }
 
@@ -141,12 +150,12 @@ struct ProgressStoryViewer: View {
 
     @ViewBuilder
     private func progressIndicator(current: Int, total: Int) -> some View {
-        HStack(spacing: 4) {
+        HStack(spacing: SupportTheme.Spacing.xxs) {
             ForEach(0..<total, id: \.self) { index in
                 Capsule()
-                    .fill(index == current ? Color.white : Color.white.opacity(0.3))
+                    .fill(index == current ? SupportTheme.textPrimary : SupportTheme.textPrimary.opacity(0.3))
                     .frame(height: 3)
-                    .animation(.easeInOut(duration: 0.2), value: current)
+                    .animation(reduceMotion ? .easeInOut(duration: 0.2) : (.easeInOut(duration: 0.2)), value: current)
             }
         }
     }
@@ -155,19 +164,19 @@ struct ProgressStoryViewer: View {
 
     @ViewBuilder
     private var actionButtons: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: SupportTheme.Spacing.m) {
             // Save to Photos
             Button {
                 Task { await saveToPhotos() }
             } label: {
                 Label("Save", systemImage: "square.and.arrow.down")
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 12)
+                    .foregroundStyle(SupportTheme.textPrimary)
+                    .padding(.horizontal, SupportTheme.Spacing.l)
+                    .padding(.vertical, SupportTheme.Spacing.s)
                     .background(
                         Capsule()
-                            .fill(.white.opacity(0.2))
+                            .fill(SupportTheme.textPrimary.opacity(0.2))
                     )
             }
             .disabled(viewModel?.isExporting ?? false)
@@ -178,12 +187,12 @@ struct ProgressStoryViewer: View {
             } label: {
                 Label("Share", systemImage: "square.and.arrow.up")
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 12)
+                    .foregroundStyle(SupportTheme.textPrimary)
+                    .padding(.horizontal, SupportTheme.Spacing.l)
+                    .padding(.vertical, SupportTheme.Spacing.s)
                     .background(
                         Capsule()
-                            .fill(.white.opacity(0.2))
+                            .fill(SupportTheme.textPrimary.opacity(0.2))
                     )
             }
             .disabled(viewModel?.isExporting ?? false)
@@ -194,12 +203,12 @@ struct ProgressStoryViewer: View {
             } label: {
                 Label("Circle", systemImage: "person.2")
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 12)
+                    .foregroundStyle(SupportTheme.textPrimary)
+                    .padding(.horizontal, SupportTheme.Spacing.l)
+                    .padding(.vertical, SupportTheme.Spacing.s)
                     .background(
                         Capsule()
-                            .fill(.white.opacity(0.2))
+                            .fill(SupportTheme.textPrimary.opacity(0.2))
                     )
             }
             .disabled(viewModel?.isExporting ?? false)
@@ -212,7 +221,7 @@ struct ProgressStoryViewer: View {
     private var toolbarButtons: some View {
         if viewModel?.isExporting ?? false {
             ProgressView()
-                .tint(.white)
+                .tint(SupportTheme.textPrimary)
         }
     }
 
@@ -225,47 +234,49 @@ struct ProgressStoryViewer: View {
         } label: {
             Image(systemName: "xmark")
                 .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(SupportTheme.textPrimary)
                 .frame(width: 32, height: 32)
                 .background(
                     Circle()
-                        .fill(.white.opacity(0.2))
+                        .fill(SupportTheme.textPrimary.opacity(0.2))
                 )
         }
+        .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+        .accessibilityLabel("Close")
     }
 
     // MARK: - Loading View
 
     @ViewBuilder
     private var loadingView: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             ProgressView()
                 .scaleEffect(1.5)
-                .tint(.white)
+                .tint(SupportTheme.textPrimary)
 
             Text("Loading your story...")
                 .font(.subheadline)
-                .foregroundStyle(.white.opacity(0.8))
+                .foregroundStyle(SupportTheme.textPrimary.opacity(0.8))
 
             if showLoadingTimeout {
                 Text("This is taking longer than usual. Check your connection and try refreshing.")
                     .font(.caption)
-                    .foregroundStyle(.white.opacity(0.6))
+                    .foregroundStyle(SupportTheme.textPrimary.opacity(0.6))
                     .multilineTextAlignment(.center)
-                    .padding(.top, 8)
+                    .padding(.top, SupportTheme.Spacing.xs)
 
                 Button("Retry") {
                     Task { await viewModel?.loadStory() }
                 }
-                .buttonStyle(.bordered)
-                .tint(.white)
+                .buttonStyle(.supportSecondary)
+                .tint(SupportTheme.textPrimary)
             }
         }
         .task {
             // Show timeout message after 10 seconds
             try? await Task.sleep(nanoseconds: 10_000_000_000)
             if viewModel?.isLoading ?? false {
-                withAnimation {
+                withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .default) {
                     showLoadingTimeout = true
                 }
             }
@@ -278,16 +289,16 @@ struct ProgressStoryViewer: View {
     private var emptyView: some View {
         ContentUnavailableView {
             Label("No Story Yet", systemImage: "book.closed")
-                .foregroundStyle(.white)
+                .foregroundStyle(SupportTheme.textPrimary)
         } description: {
             Text("Your weekly story will appear here after you've logged some activities.")
-                .foregroundStyle(.white.opacity(0.7))
+                .foregroundStyle(SupportTheme.textPrimary.opacity(0.7))
         } actions: {
             Button("Generate Story") {
                 Task { await viewModel?.generateStory() }
             }
-            .buttonStyle(.bordered)
-            .tint(.white)
+            .buttonStyle(.supportSecondary)
+            .tint(SupportTheme.textPrimary)
         }
     }
 
@@ -297,16 +308,16 @@ struct ProgressStoryViewer: View {
     private func errorView(error: StoryViewError) -> some View {
         ContentUnavailableView {
             Label("Unable to Load", systemImage: "exclamationmark.triangle")
-                .foregroundStyle(.white)
+                .foregroundStyle(SupportTheme.textPrimary)
         } description: {
             Text(error.localizedDescription)
-                .foregroundStyle(.white.opacity(0.7))
+                .foregroundStyle(SupportTheme.textPrimary.opacity(0.7))
         } actions: {
             Button("Try Again") {
                 Task { await viewModel?.loadStory() }
             }
-            .buttonStyle(.bordered)
-            .tint(.white)
+            .buttonStyle(.supportSecondary)
+            .tint(SupportTheme.textPrimary)
         }
     }
 
@@ -314,22 +325,22 @@ struct ProgressStoryViewer: View {
 
     @ViewBuilder
     private var saveSuccessToast: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: SupportTheme.Spacing.xs) {
             Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(.green)
+                .foregroundStyle(SupportTheme.accent)
 
             Text("Saved to Photos")
                 .font(.subheadline.weight(.medium))
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
+        .padding(.horizontal, SupportTheme.Spacing.l)
+        .padding(.vertical, SupportTheme.Spacing.s)
         .background(
             Capsule()
-                .fill(.regularMaterial)
+                .fill(SupportTheme.surface)
         )
-        .padding(.bottom, 120)
-        .transition(.move(edge: .bottom).combined(with: .opacity))
-        .animation(.spring(response: 0.3), value: showSaveSuccess)
+        .padding(.bottom, SupportTheme.Spacing.xl)
+        .transition(.opacity)
+        .animation(reduceMotion ? .easeInOut(duration: 0.2) : (.spring(response: 0.3)), value: showSaveSuccess)
     }
 
     // MARK: - Actions
@@ -348,14 +359,14 @@ struct ProgressStoryViewer: View {
         await vm.saveToPhotos(index: vm.currentIndex)
 
         // Show success toast
-        withAnimation {
+        withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .default) {
             showSaveSuccess = true
         }
 
         // Hide toast after 2 seconds with proper cancellation handling
         do {
             try await Task.sleep(for: .seconds(2))
-            withAnimation {
+            withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .default) {
                 showSaveSuccess = false
             }
         } catch {

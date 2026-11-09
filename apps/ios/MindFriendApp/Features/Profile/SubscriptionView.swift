@@ -1,5 +1,5 @@
-import SwiftUI
 import StoreKit
+import SwiftUI
 
 struct SubscriptionView: View {
     @EnvironmentObject var container: DependencyContainer
@@ -40,7 +40,7 @@ struct SubscriptionContent: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: SupportTheme.Spacing.l) {
                     // Header
                     headerSection
 
@@ -71,9 +71,12 @@ struct SubscriptionContent: View {
                             if billingService.isLoadingProducts {
                                 ProgressView("Loading App Store plans…")
                             } else if selectedProduct == nil {
-                                Text(billingService.productLoadError ?? "This plan is currently unavailable from the App Store.")
-                                    .font(.subheadline)
-                                    .accessibilityIdentifier("subscription.catalogError")
+                                Text(
+                                    billingService.productLoadError
+                                        ?? "This plan is currently unavailable from the App Store."
+                                )
+                                .font(.subheadline)
+                                .accessibilityIdentifier("subscription.catalogError")
                                 Button("Reload Plans") {
                                     Task { await billingService.refreshProducts() }
                                 }
@@ -100,6 +103,7 @@ struct SubscriptionContent: View {
                 }
                 .padding()
             }
+            .supportSheet()
             .navigationTitle("Premium")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -108,8 +112,10 @@ struct SubscriptionContent: View {
                         dismiss()
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
+                    .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                    .accessibilityLabel("Close")
                 }
             }
             .task {
@@ -139,19 +145,18 @@ struct SubscriptionContent: View {
     // MARK: - Header
 
     private var headerSection: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "crown.fill")
-                .font(.system(size: 60))
-                .foregroundStyle(Color(red: 1.0, green: 0.84, blue: 0.0))
+        VStack(spacing: SupportTheme.Spacing.s) {
+            CelebrationEmblem(.symbol("sparkles"), tint: SupportTheme.accent, diameter: 80)
 
             Text("MindFriend Premium")
                 .font(.title)
+                .accessibilityAddTraits(.isHeader)
                 .fontWeight(.bold)
 
             if hasActiveSubscription {
                 Label("Active", systemImage: "checkmark.seal.fill")
                     .font(.subheadline)
-                    .foregroundStyle(.green)
+                    .foregroundStyle(SupportTheme.accent)
             }
         }
     }
@@ -159,13 +164,16 @@ struct SubscriptionContent: View {
     // MARK: - Active Subscription
 
     private var activeSubscriptionSection: some View {
-        VStack(spacing: 16) {
-            GroupBox {
-                VStack(alignment: .leading, spacing: 12) {
+        VStack(spacing: SupportTheme.Spacing.m) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
+
+                Label("Your Subscription", systemImage: "creditcard.fill")
+
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                     if let subscription = billingService.subscription {
                         HStack {
                             Text("Plan")
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                             Spacer()
                             Text(subscription.planType.displayName)
                                 .fontWeight(.medium)
@@ -173,7 +181,7 @@ struct SubscriptionContent: View {
 
                         HStack {
                             Text("Billing")
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                             Spacer()
                             Text(subscription.billingPeriod.displayName)
                                 .fontWeight(.medium)
@@ -182,7 +190,7 @@ struct SubscriptionContent: View {
                         if let expiresAt = subscription.expiresAt {
                             HStack {
                                 Text("Renews")
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(SupportTheme.textSecondary)
                                 Spacer()
                                 Text(expiresAt, style: .date)
                                     .fontWeight(.medium)
@@ -193,7 +201,7 @@ struct SubscriptionContent: View {
                             Divider()
                             HStack {
                                 Text("Seats Used")
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(SupportTheme.textSecondary)
                                 Spacer()
                                 Text("\(subscription.seatsUsed)/\(subscription.seatsTotal)")
                                     .fontWeight(.medium)
@@ -201,10 +209,10 @@ struct SubscriptionContent: View {
                         }
                     }
                 }
-                .padding(.vertical, 4)
-            } label: {
-                Label("Your Subscription", systemImage: "creditcard.fill")
+                .padding(.vertical, SupportTheme.Spacing.xxs)
+
             }
+            .supportCard()
 
             Button {
                 if let url = URL(string: "https://apps.apple.com/account/subscriptions") {
@@ -220,11 +228,12 @@ struct SubscriptionContent: View {
     // MARK: - Plan Selection
 
     private var planSelectionSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("Choose Your Plan")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
-            VStack(spacing: 10) {
+            VStack(spacing: SupportTheme.Spacing.s) {
                 ForEach(PlanType.allCases, id: \.self) { planType in
                     PlanTypeCard(
                         planType: planType,
@@ -250,16 +259,18 @@ struct SubscriptionContent: View {
     // MARK: - Billing Period
 
     private var billingPeriodSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("Billing Period")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
-            HStack(spacing: 12) {
+            HStack(spacing: SupportTheme.Spacing.s) {
                 ForEach(BillingPeriod.allCases, id: \.self) { period in
                     BillingPeriodCard(
                         period: period,
                         isSelected: selectedBillingPeriod == period,
-                        showSavings: period == .yearly && billingService.product(for: selectedPlanType, billingPeriod: .yearly) != nil,
+                        showSavings: period == .yearly
+                            && billingService.product(for: selectedPlanType, billingPeriod: .yearly) != nil,
                         onSelect: { selectedBillingPeriod = period }
                     )
                 }
@@ -270,46 +281,51 @@ struct SubscriptionContent: View {
     // MARK: - Price Summary
 
     private var priceSummarySection: some View {
-        GroupBox {
-            VStack(spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
+
+            Label("Summary", systemImage: "receipt")
+
+            VStack(spacing: SupportTheme.Spacing.s) {
                 HStack {
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                         Text(selectedPlanType.displayName)
                             .font(.headline)
+                            .accessibilityAddTraits(.isHeader)
                         Text(selectedBillingPeriod.displayName)
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
 
                     Spacer()
 
                     if let price = selectedDisplayPrice {
-                        VStack(alignment: .trailing, spacing: 4) {
+                        VStack(alignment: .trailing, spacing: SupportTheme.Spacing.xxs) {
                             Text(price)
                                 .font(.title2)
+                                .accessibilityAddTraits(.isHeader)
                                 .fontWeight(.bold)
 
                             if selectedBillingPeriod == .yearly {
                                 if let product = selectedProduct {
                                     Text(monthlyEquivalent(for: product))
                                         .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                        .foregroundStyle(SupportTheme.textSecondary)
                                 }
                             }
                         }
                     } else {
                         Text(billingService.isLoadingProducts ? "Loading…" : "Unavailable")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                 }
 
                 if selectedBillingPeriod == .yearly && selectedProduct != nil {
                     HStack {
                         Image(systemName: "tag.fill")
-                            .foregroundStyle(.green)
+                            .foregroundStyle(SupportTheme.accent)
                         Text("Save 50% with annual billing")
                             .font(.subheadline)
-                            .foregroundStyle(.green)
+                            .foregroundStyle(SupportTheme.accent)
                         Spacer()
                     }
                 }
@@ -317,17 +333,17 @@ struct SubscriptionContent: View {
                 if selectedPlanType.isFamilyPlan {
                     HStack {
                         Image(systemName: "person.2.fill")
-                            .foregroundStyle(.blue)
+                            .foregroundStyle(SupportTheme.accent)
                         Text("Includes \(selectedPlanType.maxSeats) members")
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                         Spacer()
                     }
                 }
             }
-        } label: {
-            Label("Summary", systemImage: "receipt")
+
         }
+        .supportCard()
     }
 
     // MARK: - Subscribe Button
@@ -349,7 +365,7 @@ struct SubscriptionContent: View {
             HStack {
                 if isPurchasing && selectedPlanType != .enterprise && selectedPlanType != .gift {
                     ProgressView()
-                        .tint(.white)
+                        .tint(SupportTheme.onAccent)
                 } else if selectedPlanType == .enterprise {
                     Text("Contact Sales")
                         .fontWeight(.semibold)
@@ -357,17 +373,19 @@ struct SubscriptionContent: View {
                     Text("Give as Gift")
                         .fontWeight(.semibold)
                 } else {
-                    Text(billingService.isLoadingProducts ? "Loading Plans…" : canPurchase ? "Subscribe Now" : "Plan Unavailable")
-                        .fontWeight(.semibold)
+                    Text(
+                        billingService.isLoadingProducts
+                            ? "Loading Plans…" : canPurchase ? "Subscribe Now" : "Plan Unavailable"
+                    )
+                    .fontWeight(.semibold)
                 }
             }
-            .frame(maxWidth: .infinity)
-            .padding()
-            .background(isSpecialPlanType || canPurchase ? Color.accentColor : Color.secondary)
-            .foregroundStyle(.white)
-            .cornerRadius(12)
         }
-        .disabled(!isSpecialPlanType && (!canPurchase || billingService.isLoadingProducts || isPurchasing || billingService.isPurchasing))
+        .buttonStyle(.supportPrimary)
+        .disabled(
+            !isSpecialPlanType
+                && (!canPurchase || billingService.isLoadingProducts || isPurchasing || billingService.isPurchasing)
+        )
         .accessibilityIdentifier("subscription.subscribe")
     }
 
@@ -378,35 +396,38 @@ struct SubscriptionContent: View {
     // MARK: - Restore Button
 
     private var restoreButton: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: SupportTheme.Spacing.xs) {
             Button("Restore Purchases") {
                 restorePurchases()
             }
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
+            .buttonStyle(.supportSecondary)
             .disabled(isPurchasing || billingService.isPurchasing)
 
             Button("Have an invite code?") {
                 showInviteCode = true
             }
             .font(.subheadline)
-            .foregroundStyle(Color.accentColor)
+            .foregroundStyle(SupportTheme.accent)
         }
     }
 
     // MARK: - Family Section
 
     private var familySection: some View {
-        GroupBox {
-            VStack(spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
+
+            Label("Family Plan", systemImage: "person.3.fill")
+
+            VStack(spacing: SupportTheme.Spacing.s) {
                 HStack {
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                         Text("Family Members")
                             .font(.headline)
+                            .accessibilityAddTraits(.isHeader)
                         if let sub = billingService.subscription {
                             Text("\(sub.seatsUsed) of \(sub.seatsTotal) seats used")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                         }
                     }
 
@@ -426,18 +447,18 @@ struct SubscriptionContent: View {
                     ForEach(billingService.familyMembers.prefix(3)) { member in
                         HStack {
                             Image(systemName: "person.circle.fill")
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                             Text(member.displayName ?? member.invitedEmail ?? "Member")
                                 .font(.subheadline)
                             Spacer()
                             if member.status == .active {
                                 Image(systemName: "checkmark.circle.fill")
-                                    .foregroundStyle(.green)
+                                    .foregroundStyle(SupportTheme.accent)
                                     .font(.caption)
                             } else {
                                 Text("Pending")
                                     .font(.caption)
-                                    .foregroundStyle(.orange)
+                                    .foregroundStyle(SupportTheme.accent)
                             }
                         }
                     }
@@ -445,23 +466,24 @@ struct SubscriptionContent: View {
                     if billingService.familyMembers.count > 3 {
                         Text("+\(billingService.familyMembers.count - 3) more")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                 }
             }
-        } label: {
-            Label("Family Plan", systemImage: "person.3.fill")
+
         }
+        .supportCard()
     }
 
     // MARK: - Features
 
     private var featuresSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("Premium Features")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
-            VStack(spacing: 10) {
+            VStack(spacing: SupportTheme.Spacing.s) {
                 SubscriptionFeatureRow(icon: "infinity", title: "Unlimited AI Chat", included: true)
                 SubscriptionFeatureRow(icon: "sparkles", title: "Priority Responses", included: true)
                 SubscriptionFeatureRow(icon: "chart.line.uptrend.xyaxis", title: "Advanced Insights", included: true)
@@ -477,15 +499,17 @@ struct SubscriptionContent: View {
     // MARK: - Terms
 
     private var termsSection: some View {
-        VStack(spacing: 12) {
-            Text("Subscription automatically renews unless cancelled at least 24 hours before the end of the current period. Manage subscriptions in Settings.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+        VStack(spacing: SupportTheme.Spacing.s) {
+            Text(
+                "Subscription automatically renews unless cancelled at least 24 hours before the end of the current period. Manage subscriptions in Settings."
+            )
+            .font(.caption)
+            .foregroundStyle(SupportTheme.textSecondary)
+            .multilineTextAlignment(.center)
 
-            HStack(spacing: 16) {
+            HStack(spacing: SupportTheme.Spacing.m) {
                 Link("Terms of Use (EULA)", destination: AppURLs.termsOfUse)
-                Text("•").foregroundStyle(.secondary)
+                Text("•").foregroundStyle(SupportTheme.textSecondary)
                 Link("Privacy Policy", destination: AppURLs.privacyPolicy)
             }
             .font(.caption)
@@ -514,7 +538,8 @@ struct SubscriptionContent: View {
                 case .completed:
                     appState.updateEntitlements(billingService.entitlements)
                 case .pending:
-                    purchaseMessage = "Awaiting App Store approval. Your access will update after the purchase is approved."
+                    purchaseMessage =
+                        "Awaiting App Store approval. Your access will update after the purchase is approved."
                 }
             } catch let error as BillingError {
                 if error != .cancelled {
@@ -558,6 +583,7 @@ struct SubscriptionContent: View {
 // MARK: - Plan Type Card
 
 struct PlanTypeCard: View {
+    @Environment(\.dynamicTypeSize) private var typeSize
     let planType: PlanType
     let isSelected: Bool
     var price: String?
@@ -566,69 +592,75 @@ struct PlanTypeCard: View {
 
     var body: some View {
         Button(action: onSelect) {
-            HStack(spacing: 12) {
-                Image(systemName: planType.iconName)
-                    .font(.title2)
-                    .foregroundStyle(isSelected ? Color.accentColor : .secondary)
-                    .frame(width: 40)
+            (typeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: SupportTheme.Spacing.s))
+                : AnyLayout(HStackLayout(spacing: SupportTheme.Spacing.s))) {
+                    Image(systemName: planType.iconName)
+                        .font(.title2)
+                        .foregroundStyle(isSelected ? SupportTheme.accent : SupportTheme.textSecondary)
+                        .frame(width: 40)
 
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 4) {
-                        Text(planType.displayName)
-                            .font(.headline)
-                            .foregroundStyle(.primary)
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
+                        HStack(spacing: SupportTheme.Spacing.xxs) {
+                            Text(planType.displayName)
+                                .font(.headline)
+                                .accessibilityAddTraits(.isHeader)
+                                .foregroundStyle(SupportTheme.textPrimary)
 
-                        if planType == .family {
-                            Text("Best")
-                                .font(.system(size: 9, weight: .semibold))
-                                .padding(.horizontal, 4)
-                                .padding(.vertical, 2)
-                                .background(Color.green)
-                                .foregroundStyle(.white)
-                                .cornerRadius(3)
+                            if planType == .family {
+                                Text("Best")
+                                    .font(.caption2.weight(.semibold))
+                                    .padding(.horizontal, SupportTheme.Spacing.xxs)
+                                    .padding(.vertical, SupportTheme.Spacing.xxs)
+                                    .background(SupportTheme.field)
+                                    .foregroundStyle(SupportTheme.accent)
+                                    .cornerRadius(SupportTheme.controlRadius)
+                            }
                         }
-                    }
 
-                    Text(planType.subtitle)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-
-                Spacer(minLength: 4)
-
-                // Price display (not for enterprise/gift)
-                if let price = price {
-                    VStack(alignment: .trailing, spacing: 2) {
-                        Text(price)
-                            .font(.system(size: 17, weight: .bold))
-                            .foregroundStyle(.primary)
-                            .lineLimit(1)
-                        Text(billingPeriod == .monthly ? "/month" : "/year")
+                        Text(planType.subtitle)
                             .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
+                            .foregroundStyle(SupportTheme.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                    .fixedSize()
-                }
 
-                // Selection indicator
-                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(isSelected ? Color.accentColor : .secondary)
-                    .font(.title3)
-            }
-            .padding()
-            .background(isSelected ? Color.accentColor.opacity(0.1) : Color(.secondarySystemBackground))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
-            )
-            .cornerRadius(12)
+                    Spacer(minLength: SupportTheme.Spacing.xxs)
+
+                    // Price display (not for enterprise/gift)
+                    if let price = price {
+                        VStack(alignment: .trailing, spacing: SupportTheme.Spacing.xxs) {
+                            Text(price)
+                                .font(.headline.weight(.bold))
+                                .foregroundStyle(SupportTheme.textPrimary)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Text(billingPeriod == .monthly ? "/month" : "/year")
+                                .font(.caption)
+                                .foregroundStyle(SupportTheme.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    // Selection indicator
+                    Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                        .foregroundStyle(isSelected ? SupportTheme.accent : SupportTheme.textSecondary)
+                        .font(.title3)
+                        .accessibilityAddTraits(.isHeader)
+                }
+                .padding()
+                .background(isSelected ? SupportTheme.elevated : SupportTheme.surface)
+                .overlay(
+                    RoundedRectangle(cornerRadius: SupportTheme.cardRadius)
+                        .stroke(isSelected ? SupportTheme.accent : Color.clear, lineWidth: 2)
+                )
+                .cornerRadius(SupportTheme.controlRadius)
         }
         .buttonStyle(.plain)
         // P3-R7: Accessibility labels
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(planType.displayName) plan, \(planType.subtitle)\(planType == .family ? ", Best Value" : "")")
+        .accessibilityLabel(
+            "\(planType.displayName) plan, \(planType.subtitle)\(planType == .family ? ", Best Value" : "")"
+        )
         .accessibilityValue(isSelected ? "Selected" : "Not selected")
         .accessibilityHint("Double tap to select this plan")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
@@ -645,27 +677,28 @@ struct BillingPeriodCard: View {
 
     var body: some View {
         Button(action: onSelect) {
-            VStack(spacing: 4) {
+            VStack(spacing: SupportTheme.Spacing.xxs) {
                 Text(period.displayName)
                     .font(.headline)
-                    .foregroundStyle(.primary)
+                    .accessibilityAddTraits(.isHeader)
+                    .foregroundStyle(SupportTheme.textPrimary)
 
                 if showSavings {
                     Text("Save 50%")
                         .font(.caption)
                         .fontWeight(.semibold)
-                        .foregroundStyle(.green)
+                        .foregroundStyle(SupportTheme.accent)
                 }
             }
-            .frame(maxWidth: .infinity, minHeight: 44)
-            .padding(.vertical, 16)
+            .frame(maxWidth: .infinity, minHeight: SupportTheme.minimumTarget)
+            .padding(.vertical, SupportTheme.Spacing.m)
             .padding(.horizontal)
-            .background(isSelected ? Color.accentColor.opacity(0.1) : Color(.secondarySystemBackground))
+            .background(isSelected ? SupportTheme.elevated : SupportTheme.surface)
             .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
+                RoundedRectangle(cornerRadius: SupportTheme.cardRadius)
+                    .stroke(isSelected ? SupportTheme.accent : Color.clear, lineWidth: 2)
             )
-            .cornerRadius(12)
+            .cornerRadius(SupportTheme.controlRadius)
         }
         .buttonStyle(.plain)
         // P3-R7: Accessibility labels
@@ -685,20 +718,20 @@ private struct SubscriptionFeatureRow: View {
     let included: Bool
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: SupportTheme.Spacing.s) {
             Image(systemName: icon)
-                .foregroundStyle(included ? Color.accentColor : .secondary)
+                .foregroundStyle(included ? SupportTheme.accent : SupportTheme.textSecondary)
                 .frame(width: 24)
 
             Text(title)
                 .font(.subheadline)
-                .foregroundStyle(included ? .primary : .secondary)
+                .foregroundStyle(included ? SupportTheme.textPrimary : SupportTheme.textSecondary)
 
             Spacer()
 
             Image(systemName: included ? "checkmark" : "xmark")
                 .font(.caption)
-                .foregroundStyle(included ? .green : .secondary)
+                .foregroundStyle(included ? SupportTheme.accent : SupportTheme.textSecondary)
         }
         // P3-R7: Accessibility labels
         .accessibilityElement(children: .combine)
@@ -720,24 +753,26 @@ struct EnterInviteCodeSheet: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 24) {
+            VStack(spacing: SupportTheme.Spacing.l) {
                 Image(systemName: "ticket.fill")
                     .font(.system(size: 60))
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(SupportTheme.accent)
 
                 Text("Enter Invite Code")
                     .font(.title2)
+                    .accessibilityAddTraits(.isHeader)
                     .fontWeight(.semibold)
 
                 Text("If someone shared their family or couples plan with you, enter the invite code below.")
                     .font(.body)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal)
 
                 TextField("XXXXXXXX", text: $inviteCode)
-                    .textFieldStyle(.roundedBorder)
+                    .supportField()
                     .font(.title3.monospaced())
+                    .accessibilityAddTraits(.isHeader)
                     .multilineTextAlignment(.center)
                     .textInputAutocapitalization(.characters)
                     .autocorrectionDisabled()
@@ -754,7 +789,7 @@ struct EnterInviteCodeSheet: View {
 
                 if success {
                     Label("Welcome to the family plan!", systemImage: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
+                        .foregroundStyle(SupportTheme.accent)
                 }
 
                 Button {
@@ -762,16 +797,16 @@ struct EnterInviteCodeSheet: View {
                 } label: {
                     if isLoading {
                         ProgressView()
-                            .tint(.white)
+                            .tint(SupportTheme.onAccent)
                     } else {
                         Text("Join Plan")
                     }
                 }
                 .frame(maxWidth: .infinity)
                 .padding()
-                .background(inviteCode.count == 8 ? Color.accentColor : Color.secondary)
-                .foregroundStyle(.white)
-                .cornerRadius(12)
+                .background(inviteCode.count == 8 ? SupportTheme.accent : SupportTheme.textSecondary)
+                .foregroundStyle(SupportTheme.onAccent)
+                .cornerRadius(SupportTheme.controlRadius)
                 .disabled(inviteCode.count != 8 || isLoading || success)
                 .padding(.horizontal)
 
@@ -785,8 +820,10 @@ struct EnterInviteCodeSheet: View {
                         dismiss()
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
+                    .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                    .accessibilityLabel("Close")
                 }
             }
         }
@@ -850,36 +887,38 @@ extension PlanType {
 }
 
 #if DEBUG
-/// Local StoreKit catalog fixture. This route skips normal app startup and never purchases.
-struct SubscriptionCatalogUITestView: View {
-    @StateObject private var billingService: BillingService
+    /// Local StoreKit catalog fixture. This route skips normal app startup and never purchases.
+    struct SubscriptionCatalogUITestView: View {
+        @StateObject private var billingService: BillingService
 
-    init() {
-        let loader = SubscriptionCatalogUITestLoader()
-        _billingService = StateObject(wrappedValue: BillingService(
-            authService: SupabaseAuthService(),
-            productLoader: { try await loader.load($0) },
-            observeTransactions: false))
-    }
-
-    var body: some View {
-        SubscriptionContent(billingService: billingService)
-    }
-}
-
-private actor SubscriptionCatalogUITestLoader {
-    private var calls = 0
-
-    func load(_ ids: [String]) async throws -> [Product] {
-        calls += 1
-        if calls == 1 { return [] }
-        if calls == 2 { throw URLError(.notConnectedToInternet) }
-        let products = try await Product.products(for: ids)
-        guard products.count == ids.count,
-              products.allSatisfy({ $0.description == "Synthetic StoreKit UI test" }) else {
-            throw URLError(.badServerResponse)
+        init() {
+            let loader = SubscriptionCatalogUITestLoader()
+            _billingService = StateObject(
+                wrappedValue: BillingService(
+                    authService: SupabaseAuthService(),
+                    productLoader: { try await loader.load($0) },
+                    observeTransactions: false))
         }
-        return products
+
+        var body: some View {
+            SubscriptionContent(billingService: billingService)
+        }
     }
-}
+
+    private actor SubscriptionCatalogUITestLoader {
+        private var calls = 0
+
+        func load(_ ids: [String]) async throws -> [Product] {
+            calls += 1
+            if calls == 1 { return [] }
+            if calls == 2 { throw URLError(.notConnectedToInternet) }
+            let products = try await Product.products(for: ids)
+            guard products.count == ids.count,
+                products.allSatisfy({ $0.description == "Synthetic StoreKit UI test" })
+            else {
+                throw URLError(.badServerResponse)
+            }
+            return products
+        }
+    }
 #endif

@@ -18,7 +18,7 @@ struct ImageCropView: View {
                 let imageSize = calculateImageSize(in: geometry.size)
 
                 ZStack {
-                    Color.black.ignoresSafeArea()
+                    SupportTheme.canvas.ignoresSafeArea()
 
                     Image(uiImage: image)
                         .resizable()
@@ -38,8 +38,9 @@ struct ImageCropView: View {
                                 .onEnded { _ in
                                     lastOffset = offset
                                 }
-                                .simultaneously(with:
-                                    MagnificationGesture(minimumScaleDelta: 0)
+                                .simultaneously(
+                                    with:
+                                        MagnificationGesture(minimumScaleDelta: 0)
                                         .onChanged { value in
                                             // value is CGFloat, not a struct with .magnification
                                             scale = lastScale * value
@@ -49,26 +50,30 @@ struct ImageCropView: View {
                                         }
                                 )
                         )
-                        .animation(nil, value: offset) // Disable animation for immediate response
+                        .animation(nil, value: offset)  // Disable animation for immediate response
                         .animation(nil, value: scale)
 
                     // Crop overlay (circular)
                     Circle()
-                        .strokeBorder(Color.white, lineWidth: 2)
-                        .frame(width: min(geometry.size.width, geometry.size.height) - 40,
-                               height: min(geometry.size.width, geometry.size.height) - 40)
+                        .strokeBorder(SupportTheme.textPrimary, lineWidth: 2)
+                        .frame(
+                            width: min(geometry.size.width, geometry.size.height) - 40,
+                            height: min(geometry.size.width, geometry.size.height) - 40
+                        )
                         .allowsHitTesting(false)
 
                     // Dimming overlay
-                    RoundedRectangle(cornerRadius: 0)
-                        .fill(Color.black.opacity(0.5))
+                    RoundedRectangle(cornerRadius: SupportTheme.cardRadius)
+                        .fill(SupportTheme.canvas.opacity(0.5))
                         .mask(
                             GeometryReader { geo in
                                 Rectangle()
                                     .overlay(
                                         Circle()
-                                            .frame(width: min(geo.size.width, geo.size.height) - 40,
-                                                   height: min(geo.size.width, geo.size.height) - 40)
+                                            .frame(
+                                                width: min(geo.size.width, geo.size.height) - 40,
+                                                height: min(geo.size.width, geo.size.height) - 40
+                                            )
                                             .blendMode(.destinationOut)
                                     )
                             }
@@ -83,6 +88,8 @@ struct ImageCropView: View {
                     containerSize = newSize
                 }
             }
+            .supportScreen()
+            .foregroundStyle(SupportTheme.textPrimary)
             .navigationTitle("Crop Photo")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -121,53 +128,53 @@ struct ImageCropView: View {
             onCancel()
             return
         }
-        
+
         // Calculate displayed image size in view coordinates
         let displayedImageSize = calculateImageSize(in: containerSize)
-        
+
         // Calculate crop circle parameters in view coordinates
         let cropDiameter = min(containerSize.width, containerSize.height) - 40
         let cropRadius = cropDiameter / 2
         let viewCenterX = containerSize.width / 2
         let viewCenterY = containerSize.height / 2
-        
+
         // Calculate the image's position in view coordinates (accounting for scale and offset)
         let scaledImageWidth = displayedImageSize.width * scale
         let scaledImageHeight = displayedImageSize.height * scale
         let imageOriginX = viewCenterX - (scaledImageWidth / 2) + offset.width
         let imageOriginY = viewCenterY - (scaledImageHeight / 2) + offset.height
-        
+
         // Convert crop circle center to image coordinates (relative to image origin)
         let cropCenterInImageX = viewCenterX - imageOriginX
         let cropCenterInImageY = viewCenterY - imageOriginY
-        
+
         // Convert from view coordinates to original image pixel coordinates
         let pixelWidth = CGFloat(cgImage.width)
         let pixelHeight = CGFloat(cgImage.height)
         let scaleFactorX = pixelWidth / scaledImageWidth
         let scaleFactorY = pixelHeight / scaledImageHeight
-        
+
         let cropCenterInPixelsX = cropCenterInImageX * scaleFactorX
         let cropCenterInPixelsY = cropCenterInImageY * scaleFactorY
         let cropRadiusInPixels = cropRadius * min(scaleFactorX, scaleFactorY)
-        
+
         // Create crop rect (square inscribed in circle)
         let cropRectX = cropCenterInPixelsX - cropRadiusInPixels
         let cropRectY = cropCenterInPixelsY - cropRadiusInPixels
         let cropRectSize = cropRadiusInPixels * 2
-        
+
         let cropRect = CGRect(
             x: max(0, cropRectX),
             y: max(0, cropRectY),
             width: min(cropRectSize, pixelWidth - max(0, cropRectX)),
             height: min(cropRectSize, pixelHeight - max(0, cropRectY))
         )
-        
+
         guard let croppedCGImage = cgImage.cropping(to: cropRect) else {
             onCancel()
             return
         }
-        
+
         let croppedImage = UIImage(cgImage: croppedCGImage, scale: image.scale, orientation: image.imageOrientation)
         onCrop(croppedImage)
     }

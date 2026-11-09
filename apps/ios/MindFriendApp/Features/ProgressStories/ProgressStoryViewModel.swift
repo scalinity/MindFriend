@@ -1,6 +1,6 @@
-import SwiftUI
-import Photos
 import OSLog
+import Photos
+import SwiftUI
 
 /// ViewModel for managing weekly story state and actions
 @MainActor
@@ -10,6 +10,9 @@ final class ProgressStoryViewModel {
 
     /// Current weekly story (nil if not loaded)
     var story: WeeklyStory?
+
+    /// Cards presented by the viewer; the stored server story remains unchanged.
+    var visibleCards: [StoryCard] { story?.cards.filter { $0.cardType != .streak } ?? [] }
 
     /// Current card index in the story viewer
     var currentIndex: Int = 0
@@ -62,14 +65,14 @@ final class ProgressStoryViewModel {
         for attempt in 1...maxAttempts {
             do {
                 return try await operation()
-            } catch let error as URLError where error.code == .timedOut ||
-                                                error.code == .networkConnectionLost {
+            } catch let error as URLError where error.code == .timedOut || error.code == .networkConnectionLost {
                 // Transient error - retry
                 lastError = error
                 if attempt < maxAttempts {
-                    logger.info("[ProgressStory] Transient error, retrying in \(delay)s (attempt \(attempt)/\(maxAttempts))")
+                    logger.info(
+                        "[ProgressStory] Transient error, retrying in \(delay)s (attempt \(attempt)/\(maxAttempts))")
                     try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-                    delay *= 2.0 // Exponential backoff
+                    delay *= 2.0  // Exponential backoff
                 }
             } catch {
                 // Permanent error - give up immediately
@@ -142,13 +145,13 @@ final class ProgressStoryViewModel {
             guard let monday = calendar.date(byAdding: .day, value: -daysFromMonday, to: weekStart) else {
                 throw DataError.operationFailed("Could not calculate week start")
             }
-            
+
             // Format as YYYY-MM-DD for comparison
             let formatter = DateFormatter()
             formatter.dateFormat = "yyyy-MM-dd"
             formatter.timeZone = TimeZone(identifier: "UTC")
             let weekStartStr = formatter.string(from: monday)
-            
+
             // Fetch stories from the database
             let fetchedStory: WeeklyStory? = try await withTimeout(timeoutSeconds: 30) {
                 try await self.retryWithBackoff {
@@ -161,7 +164,7 @@ final class ProgressStoryViewModel {
                     return stories.first { $0.weekStart == weekStartStr }
                 }
             }
-            
+
             if let existingStory = fetchedStory {
                 self.story = existingStory
                 cacheStory(existingStory)
@@ -195,7 +198,7 @@ final class ProgressStoryViewModel {
                     try await self.dataService.generateWeeklyStory(weekStart: self.weekStart)
                 }
             }
-            
+
             self.story = generatedStory
             cacheStory(generatedStory)
             logger.info("[ProgressStory] Successfully generated story with \(generatedStory.cards.count) cards")
@@ -211,9 +214,11 @@ final class ProgressStoryViewModel {
     /// - Returns: Rendered UIImage or nil on failure
     @MainActor
     func exportCard(at index: Int) async -> UIImage? {
-        guard let cards = story?.cards,
-              index >= 0,
-              index < cards.count else {
+        let cards = visibleCards
+        guard !cards.isEmpty,
+            index >= 0,
+            index < cards.count
+        else {
             logger.warning("[ProgressStory] Invalid card index: \(index)")
             return nil
         }
@@ -232,13 +237,15 @@ final class ProgressStoryViewModel {
             content: StoryCardView(card: card, privacyMode: false, isExport: true)
                 .frame(width: 1080, height: 1920)
         )
-        renderer.scale = 1.0 // Use 1x scale for 1080x1920 output
+        renderer.scale = 1.0  // Use 1x scale for 1080x1920 output
 
-        Analytics.shared.track(.weeklyStoryCardExported, properties: [
-            "week_start": weekStart.weekStartString,
-            "card_index": index,
-            "card_type": card.cardType.rawValue
-        ])
+        Analytics.shared.track(
+            .weeklyStoryCardExported,
+            properties: [
+                "week_start": weekStart.weekStartString,
+                "card_index": index,
+                "card_type": card.cardType.rawValue,
+            ])
 
         return renderer.uiImage
     }
@@ -265,10 +272,12 @@ final class ProgressStoryViewModel {
                 PHAssetCreationRequest.creationRequestForAsset(from: image)
             }
 
-            Analytics.shared.track(.weeklyStorySavedToPhotos, properties: [
-                "week_start": weekStart.weekStartString,
-                "card_index": index
-            ])
+            Analytics.shared.track(
+                .weeklyStorySavedToPhotos,
+                properties: [
+                    "week_start": weekStart.weekStartString,
+                    "card_index": index,
+                ])
 
             // Show success feedback (handled by view)
         } catch {
@@ -289,10 +298,12 @@ final class ProgressStoryViewModel {
 
         exportedImage = image
 
-        Analytics.shared.track(.weeklyStoryShared, properties: [
-            "week_start": weekStart.weekStartString,
-            "card_index": index
-        ])
+        Analytics.shared.track(
+            .weeklyStoryShared,
+            properties: [
+                "week_start": weekStart.weekStartString,
+                "card_index": index,
+            ])
     }
 
     /// Share a card to a circle
@@ -335,7 +346,7 @@ final class ProgressStoryViewModel {
 
     /// Move to next card
     func nextCard() {
-        guard let story = story, currentIndex < story.cards.count - 1 else { return }
+        guard currentIndex < visibleCards.count - 1 else { return }
         currentIndex += 1
     }
 
@@ -395,4 +406,3 @@ enum StoryViewError: LocalizedError {
         }
     }
 }
-

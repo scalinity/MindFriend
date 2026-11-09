@@ -13,56 +13,57 @@ struct ShieldHistoryView: View {
         Group {
             if isLoading {
                 ProgressView("Loading shield history...")
+            } else if let errorMessage {
+                SupportUnavailableState(
+                    title: "History unavailable", message: errorMessage,
+                    actionTitle: "Try again", action: { Task { await loadHistory() } })
             } else if events.isEmpty {
                 emptyState
             } else {
                 eventsList
             }
         }
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle("Shield History")
         .navigationBarTitleDisplayMode(.inline)
         .task {
             await loadHistory()
         }
-        .alert("Error", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
-            Button("OK") { errorMessage = nil }
-        } message: {
-            if let errorMessage = errorMessage {
-                Text(errorMessage)
-            }
-        }
+
     }
 
     // MARK: - Views
 
     private var emptyState: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             Image(systemName: "shield.fill")
                 .font(.system(size: 60))
-                .foregroundStyle(.blue.opacity(0.6))
+                .foregroundStyle(SupportTheme.accent.opacity(0.6))
 
             Text("No Shield Events Yet")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
-            VStack(spacing: 8) {
-                Text("You have shields ready to protect your streak!")
+            VStack(spacing: SupportTheme.Spacing.xs) {
+                Text("Your past shield activity appears here.")
                     .font(.subheadline)
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(SupportTheme.textPrimary)
 
                 Text("Events appear here when:")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Label("A shield protects your streak after missing a day", systemImage: "checkmark.shield.fill")
-                    Label("You earn new shields at 7-day streak milestones", systemImage: "gift.fill")
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
+                    Label("Past protection events are kept in this history", systemImage: "checkmark.shield.fill")
+                    Label("Milestone events appear when recorded", systemImage: "gift.fill")
                     Label("Shields are reset weekly", systemImage: "arrow.clockwise")
                 }
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
             }
             .multilineTextAlignment(.center)
-            .padding(.horizontal, 24)
+            .padding(.horizontal, SupportTheme.Spacing.l)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -78,6 +79,7 @@ struct ShieldHistoryView: View {
 
     private func loadHistory() async {
         isLoading = true
+        errorMessage = nil
         defer { isLoading = false }
 
         do {
@@ -100,58 +102,54 @@ struct ShieldEventRow: View {
     let event: ShieldEvent
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: SupportTheme.Spacing.s) {
             Image(systemName: event.iconName)
                 .font(.title2)
                 .foregroundStyle(iconColor)
                 .frame(width: 40)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text(event.title)
                     .font(.subheadline)
                     .fontWeight(.medium)
 
                 Text(event.createdAt.formatted(date: .abbreviated, time: .shortened))
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
 
-                if let streakDay = event.streakProtected {
-                    Text("Streak Day: \(streakDay)")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                }
             }
 
             Spacer()
 
             if let remaining = event.shieldsRemaining {
-                VStack(alignment: .trailing, spacing: 2) {
+                VStack(alignment: .trailing, spacing: SupportTheme.Spacing.xxs) {
                     Text("\(remaining)")
                         .font(.title3)
+                        .accessibilityAddTraits(.isHeader)
                         .fontWeight(.bold)
                         .foregroundStyle(iconColor)
 
                     Text("shields")
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, SupportTheme.Spacing.xxs)
     }
 
     private var iconColor: Color {
         switch event.eventType {
         case .earned:
-            return .green
+            return SupportTheme.accent
         case .used:
-            return .orange
+            return SupportTheme.accent
         case .reset:
-            return .blue
+            return SupportTheme.accent
         case .expired:
             return .red
         case .purchased:
-            return .purple
+            return SupportTheme.accent
         }
     }
 }

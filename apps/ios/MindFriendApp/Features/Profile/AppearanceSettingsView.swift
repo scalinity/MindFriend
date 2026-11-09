@@ -13,22 +13,26 @@ struct AppearanceSettingsView: View {
                     } label: {
                         HStack {
                             Image(systemName: theme.icon)
-                                .foregroundStyle(theme.iconColor)
+                                .foregroundStyle(SupportTheme.accent)
                                 .frame(width: 24)
 
                             Text(theme.displayName)
-                                .foregroundStyle(.primary)
+                                .foregroundStyle(SupportTheme.textPrimary)
 
                             Spacer()
 
                             if selectedTheme == theme {
                                 Image(systemName: "checkmark")
-                                    .foregroundStyle(Color.accentColor)
+                                    .foregroundStyle(SupportTheme.accent)
                             }
                         }
                     }
                     .accessibilityLabel("\(theme.displayName) theme")
-                    .accessibilityHint(theme == .system ? "Follows your device's appearance setting" : "Always use \(theme.displayName.lowercased()) mode")
+                    .accessibilityHint(
+                        theme == .system
+                            ? "Follows your device's appearance setting"
+                            : "Always use \(theme.displayName.lowercased()) mode"
+                    )
                     .accessibilityAddTraits(selectedTheme == theme ? .isSelected : [])
                 }
             } header: {
@@ -36,6 +40,7 @@ struct AppearanceSettingsView: View {
             } footer: {
                 Text("Choose how MindFriend appears. System uses your device's light or dark mode setting.")
             }
+            .listRowBackground(SupportTheme.surface)
 
             // Ambient Themes Section
             Section {
@@ -45,14 +50,14 @@ struct AppearanceSettingsView: View {
                 } label: {
                     HStack {
                         Image(systemName: "sparkles")
-                            .foregroundStyle(.purple)
+                            .foregroundStyle(SupportTheme.accent)
                             .frame(width: 24)
-                        
-                        VStack(alignment: .leading, spacing: 2) {
+
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                             Text("Ambient Themes")
                             Text("Dynamic backgrounds & visual effects")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                         }
                     }
                 }
@@ -61,7 +66,11 @@ struct AppearanceSettingsView: View {
             } footer: {
                 Text("Customize ambient backgrounds that adapt to your mood and time of day.")
             }
+
+            .listRowBackground(SupportTheme.surface)
         }
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle("Appearance")
     }
 }

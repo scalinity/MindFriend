@@ -10,6 +10,7 @@ import SwiftUI
 struct TherapistApplicationView: View {
     @EnvironmentObject private var dependencies: DependencyContainer
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.supportRootEmbedded) private var supportEmbedded
 
     @StateObject private var viewModel = TherapistApplicationViewModel()
 
@@ -25,8 +26,10 @@ struct TherapistApplicationView: View {
 
                 Text(viewModel.profileType.description)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
+
+            .listRowBackground(SupportTheme.surface)
 
             // Personal Info Section
             Section("Personal Information") {
@@ -36,15 +39,17 @@ struct TherapistApplicationView: View {
                 VStack(alignment: .leading) {
                     Text("Bio")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                     TextEditor(text: $viewModel.bio)
                         .frame(minHeight: 100)
                 }
 
                 Text("\(viewModel.bio.count)/50 characters minimum")
                     .font(.caption)
-                    .foregroundStyle(viewModel.bio.count >= 50 ? .secondary : Color.red)
+                    .foregroundStyle(viewModel.bio.count >= 50 ? SupportTheme.textSecondary : Color.red)
             }
+
+            .listRowBackground(SupportTheme.surface)
 
             // Credentials Section
             Section("Credentials") {
@@ -58,13 +63,17 @@ struct TherapistApplicationView: View {
                             Image(systemName: "minus.circle.fill")
                                 .foregroundStyle(.red)
                         }
+                        .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                        .accessibilityLabel("Remove item")
                     }
                 }
 
                 Menu {
-                    ForEach(TherapistCredential.allCases.filter {
-                        !viewModel.selectedCredentials.contains($0.rawValue)
-                    }, id: \.self) { credential in
+                    ForEach(
+                        TherapistCredential.allCases.filter {
+                            !viewModel.selectedCredentials.contains($0.rawValue)
+                        }, id: \.self
+                    ) { credential in
                         Button(credential.fullName) {
                             viewModel.addCredential(credential.rawValue)
                         }
@@ -73,6 +82,8 @@ struct TherapistApplicationView: View {
                     Label("Add Credential", systemImage: "plus.circle")
                 }
             }
+
+            .listRowBackground(SupportTheme.surface)
 
             // Specialties Section
             Section("Specialties") {
@@ -88,14 +99,18 @@ struct TherapistApplicationView: View {
                                 Image(systemName: "minus.circle.fill")
                                     .foregroundStyle(.red)
                             }
+                            .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                            .accessibilityLabel("Remove item")
                         }
                     }
                 }
 
                 Menu {
-                    ForEach(TherapistSpecialty.allCases.filter {
-                        !viewModel.selectedSpecialties.contains($0.rawValue)
-                    }, id: \.self) { specialty in
+                    ForEach(
+                        TherapistSpecialty.allCases.filter {
+                            !viewModel.selectedSpecialties.contains($0.rawValue)
+                        }, id: \.self
+                    ) { specialty in
                         Button {
                             viewModel.addSpecialty(specialty.rawValue)
                         } label: {
@@ -106,6 +121,8 @@ struct TherapistApplicationView: View {
                     Label("Add Specialty", systemImage: "plus.circle")
                 }
             }
+
+            .listRowBackground(SupportTheme.surface)
 
             // Therapeutic Approaches Section
             Section("Therapeutic Approaches (Optional)") {
@@ -119,13 +136,17 @@ struct TherapistApplicationView: View {
                             Image(systemName: "minus.circle.fill")
                                 .foregroundStyle(.red)
                         }
+                        .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                        .accessibilityLabel("Remove item")
                     }
                 }
 
                 Menu {
-                    ForEach(TherapeuticApproach.allCases.filter {
-                        !viewModel.selectedApproaches.contains($0.rawValue)
-                    }, id: \.self) { approach in
+                    ForEach(
+                        TherapeuticApproach.allCases.filter {
+                            !viewModel.selectedApproaches.contains($0.rawValue)
+                        }, id: \.self
+                    ) { approach in
                         Button(approach.displayName) {
                             viewModel.addApproach(approach.rawValue)
                         }
@@ -134,6 +155,8 @@ struct TherapistApplicationView: View {
                     Label("Add Approach", systemImage: "plus.circle")
                 }
             }
+
+            .listRowBackground(SupportTheme.surface)
 
             // License Section (for therapists)
             if viewModel.profileType == .therapist {
@@ -147,6 +170,7 @@ struct TherapistApplicationView: View {
                         }
                     }
                 }
+                .listRowBackground(SupportTheme.surface)
             }
 
             // Languages Section
@@ -162,6 +186,8 @@ struct TherapistApplicationView: View {
                                 Image(systemName: "minus.circle.fill")
                                     .foregroundStyle(.red)
                             }
+                            .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                            .accessibilityLabel("Remove item")
                         }
                     }
                 }
@@ -173,9 +199,13 @@ struct TherapistApplicationView: View {
                     } label: {
                         Image(systemName: "plus.circle.fill")
                     }
+                    .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                    .accessibilityLabel("Add item")
                     .disabled(viewModel.newLanguage.isEmpty)
                 }
             }
+
+            .listRowBackground(SupportTheme.surface)
 
             // Rates Section
             Section("Session Rates (USD)") {
@@ -208,8 +238,10 @@ struct TherapistApplicationView: View {
 
                 Text("Set at least one rate. Rates can be changed later.")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
+
+            .listRowBackground(SupportTheme.surface)
 
             // Submit Section
             Section {
@@ -227,17 +259,22 @@ struct TherapistApplicationView: View {
                             .fontWeight(.semibold)
                     }
                 }
+                .buttonStyle(.supportPrimary)
                 .disabled(!viewModel.isValid || viewModel.isSubmitting)
             } footer: {
                 Text("Your application will be reviewed by our team. You'll be notified once approved.")
             }
+
+            .listRowBackground(SupportTheme.surface)
         }
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle("Become a Provider")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("Cancel") {
-                    dismiss()
+            if !supportEmbedded {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
                 }
             }
         }
@@ -289,12 +326,9 @@ final class TherapistApplicationViewModel: ObservableObject {
     @Published var errorMessage = ""
 
     var isValid: Bool {
-        !displayName.trimmingCharacters(in: .whitespaces).isEmpty &&
-        bio.count >= 50 &&
-        !selectedCredentials.isEmpty &&
-        !selectedSpecialties.isEmpty &&
-        (profileType == .coach || (!licenseNumber.isEmpty && !licenseState.isEmpty)) &&
-        hasAtLeastOneRate
+        !displayName.trimmingCharacters(in: .whitespaces).isEmpty && bio.count >= 50 && !selectedCredentials.isEmpty
+            && !selectedSpecialties.isEmpty
+            && (profileType == .coach || (!licenseNumber.isEmpty && !licenseState.isEmpty)) && hasAtLeastOneRate
     }
 
     private var hasAtLeastOneRate: Bool {

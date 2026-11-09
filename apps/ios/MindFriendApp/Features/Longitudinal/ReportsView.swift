@@ -17,6 +17,8 @@ struct ReportsView: View {
                 reportsSection
             }
         }
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle("Reports")
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
@@ -26,6 +28,8 @@ struct ReportsView: View {
                 } label: {
                     Image(systemName: "doc.badge.plus")
                 }
+                .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                .accessibilityLabel("Create report")
             }
         }
         .sheet(isPresented: $showingGenerateSheet) {
@@ -46,42 +50,45 @@ struct ReportsView: View {
         Section {
             HStack {
                 Spacer()
-                VStack(spacing: 12) {
+                VStack(spacing: SupportTheme.Spacing.s) {
                     ProgressView()
                     Text("Loading reports...")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
                 Spacer()
             }
-            .padding(.vertical, 40)
+            .padding(.vertical, SupportTheme.Spacing.xl)
         }
+        .listRowBackground(SupportTheme.surface)
     }
 
     // MARK: - Empty State Section
 
     private var emptyStateSection: some View {
         Section {
-            VStack(spacing: 16) {
+            VStack(spacing: SupportTheme.Spacing.m) {
                 Image(systemName: "doc.text.magnifyingglass")
                     .font(.system(size: 48))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                 Text("No Reports Yet")
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
                 Text("Generate your first wellness report to see insights about your journey over time.")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .multilineTextAlignment(.center)
                 Button {
                     showingGenerateSheet = true
                 } label: {
                     Text("Generate Report")
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.supportPrimary)
             }
-            .padding(.vertical, 40)
+            .padding(.vertical, SupportTheme.Spacing.xl)
             .frame(maxWidth: .infinity)
         }
+        .listRowBackground(SupportTheme.surface)
     }
 
     // MARK: - Reports Section
@@ -95,6 +102,7 @@ struct ReportsView: View {
                     }
                 }
             }
+            .listRowBackground(SupportTheme.surface)
         }
     }
 
@@ -161,26 +169,27 @@ struct ReportRow: View {
     let report: LongitudinalReport
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: SupportTheme.Spacing.s) {
             Image(systemName: report.reportType.icon)
                 .font(.title2)
-                .foregroundStyle(.blue)
+                .foregroundStyle(SupportTheme.accent)
                 .frame(width: 40, height: 40)
-                .background(Color.blue.opacity(0.1))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .background(SupportTheme.surface)
+                .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text(report.reportType.displayName)
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
                 Text(report.formattedPeriod)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                 Text("Generated \(report.formattedGeneratedAt)")
                     .font(.caption)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, SupportTheme.Spacing.xxs)
     }
 }
 
@@ -209,8 +218,9 @@ struct GenerateReportSheet: View {
 
                     Text(reportDescription)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
+                .listRowBackground(SupportTheme.surface)
 
                 if selectedType == .custom {
                     Section("Date Range") {
@@ -227,26 +237,31 @@ struct GenerateReportSheet: View {
                             displayedComponents: .date
                         )
                     }
+                    .listRowBackground(SupportTheme.surface)
                 }
 
                 Section {
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                         Text("What's in a report?")
                             .font(.subheadline)
                             .fontWeight(.medium)
                         Text("Your report will include:")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
-                        VStack(alignment: .leading, spacing: 4) {
+                            .foregroundStyle(SupportTheme.textSecondary)
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                             ReportFeatureRow(icon: "chart.line.uptrend.xyaxis", text: "Mood trends and patterns")
                             ReportFeatureRow(icon: "calendar", text: "Activity heatmap")
                             ReportFeatureRow(icon: "lightbulb", text: "Key insights")
                             ReportFeatureRow(icon: "star", text: "Personalized recommendations")
                         }
                     }
-                    .padding(.vertical, 8)
+                    .padding(.vertical, SupportTheme.Spacing.xs)
                 }
+
+                .listRowBackground(SupportTheme.surface)
             }
+            .supportScreen()
+            .foregroundStyle(SupportTheme.textPrimary)
             .navigationTitle("Generate Report")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -272,16 +287,16 @@ struct GenerateReportSheet: View {
             .overlay {
                 if viewModel.isGenerating {
                     ZStack {
-                        Color.black.opacity(0.3)
+                        SupportTheme.canvas.opacity(0.3)
                             .ignoresSafeArea()
-                        VStack(spacing: 16) {
+                        VStack(spacing: SupportTheme.Spacing.m) {
                             ProgressView()
                             Text("Generating your report...")
                                 .font(.subheadline)
                         }
-                        .padding(24)
-                        .background(Color(.systemBackground))
-                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                        .padding(SupportTheme.Spacing.l)
+                        .background(SupportTheme.canvas)
+                        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
                     }
                 }
             }
@@ -305,14 +320,14 @@ struct ReportFeatureRow: View {
     let text: String
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: SupportTheme.Spacing.xs) {
             Image(systemName: icon)
                 .font(.caption)
-                .foregroundStyle(.blue)
+                .foregroundStyle(SupportTheme.accent)
                 .frame(width: 16)
             Text(text)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
     }
 }
@@ -324,49 +339,48 @@ struct ReportDetailView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.l) {
                 // Header
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                     Text(report.reportType.displayName)
                         .font(.title2)
+                        .accessibilityAddTraits(.isHeader)
                         .fontWeight(.bold)
                     Text(report.formattedPeriod)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
 
                 // Summary
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                     Text("Summary")
                         .font(.headline)
+                        .accessibilityAddTraits(.isHeader)
                     Text(report.contentJson.summary)
                         .font(.body)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
-                .padding()
-                .background(Color(.systemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 16))
-                .shadow(color: .black.opacity(0.05), radius: 8, y: 2)
+                .supportCard()
+                .shadow(color: SupportTheme.canvas.opacity(0.05), radius: 8, y: 2)
 
                 // Key Insights
                 if !report.contentJson.keyInsights.isEmpty {
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                         Text("Key Insights")
                             .font(.headline)
+                            .accessibilityAddTraits(.isHeader)
 
                         ForEach(report.contentJson.keyInsights, id: \.self) { insight in
-                            HStack(alignment: .top, spacing: 12) {
+                            HStack(alignment: .top, spacing: SupportTheme.Spacing.s) {
                                 Image(systemName: "lightbulb.fill")
-                                    .foregroundStyle(.yellow)
+                                    .foregroundStyle(SupportTheme.Celebration.gold)
                                 Text(insight)
                                     .font(.subheadline)
                             }
                         }
                     }
-                    .padding()
-                    .background(Color(.systemBackground))
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
-                    .shadow(color: .black.opacity(0.05), radius: 8, y: 2)
+                    .supportCard()
+                    .shadow(color: SupportTheme.canvas.opacity(0.05), radius: 8, y: 2)
                 }
 
                 // Charts section
@@ -374,29 +388,30 @@ struct ReportDetailView: View {
 
                 // Recommendations
                 if !report.contentJson.recommendations.isEmpty {
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                         Text("Recommendations")
                             .font(.headline)
+                            .accessibilityAddTraits(.isHeader)
 
                         ForEach(report.contentJson.recommendations.indices, id: \.self) { index in
-                            HStack(alignment: .top, spacing: 12) {
+                            HStack(alignment: .top, spacing: SupportTheme.Spacing.s) {
                                 Text("\(index + 1).")
                                     .font(.subheadline)
                                     .fontWeight(.medium)
-                                    .foregroundStyle(.blue)
+                                    .foregroundStyle(SupportTheme.accent)
                                 Text(report.contentJson.recommendations[index])
                                     .font(.subheadline)
                             }
                         }
                     }
-                    .padding()
-                    .background(Color(.systemBackground))
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
-                    .shadow(color: .black.opacity(0.05), radius: 8, y: 2)
+                    .supportCard()
+                    .shadow(color: SupportTheme.canvas.opacity(0.05), radius: 8, y: 2)
                 }
             }
             .padding()
         }
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle("Report")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -413,30 +428,28 @@ struct ReportDetailView: View {
     @ViewBuilder
     private var chartsSection: some View {
         if !report.contentJson.chartsData.moodTrend.isEmpty {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                 Text("Mood Trend")
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
 
                 ReportMoodTrendChart(data: report.contentJson.chartsData.moodTrend)
                     .frame(height: 200)
             }
-            .padding()
-            .background(Color(.systemBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 16))
-            .shadow(color: .black.opacity(0.05), radius: 8, y: 2)
+            .supportCard()
+            .shadow(color: SupportTheme.canvas.opacity(0.05), radius: 8, y: 2)
         }
 
         if !report.contentJson.chartsData.activityHeatmap.isEmpty {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                 Text("Activity Heatmap")
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
 
                 ActivityHeatmapView(data: report.contentJson.chartsData.activityHeatmap)
             }
-            .padding()
-            .background(Color(.systemBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 16))
-            .shadow(color: .black.opacity(0.05), radius: 8, y: 2)
+            .supportCard()
+            .shadow(color: SupportTheme.canvas.opacity(0.05), radius: 8, y: 2)
         }
     }
 
@@ -485,7 +498,7 @@ struct ReportMoodTrendChart: View {
                     }
                 }
             }
-            .stroke(Color.blue, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+            .stroke(SupportTheme.accent, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
 
             // Gradient fill
             Path { path in
@@ -505,11 +518,7 @@ struct ReportMoodTrendChart: View {
                 path.closeSubpath()
             }
             .fill(
-                LinearGradient(
-                    colors: [Color.blue.opacity(0.3), Color.blue.opacity(0.05)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
+                SupportTheme.surface
             )
         }
     }
@@ -519,9 +528,12 @@ struct ActivityHeatmapView: View {
     let data: [ActivityDataPoint]
 
     var body: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 7), spacing: 4) {
+        LazyVGrid(
+            columns: Array(repeating: GridItem(.flexible(), spacing: SupportTheme.Spacing.xxs), count: 7),
+            spacing: SupportTheme.Spacing.xxs
+        ) {
             ForEach(data, id: \.week) { point in
-                RoundedRectangle(cornerRadius: 4)
+                RoundedRectangle(cornerRadius: SupportTheme.cardRadius)
                     .fill(activityColor(for: point.days))
                     .aspectRatio(1, contentMode: .fit)
             }
@@ -531,11 +543,11 @@ struct ActivityHeatmapView: View {
 
     private func activityColor(for days: Int) -> Color {
         switch days {
-        case 7: return .green
-        case 5...6: return .green.opacity(0.7)
-        case 3...4: return .green.opacity(0.4)
-        case 1...2: return .green.opacity(0.2)
-        default: return Color(.systemGray5)
+        case 7: return SupportTheme.accent
+        case 5...6: return SupportTheme.accent.opacity(0.7)
+        case 3...4: return SupportTheme.accent.opacity(0.4)
+        case 1...2: return SupportTheme.accent.opacity(0.2)
+        default: return SupportTheme.field
         }
     }
 }
@@ -543,12 +555,12 @@ struct ActivityHeatmapView: View {
 // MARK: - Preview
 
 #if DEBUG
-struct ReportsView_Previews: PreviewProvider {
-    static var previews: some View {
-        NavigationStack {
-            ReportsView()
-                .environmentObject(DependencyContainer.preview)
+    struct ReportsView_Previews: PreviewProvider {
+        static var previews: some View {
+            NavigationStack {
+                ReportsView()
+                    .environmentObject(DependencyContainer.preview)
+            }
         }
     }
-}
 #endif

@@ -15,22 +15,25 @@ struct SleepGoalsView: View {
                         Text("Target Sleep Duration")
                         Spacer()
                         Text("\(viewModel.targetDurationHours)h")
-                            .foregroundColor(.secondary)
+                            .foregroundColor(SupportTheme.textSecondary)
                     }
                 }
 
                 // Target Bedtime
-                DatePicker("Target Bedtime",
-                          selection: $viewModel.targetBedtime,
-                          displayedComponents: .hourAndMinute)
+                DatePicker(
+                    "Target Bedtime",
+                    selection: $viewModel.targetBedtime,
+                    displayedComponents: .hourAndMinute)
 
                 // Target Wake Time
-                DatePicker("Target Wake Time",
-                          selection: $viewModel.targetWakeTime,
-                          displayedComponents: .hourAndMinute)
+                DatePicker(
+                    "Target Wake Time",
+                    selection: $viewModel.targetWakeTime,
+                    displayedComponents: .hourAndMinute)
             } header: {
                 Text("Sleep Schedule")
             }
+            .listRowBackground(SupportTheme.surface)
 
             Section {
                 // Wind-Down Duration
@@ -39,7 +42,7 @@ struct SleepGoalsView: View {
                         Text("Wind-Down Duration")
                         Spacer()
                         Text("\(viewModel.windDownMinutes) min")
-                            .foregroundColor(.secondary)
+                            .foregroundColor(SupportTheme.textSecondary)
                     }
                 }
 
@@ -52,7 +55,7 @@ struct SleepGoalsView: View {
                             Text("Remind Me")
                             Spacer()
                             Text("\(viewModel.reminderOffsetMinutes) min before")
-                                .foregroundColor(.secondary)
+                                .foregroundColor(SupportTheme.textSecondary)
                         }
                     }
                 }
@@ -60,22 +63,28 @@ struct SleepGoalsView: View {
                 Text("Wind-Down Routine")
             }
 
+            .listRowBackground(SupportTheme.surface)
+
             Section {
                 ForEach(["breathing", "meditation", "journaling", "stretching"], id: \.self) { type in
-                    Toggle(type.capitalized, isOn: Binding(
-                        get: { viewModel.preferredTypes.contains(type) },
-                        set: { isOn in
-                            if isOn {
-                                viewModel.preferredTypes.insert(type)
-                            } else {
-                                viewModel.preferredTypes.remove(type)
+                    Toggle(
+                        type.capitalized,
+                        isOn: Binding(
+                            get: { viewModel.preferredTypes.contains(type) },
+                            set: { isOn in
+                                if isOn {
+                                    viewModel.preferredTypes.insert(type)
+                                } else {
+                                    viewModel.preferredTypes.remove(type)
+                                }
                             }
-                        }
-                    ))
+                        ))
                 }
             } header: {
                 Text("Preferred Activities")
             }
+
+            .listRowBackground(SupportTheme.surface)
 
             Section {
                 Toggle("Dark Room", isOn: $viewModel.prefersDarkRoom)
@@ -85,7 +94,11 @@ struct SleepGoalsView: View {
             } header: {
                 Text("Sleep Environment")
             }
+
+            .listRowBackground(SupportTheme.surface)
         }
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle("Sleep Goals")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

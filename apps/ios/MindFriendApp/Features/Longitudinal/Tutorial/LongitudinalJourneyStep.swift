@@ -9,6 +9,7 @@ import SwiftUI
 
 /// Step 1: Introduce long-term tracking concept
 struct LongitudinalJourneyStep: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let onNext: () -> Void
     let onSkip: () -> Void
 
@@ -17,59 +18,55 @@ struct LongitudinalJourneyStep: View {
     var body: some View {
         TutorialStepView(
             icon: "calendar.badge.clock",
-            iconColor: .teal,
+            iconColor: SupportTheme.accent,
             headline: "Your Journey Over Time",
             subheadline: "Track your progress across months and years, not just days.",
             primaryAction: onNext,
             skipAction: onSkip
         ) {
-            VStack(spacing: 12) {
+            VStack(spacing: SupportTheme.Spacing.s) {
                 // Timeline visualization
-                HStack(spacing: 4) {
+                HStack(spacing: SupportTheme.Spacing.xxs) {
                     ForEach(0..<6, id: \.self) { month in
-                        VStack(spacing: 4) {
+                        VStack(spacing: SupportTheme.Spacing.xxs) {
                             Spacer(minLength: 0)
 
                             // Bar
-                            RoundedRectangle(cornerRadius: 3)
+                            RoundedRectangle(cornerRadius: SupportTheme.cardRadius)
                                 .fill(
-                                    LinearGradient(
-                                        colors: [.teal.opacity(0.3), .teal],
-                                        startPoint: .bottom,
-                                        endPoint: .top
-                                    )
+                                    SupportTheme.surface
                                 )
                                 .frame(width: 24, height: showTimeline ? heights[month] : 0)
 
                             // Month label
                             Text(monthLabels[month])
                                 .font(.system(size: 9))
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
                 }
                 .frame(height: 70)
-                .padding(.vertical, 10)
-                .padding(.horizontal, 16)
-                .background(Color(.secondarySystemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .padding(.horizontal, 20)
+                .padding(.vertical, SupportTheme.Spacing.s)
+                .padding(.horizontal, SupportTheme.Spacing.m)
+                .background(SupportTheme.surface)
+                .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
+                .padding(.horizontal, SupportTheme.Spacing.l)
 
                 // Benefits
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                     TimelineFeature(icon: "calendar", text: "Month-by-month view")
                     TimelineFeature(icon: "chart.xyaxis.line", text: "Trend analysis over time")
                     TimelineFeature(icon: "arrow.up.forward", text: "Track long-term growth")
                 }
-                .padding(12)
-                .background(Color(.tertiarySystemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .padding(.horizontal, 20)
+                .padding(SupportTheme.Spacing.s)
+                .background(SupportTheme.surface)
+                .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
+                .padding(.horizontal, SupportTheme.Spacing.l)
                 .opacity(showTimeline ? 1 : 0)
             }
             .onAppear {
-                withAnimation(.easeOut(duration: 0.8).delay(0.3)) {
+                withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : (.easeOut(duration: 0.8).delay(0.3))) {
                     showTimeline = true
                 }
             }
@@ -85,13 +82,13 @@ private struct TimelineFeature: View {
     let text: String
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: SupportTheme.Spacing.s) {
             Image(systemName: icon)
-                .foregroundStyle(.teal)
+                .foregroundStyle(SupportTheme.accent)
                 .frame(width: 20)
             Text(text)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }

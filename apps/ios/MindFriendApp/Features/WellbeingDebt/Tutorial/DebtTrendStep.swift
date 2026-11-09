@@ -15,42 +15,42 @@ struct DebtTrendStep: View {
     var body: some View {
         TutorialStepLayout(
             icon: "chart.line.uptrend.xyaxis",
-            iconColor: .indigo,
+            iconColor: SupportTheme.accent,
             headline: "Tracking Your Trajectory",
             subheadline: "We monitor your wellbeing patterns over time.",
             primaryAction: onNext,
             skipAction: onSkip
         ) {
-            VStack(spacing: 8) {
+            VStack(spacing: SupportTheme.Spacing.xs) {
                 // Metric cards
                 metricCard(
                     icon: "calendar",
                     title: "Rolling Windows",
                     description: "7, 14, and 30-day scores show patterns over time",
-                    color: .blue
+                    color: SupportTheme.accent
                 )
 
                 metricCard(
                     icon: "arrow.up.right",
                     title: "Trend & Velocity",
                     description: "See if you're improving or worsening, and by how much",
-                    color: .green
+                    color: SupportTheme.accent
                 )
 
                 metricCard(
                     icon: "gauge.with.needle",
                     title: "Your Threshold",
                     description: "We learn YOUR personal breaking point from past patterns",
-                    color: .orange
+                    color: SupportTheme.accent
                 )
 
                 // Severity legend
-                HStack(spacing: 12) {
-                    severityBadge(color: .green, label: "Safe")
-                    severityBadge(color: .orange, label: "Warning")
+                HStack(spacing: SupportTheme.Spacing.s) {
+                    severityBadge(color: SupportTheme.accent, label: "Safe")
+                    severityBadge(color: SupportTheme.accent, label: "Warning")
                     severityBadge(color: .red, label: "Danger")
                 }
-                .padding(.top, 6)
+                .padding(.top, SupportTheme.Spacing.xs)
             }
             .padding(.horizontal)
         }
@@ -58,38 +58,38 @@ struct DebtTrendStep: View {
 
     @ViewBuilder
     private func metricCard(icon: String, title: String, description: String, color: Color) -> some View {
-        HStack(spacing: 10) {
+        HStack(spacing: SupportTheme.Spacing.s) {
             Image(systemName: icon)
                 .font(.body)
                 .foregroundStyle(color)
                 .frame(width: 24)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text(title)
                     .font(.caption.bold())
 
                 Text(description)
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
             Spacer(minLength: 0)
         }
-        .padding(10)
-        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10))
+        .padding(SupportTheme.Spacing.s)
+        .background(SupportTheme.surface, in: RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
     }
 
     @ViewBuilder
     private func severityBadge(color: Color, label: String) -> some View {
-        HStack(spacing: 6) {
+        HStack(spacing: SupportTheme.Spacing.xs) {
             Circle()
                 .fill(color)
                 .frame(width: 10, height: 10)
 
             Text(label)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
     }
 }

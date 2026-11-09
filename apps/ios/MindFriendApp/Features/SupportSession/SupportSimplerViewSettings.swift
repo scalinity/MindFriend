@@ -4,7 +4,9 @@ import SwiftUI
 enum SupportSimplerViewPreference {
     static func key(ownerID: UUID) -> String { "mf.support.simpler.\(ownerID.uuidString.lowercased())" }
     static func isEnabled(ownerID: UUID) -> Bool { UserDefaults.standard.bool(forKey: key(ownerID: ownerID)) }
-    static func setEnabled(_ value: Bool, ownerID: UUID) { UserDefaults.standard.set(value, forKey: key(ownerID: ownerID)) }
+    static func setEnabled(_ value: Bool, ownerID: UUID) {
+        UserDefaults.standard.set(value, forKey: key(ownerID: ownerID))
+    }
 }
 
 struct SupportSimplerViewSettings: View {
@@ -22,12 +24,20 @@ private struct AccountSimplerViewSettings: View {
             Section {
                 Toggle("Use simpler view", isOn: $enabled)
             } footer: {
-                Text("Hide optional check-in and pin rows on Today. You can turn this off immediately, whenever you choose.")
+                Text(
+                    "Hide optional check-in and pin rows on Today. You can turn this off immediately, whenever you choose."
+                )
             }
+            .listRowBackground(SupportTheme.surface)
             Section {
-                Text("Your session, all four tabs, practices and Help stay available. This choice applies on this device.")
+                Text(
+                    "Your session, all four tabs, practices and Help stay available. This choice applies on this device."
+                )
             }
+            .listRowBackground(SupportTheme.surface)
         }
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle("Simpler view")
         .supportCanvas()
     }

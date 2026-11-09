@@ -1,5 +1,5 @@
-import SwiftUI
 import Charts
+import SwiftUI
 
 // MARK: - Yearly Overview View
 
@@ -10,7 +10,7 @@ struct YearlyOverviewView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 24) {
+            VStack(spacing: SupportTheme.Spacing.l) {
                 if viewModel.isLoading {
                     loadingView
                 } else {
@@ -32,13 +32,16 @@ struct YearlyOverviewView: View {
 
                     // Milestones achieved
                     if let milestones = viewModel.selectedYearStat?.milestonesAchieved,
-                       !milestones.isEmpty {
+                        !milestones.isEmpty
+                    {
                         milestonesSection(milestones)
                     }
                 }
             }
             .padding()
         }
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle("Yearly Overview")
         .navigationBarTitleDisplayMode(.large)
         .task {
@@ -59,21 +62,22 @@ struct YearlyOverviewView: View {
 
     private var yearSelector: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 12) {
+            HStack(spacing: SupportTheme.Spacing.s) {
                 ForEach(viewModel.availableYears, id: \.self) { year in
                     Button {
                         selectedYear = year
                     } label: {
                         Text(String(year))
                             .font(.headline)
-                            .padding(.horizontal, 20)
-                            .padding(.vertical, 10)
+                            .accessibilityAddTraits(.isHeader)
+                            .padding(.horizontal, SupportTheme.Spacing.l)
+                            .padding(.vertical, SupportTheme.Spacing.s)
                             .background(
                                 selectedYear == year
-                                    ? Color.blue
-                                    : Color(.secondarySystemBackground)
+                                    ? SupportTheme.accent
+                                    : SupportTheme.surface
                             )
-                            .foregroundStyle(selectedYear == year ? .white : .primary)
+                            .foregroundStyle(selectedYear == year ? SupportTheme.textPrimary : SupportTheme.textPrimary)
                             .clipShape(Capsule())
                     }
                     .buttonStyle(.plain)
@@ -85,14 +89,15 @@ struct YearlyOverviewView: View {
     // MARK: - Mood Chart Section
 
     private var moodChartSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
             Text("Mood Throughout the Year")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
             if viewModel.monthlyStatsForYear.isEmpty {
                 Text("No mood data available for this year")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .frame(height: 250)
                     .frame(maxWidth: .infinity)
             } else {
@@ -103,7 +108,7 @@ struct YearlyOverviewView: View {
                                 x: .value("Month", stat.monthStart, unit: .month),
                                 y: .value("Mood", mood)
                             )
-                            .foregroundStyle(.blue)
+                            .foregroundStyle(SupportTheme.accent)
                             .interpolationMethod(.catmullRom)
 
                             AreaMark(
@@ -111,11 +116,7 @@ struct YearlyOverviewView: View {
                                 y: .value("Mood", mood)
                             )
                             .foregroundStyle(
-                                LinearGradient(
-                                    colors: [.blue.opacity(0.3), .blue.opacity(0.05)],
-                                    startPoint: .top,
-                                    endPoint: .bottom
-                                )
+                                SupportTheme.surface
                             )
                             .interpolationMethod(.catmullRom)
 
@@ -123,7 +124,7 @@ struct YearlyOverviewView: View {
                                 x: .value("Month", stat.monthStart, unit: .month),
                                 y: .value("Mood", mood)
                             )
-                            .foregroundStyle(.blue)
+                            .foregroundStyle(SupportTheme.accent)
                         }
                     }
                 }
@@ -157,21 +158,20 @@ struct YearlyOverviewView: View {
                 }
             }
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .shadow(color: .black.opacity(0.05), radius: 8, y: 2)
+        .supportCard()
+        .shadow(color: SupportTheme.canvas.opacity(0.05), radius: 8, y: 2)
     }
 
     // MARK: - Seasonal Comparison
 
     private func seasonalComparisonSection(_ patterns: SeasonalPatterns) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
             Text("Seasonal Patterns")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
             // Season bars
-            VStack(spacing: 12) {
+            VStack(spacing: SupportTheme.Spacing.s) {
                 ForEach(patterns.allSeasons, id: \.name) { season in
                     SeasonRow(name: season.name, value: season.value)
                 }
@@ -179,36 +179,37 @@ struct YearlyOverviewView: View {
 
             // Insight
             if let highest = patterns.highestSeason,
-               let lowest = patterns.lowestSeason {
+                let lowest = patterns.lowestSeason
+            {
                 HStack {
                     Image(systemName: "lightbulb.fill")
-                        .foregroundStyle(.yellow)
+                        .foregroundStyle(SupportTheme.Celebration.gold)
                     Text("Your mood tends to be highest in \(highest.capitalized) and lowest in \(lowest.capitalized)")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
-                .padding(.top, 8)
+                .padding(.top, SupportTheme.Spacing.xs)
             }
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .shadow(color: .black.opacity(0.05), radius: 8, y: 2)
+        .supportCard()
+        .shadow(color: SupportTheme.canvas.opacity(0.05), radius: 8, y: 2)
     }
 
     // MARK: - Year-over-Year Section
 
     private var yearOverYearSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
             Text("Year-over-Year Comparison")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
             if viewModel.yearlyStats.count >= 2 {
                 Chart {
                     ForEach(viewModel.yearlyStats.prefix(3)) { yearStat in
                         ForEach(0..<4, id: \.self) { quarter in
                             if yearStat.quarterlyMoods.indices.contains(quarter),
-                               let mood = yearStat.quarterlyMoods[quarter] {
+                                let mood = yearStat.quarterlyMoods[quarter]
+                            {
                                 BarMark(
                                     x: .value("Quarter", "Q\(quarter + 1)"),
                                     y: .value("Mood", mood)
@@ -225,8 +226,9 @@ struct YearlyOverviewView: View {
 
             // Comparison summary
             if let current = viewModel.selectedYearStat,
-               let comparison = current.yearlyComparison {
-                HStack(spacing: 24) {
+                let comparison = current.yearlyComparison
+            {
+                HStack(spacing: SupportTheme.Spacing.l) {
                     ComparisonStat(
                         title: "Mood Change",
                         value: comparison.moodDeltaFormatted,
@@ -243,42 +245,41 @@ struct YearlyOverviewView: View {
                 }
             }
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .shadow(color: .black.opacity(0.05), radius: 8, y: 2)
+        .supportCard()
+        .shadow(color: SupportTheme.canvas.opacity(0.05), radius: 8, y: 2)
     }
 
     // MARK: - Milestones Section
 
     private func milestonesSection(_ milestones: [Milestone]) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
             Text("Milestones Achieved")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
-            LazyVGrid(columns: [
-                GridItem(.flexible()),
-                GridItem(.flexible())
-            ], spacing: 12) {
-                ForEach(milestones, id: \.name) { milestone in
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible()),
+                    GridItem(.flexible()),
+                ], spacing: SupportTheme.Spacing.s
+            ) {
+                ForEach(milestones.filter { $0.type.lowercased() != "streak" }, id: \.name) { milestone in
                     MilestoneCard(milestone: milestone)
                 }
             }
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .shadow(color: .black.opacity(0.05), radius: 8, y: 2)
+        .supportCard()
+        .shadow(color: SupportTheme.canvas.opacity(0.05), radius: 8, y: 2)
     }
 
     // MARK: - Loading View
 
     private var loadingView: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             ProgressView()
             Text("Loading yearly data...")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
         .frame(maxWidth: .infinity, minHeight: 300)
     }
@@ -366,10 +367,10 @@ struct MonthlyStatRow: View {
             Spacer()
 
             if let mood = stat.avgMood {
-                HStack(spacing: 4) {
+                HStack(spacing: SupportTheme.Spacing.xxs) {
                     Image(systemName: stat.trendIcon)
                         .font(.caption)
-                        .foregroundStyle(stat.trendColor)
+                        .foregroundStyle(SupportTheme.accent)
                     Text(String(format: "%.1f", mood))
                         .font(.subheadline)
                         .fontWeight(.medium)
@@ -377,17 +378,17 @@ struct MonthlyStatRow: View {
             } else {
                 Text("--")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
 
             if let pct = stat.activeDaysPct {
                 Text("\(Int(pct))% active")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .frame(width: 80, alignment: .trailing)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, SupportTheme.Spacing.xxs)
     }
 }
 
@@ -409,7 +410,7 @@ struct SeasonRow: View {
         HStack {
             Image(systemName: seasonIcon)
                 .frame(width: 24)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
 
             Text(name.capitalized)
                 .font(.subheadline)
@@ -417,10 +418,10 @@ struct SeasonRow: View {
 
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(Color(.systemGray5))
+                    RoundedRectangle(cornerRadius: SupportTheme.cardRadius)
+                        .fill(SupportTheme.field)
 
-                    RoundedRectangle(cornerRadius: 4)
+                    RoundedRectangle(cornerRadius: SupportTheme.cardRadius)
                         .fill(seasonColor(for: name))
                         .frame(width: geometry.size.width * CGFloat(value / 5.0))
                 }
@@ -436,11 +437,11 @@ struct SeasonRow: View {
 
     private func seasonColor(for season: String) -> Color {
         switch season.lowercased() {
-        case "winter": return .blue
-        case "spring": return .green
-        case "summer": return .orange
-        case "fall": return .brown
-        default: return .gray
+        case "winter": return SupportTheme.accent
+        case "spring": return SupportTheme.accent
+        case "summer": return SupportTheme.accent
+        case "fall": return SupportTheme.accent
+        default: return SupportTheme.textSecondary
         }
     }
 }
@@ -451,19 +452,20 @@ struct ComparisonStat: View {
     let isPositive: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
             Text(title)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
 
-            HStack(spacing: 4) {
+            HStack(spacing: SupportTheme.Spacing.xxs) {
                 Image(systemName: isPositive ? "arrow.up.right" : "arrow.down.right")
                     .font(.caption)
                 Text(value)
                     .font(.title3)
+                    .accessibilityAddTraits(.isHeader)
                     .fontWeight(.semibold)
             }
-            .foregroundStyle(isPositive ? .green : .red)
+            .foregroundStyle(isPositive ? SupportTheme.accent : .red)
         }
     }
 }
@@ -472,10 +474,10 @@ struct MilestoneCard: View {
     let milestone: Milestone
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: SupportTheme.Spacing.xs) {
             Image(systemName: milestoneIcon)
                 .font(.title2)
-                .foregroundStyle(.yellow)
+                .foregroundStyle(SupportTheme.Celebration.gold)
 
             Text(milestone.name)
                 .font(.caption)
@@ -483,18 +485,18 @@ struct MilestoneCard: View {
 
             Text(milestone.achievedDate)
                 .font(.caption2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
         .padding()
         .frame(maxWidth: .infinity)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .background(SupportTheme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
     }
 
     private var milestoneIcon: String {
         switch milestone.type.lowercased() {
         case "badge": return "star.fill"
-        case "streak": return "flame.fill"
+        case "streak": return "leaf.fill"
         case "completion": return "checkmark.seal.fill"
         default: return "trophy.fill"
         }
@@ -504,12 +506,12 @@ struct MilestoneCard: View {
 // MARK: - Preview
 
 #if DEBUG
-struct YearlyOverviewView_Previews: PreviewProvider {
-    static var previews: some View {
-        NavigationStack {
-            YearlyOverviewView()
-                .environmentObject(DependencyContainer.preview)
+    struct YearlyOverviewView_Previews: PreviewProvider {
+        static var previews: some View {
+            NavigationStack {
+                YearlyOverviewView()
+                    .environmentObject(DependencyContainer.preview)
+            }
         }
     }
-}
 #endif

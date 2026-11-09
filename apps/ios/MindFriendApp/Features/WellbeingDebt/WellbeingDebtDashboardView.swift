@@ -45,11 +45,11 @@ struct WellbeingDebtDashboardView: View {
             ScrollView {
                 if isLoading {
                     ProgressView("Loading debt status...")
-                        .padding(.top, 100)
+                        .padding(.top, SupportTheme.Spacing.xl)
                 } else if let error = errorMessage {
                     errorView(error)
                 } else if let score = latestScore {
-                    VStack(spacing: 24) {
+                    VStack(spacing: SupportTheme.Spacing.l) {
                         // Main status card
                         statusCard(score)
 
@@ -72,6 +72,8 @@ struct WellbeingDebtDashboardView: View {
                     noDataView
                 }
             }
+            .supportScreen()
+            .foregroundStyle(SupportTheme.textPrimary)
             .navigationTitle("Wellbeing Debt")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
@@ -113,6 +115,8 @@ struct WellbeingDebtDashboardView: View {
                     } label: {
                         Image(systemName: "ellipsis.circle")
                     }
+                    .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                    .accessibilityLabel("More options")
                 }
             }
             .sheet(isPresented: $showingBreakdown) {
@@ -120,20 +124,21 @@ struct WellbeingDebtDashboardView: View {
                     DebtBreakdownView(debtScore: score, transactionReader: reader)
                         .environmentObject(container)
                 } else {
-                    VStack(spacing: 16) {
+                    VStack(spacing: SupportTheme.Spacing.m) {
                         Image(systemName: "exclamationmark.triangle")
                             .font(.largeTitle)
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(SupportTheme.accent)
                         Text("No Data Available")
                             .font(.headline)
+                            .accessibilityAddTraits(.isHeader)
                         Text("Please try again after loading your debt status.")
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                             .multilineTextAlignment(.center)
                         Button("Close") {
                             showingBreakdown = false
                         }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.supportSecondary)
                     }
                     .padding()
                 }
@@ -146,20 +151,27 @@ struct WellbeingDebtDashboardView: View {
                 recalculation.cancel()
                 await loadData()
             }
-            .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)
-                .merge(with: NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification))) { _ in
+            .onReceive(
+                NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)
+                    .merge(
+                        with: NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification)
+                    )
+            ) { _ in
                 Task { await loadData() }
             }
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
                 Task { await loadData() }
             }
-            .onReceive(NotificationCenter.default.publisher(for: .wellbeingDebtSourcesDidChange).debounce(for: .seconds(1), scheduler: RunLoop.main)) { _ in
+            .onReceive(
+                NotificationCenter.default.publisher(for: .wellbeingDebtSourcesDidChange).debounce(
+                    for: .seconds(1), scheduler: RunLoop.main)
+            ) { _ in
                 Task { await loadData() }
             }
             .onDisappear { recalculation.cancel() }
             .safeAreaInset(edge: .bottom) {
                 if recalculation.isRunning {
-                    HStack(spacing: 12) {
+                    HStack(spacing: SupportTheme.Spacing.s) {
                         ProgressView()
                         Text(recalculation.progress ?? "Calculating recorded history…")
                             .font(.subheadline)
@@ -167,13 +179,16 @@ struct WellbeingDebtDashboardView: View {
                         Button("Cancel") { recalculation.cancel() }
                     }
                     .padding()
-                    .background(.regularMaterial)
+                    .background(SupportTheme.surface)
                 }
             }
             .onReceive(recalculation.$result) { result in
                 guard let result else { return }
                 if let visibleOwner = appState.currentUser?.id,
-                   String(describing: visibleOwner).lowercased() != result.score.userId.lowercased() { return }
+                    String(describing: visibleOwner).lowercased() != result.score.userId.lowercased()
+                {
+                    return
+                }
                 loadID = UUID()
                 isLoading = false
                 latestScore = result.score
@@ -209,34 +224,45 @@ struct WellbeingDebtDashboardView: View {
 
     @ViewBuilder
     private func statusCard(_ score: DebtScore) -> some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             // Severity indicator
             HStack {
                 Circle()
-                    .fill(score.thresholdStatus.confidence > 0 ? severityColor(score.thresholdStatus.severity) : .secondary)
+                    .fill(
+                        score.thresholdStatus.confidence > 0
+                            ? severityColor(score.thresholdStatus.severity) : SupportTheme.textSecondary
+                    )
                     .frame(width: 12, height: 12)
 
-                Text(score.thresholdStatus.confidence > 0 ? score.thresholdStatus.severity.displayName : "Reference threshold · limited history")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundStyle(score.thresholdStatus.confidence > 0 ? severityColor(score.thresholdStatus.severity) : .primary)
+                Text(
+                    score.thresholdStatus.confidence > 0
+                        ? score.thresholdStatus.severity.displayName : "Reference threshold · limited history"
+                )
+                .font(.subheadline)
+                .fontWeight(.medium)
+                .foregroundStyle(
+                    score.thresholdStatus.confidence > 0
+                        ? severityColor(score.thresholdStatus.severity) : SupportTheme.textPrimary)
 
                 Spacer()
 
                 Text(score.date).accessibilityIdentifier("debt.dashboard.date")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
 
             // Main debt indicator
-            VStack(spacing: 8) {
+            VStack(spacing: SupportTheme.Spacing.xs) {
                 Text(score.rollingDebt14Day.formatted())
                     .font(.system(size: 56, weight: .bold, design: .rounded))
-                    .foregroundStyle(score.thresholdStatus.confidence > 0 ? severityColor(score.thresholdStatus.severity) : .primary)
+                    .foregroundStyle(
+                        score.thresholdStatus.confidence > 0
+                            ? severityColor(score.thresholdStatus.severity) : SupportTheme.textPrimary)
 
                 Text("14-Day Debt Score")
                     .font(.headline)
-                    .foregroundStyle(.secondary)
+                    .accessibilityAddTraits(.isHeader)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
 
             // Threshold progress bar
@@ -248,31 +274,32 @@ struct WellbeingDebtDashboardView: View {
             }
         }
         .padding()
-        .background(Color(.systemGray6))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .background(SupportTheme.field)
+        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
     }
 
     @ViewBuilder
     private func thresholdProgressBar(current: Decimal, threshold: Decimal) -> some View {
-        let progress = min(1.0, Double(truncating: current as NSDecimalNumber) / abs(Double(truncating: threshold as NSDecimalNumber)))
+        let progress = min(
+            1.0, Double(truncating: current as NSDecimalNumber) / abs(Double(truncating: threshold as NSDecimalNumber)))
 
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             HStack {
                 Text("Reference Threshold")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
 
                 Spacer()
 
                 Text("\(Int(progress * 100))%")
                     .font(.caption.bold())
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
 
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
                     Rectangle()
-                        .fill(Color(.systemGray5))
+                        .fill(SupportTheme.field)
                         .frame(height: 8)
                         .clipShape(Capsule())
 
@@ -286,13 +313,13 @@ struct WellbeingDebtDashboardView: View {
         }
     }
 
-    private func progressGradient(_ progress: Double) -> LinearGradient {
+    private func progressGradient(_ progress: Double) -> Color {
         if progress < 0.7 {
-            return LinearGradient(colors: [.green, .green], startPoint: .leading, endPoint: .trailing)
+            return SupportTheme.accent
         } else if progress < 0.9 {
-            return LinearGradient(colors: [.yellow, .orange], startPoint: .leading, endPoint: .trailing)
+            return SupportTheme.accent
         } else {
-            return LinearGradient(colors: [.orange, .red], startPoint: .leading, endPoint: .trailing)
+            return SupportTheme.accent
         }
     }
 
@@ -300,38 +327,43 @@ struct WellbeingDebtDashboardView: View {
 
     @ViewBuilder
     private func trendCard(_ trend: TrendData) -> some View {
-        HStack(spacing: 16) {
+        HStack(spacing: SupportTheme.Spacing.m) {
             Image(systemName: trend.available == true ? trendIcon(trend.direction) : "clock")
                 .font(.title2)
-                .foregroundStyle(trend.available == true ? trendColor(trend.direction) : .secondary)
+                .foregroundStyle(trend.available == true ? trendColor(trend.direction) : SupportTheme.textSecondary)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 if trend.available == true {
                     Text("Trend: \(trend.direction.rawValue.capitalized)")
                         .font(.headline)
+                        .accessibilityAddTraits(.isHeader)
 
-                    Text("Velocity: \(String(format: "%.1f", Double(truncating: trend.velocity as NSDecimalNumber))) pts/day")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    Text(
+                        "Velocity: \(String(format: "%.1f", Double(truncating: trend.velocity as NSDecimalNumber))) pts/day"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(SupportTheme.textSecondary)
 
                     Text("7-day trend estimate: \(trend.projection7Day.formatted())")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text("Based on \(trend.observedDays ?? 0) recorded days; an estimate, not a forecast of your health.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
+                    Text(
+                        "Based on \(trend.observedDays ?? 0) recorded days; an estimate, not a forecast of your health."
+                    )
+                    .font(.caption)
+                    .foregroundStyle(SupportTheme.textSecondary)
                 } else {
                     Text("Trend unavailable").font(.headline)
                     Text("Record activity on at least two days to estimate a trend.")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.caption).foregroundStyle(SupportTheme.textSecondary)
                 }
             }
 
             Spacer()
         }
         .padding()
-        .background(Color(.systemGray6))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .background(SupportTheme.field)
+        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
     }
 
     private func trendIcon(_ direction: DebtTrendDirection) -> String {
@@ -344,9 +376,9 @@ struct WellbeingDebtDashboardView: View {
 
     private func trendColor(_ direction: DebtTrendDirection) -> Color {
         switch direction {
-        case .improving: return .green
+        case .improving: return SupportTheme.accent
         case .worsening: return .red
-        case .stable: return .blue
+        case .stable: return SupportTheme.accent
         }
     }
 
@@ -354,20 +386,23 @@ struct WellbeingDebtDashboardView: View {
 
     @ViewBuilder
     private func thresholdWarningCard(_ status: ThresholdStatus) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             HStack {
                 Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(SupportTheme.accent)
 
                 Text(status.severity == .danger ? "Review this pattern" : "Approaching Threshold")
                     .font(.headline)
-                    .foregroundStyle(.primary)
+                    .accessibilityAddTraits(.isHeader)
+                    .foregroundStyle(SupportTheme.textPrimary)
             }
 
             if let days = status.daysUntilCrash, days > 0 {
-                Text("If this recorded trend continues, the reference threshold may be reached in \(days) \(days == 1 ? "day" : "days"). This is an estimate.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                Text(
+                    "If this recorded trend continues, the reference threshold may be reached in \(days) \(days == 1 ? "day" : "days"). This is an estimate."
+                )
+                .font(.subheadline)
+                .foregroundStyle(SupportTheme.textSecondary)
             }
 
             Button {
@@ -377,25 +412,26 @@ struct WellbeingDebtDashboardView: View {
                     .font(.subheadline.bold())
                     .frame(maxWidth: .infinity)
                     .padding()
-                    .background(hasActiveRecoveryProgram ? Color.green : Color.orange)
-                    .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .background(hasActiveRecoveryProgram ? SupportTheme.accent : SupportTheme.accent)
+                    .foregroundStyle(SupportTheme.onAccent)
+                    .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
             }
         }
         .padding()
-        .background(Color.orange.opacity(0.1))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .background(SupportTheme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
     }
 
     // MARK: - Quick Stats
 
     @ViewBuilder
     private func quickStatsSection(_ score: DebtScore) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("Rolling Debts")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
-            HStack(spacing: 16) {
+            HStack(spacing: SupportTheme.Spacing.m) {
                 statPill(String(localized: "7-Day"), value: score.rollingDebt7Day)
                 statPill(String(localized: "14-Day"), value: score.rollingDebt14Day)
                 statPill(String(localized: "30-Day"), value: score.rollingDebt30Day)
@@ -405,35 +441,36 @@ struct WellbeingDebtDashboardView: View {
 
     @ViewBuilder
     private func statPill(_ label: String, value: Decimal) -> some View {
-        VStack(spacing: 4) {
+        VStack(spacing: SupportTheme.Spacing.xxs) {
             Text(label)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
 
             Text(value.formatted())
                 .font(.title3.bold())
-                .foregroundStyle(.primary)
+                .accessibilityAddTraits(.isHeader)
+                .foregroundStyle(SupportTheme.textPrimary)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
-        .background(Color(.systemGray6))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .padding(.vertical, SupportTheme.Spacing.s)
+        .background(SupportTheme.field)
+        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
     }
 
     // MARK: - Action Buttons
 
     @ViewBuilder
     private var actionButtons: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: SupportTheme.Spacing.s) {
             Button {
                 showingBreakdown = true
             } label: {
                 Label("View Transaction Breakdown", systemImage: "chart.bar.fill")
                     .frame(maxWidth: .infinity)
                     .padding()
-                    .background(Color.blue)
-                    .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .background(SupportTheme.accent)
+                    .foregroundStyle(SupportTheme.onAccent)
+                    .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
             }
 
             if let profile = profile, !profile.topDrains.categories.isEmpty {
@@ -443,9 +480,9 @@ struct WellbeingDebtDashboardView: View {
                     Label("Top Drains Analysis", systemImage: "chart.line.downtrend.xyaxis")
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(Color(.systemGray5))
-                        .foregroundStyle(.primary)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .background(SupportTheme.field)
+                        .foregroundStyle(SupportTheme.textPrimary)
+                        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
                 }
             }
         }
@@ -460,10 +497,11 @@ struct WellbeingDebtDashboardView: View {
                         Text(stat.category)
                         Spacer()
                         Text("\(Int(truncating: stat.totalAmount as NSDecimalNumber)) pts")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                 }
             }
+            .listRowBackground(SupportTheme.surface)
 
             Section("Top Deposits (Last 30 Days)") {
                 ForEach(profile.topDeposits.categories, id: \.category) { stat in
@@ -471,11 +509,15 @@ struct WellbeingDebtDashboardView: View {
                         Text(stat.category)
                         Spacer()
                         Text("+\(Int(truncating: stat.totalAmount as NSDecimalNumber)) pts")
-                            .foregroundStyle(.green)
+                            .foregroundStyle(SupportTheme.accent)
                     }
                 }
             }
+
+            .listRowBackground(SupportTheme.surface)
         }
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle("Category Analysis")
     }
 
@@ -483,26 +525,29 @@ struct WellbeingDebtDashboardView: View {
 
     @ViewBuilder
     private var noDataView: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             Image(systemName: "chart.bar.doc.horizontal")
                 .font(.system(size: 60))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
 
             Text(needsRefresh ? "Calculation Needs Updating" : "No Debt Data Yet")
                 .font(.title2.bold())
+                .accessibilityAddTraits(.isHeader)
 
-            Text("Calculate from recorded sleep, completed activities and logged events for the last 30 complete days. Missing data adds no event.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal)
+            Text(
+                "Calculate from recorded sleep, completed activities and logged events for the last 30 complete days. Missing data adds no event."
+            )
+            .font(.subheadline)
+            .foregroundStyle(SupportTheme.textSecondary)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal)
 
             Button {
                 errorMessage = nil
                 beginCalculation()
             } label: {
                 if recalculation.isRunning {
-                    HStack(spacing: 8) {
+                    HStack(spacing: SupportTheme.Spacing.xs) {
                         ProgressView()
                             .frame(width: 16, height: 16)
                         Text("Analyzing...")
@@ -511,11 +556,11 @@ struct WellbeingDebtDashboardView: View {
                     Label("Analyze History", systemImage: "sparkles")
                 }
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.supportPrimary)
             .disabled(!recalculation.canStart)
-            .padding(.top, 8)
+            .padding(.top, SupportTheme.Spacing.xs)
         }
-        .padding(.top, 100)
+        .padding(.top, SupportTheme.Spacing.xl)
     }
 
     private func beginCalculation() {
@@ -529,17 +574,18 @@ struct WellbeingDebtDashboardView: View {
 
     @ViewBuilder
     private func errorView(_ error: String) -> some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             Image(systemName: "exclamationmark.triangle")
                 .font(.system(size: 60))
                 .foregroundStyle(.red)
 
             Text(failedCalculation ? "Calculation Didn’t Finish" : "Error Loading Data")
                 .font(.title2.bold())
+                .accessibilityAddTraits(.isHeader)
 
             Text(error)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
 
@@ -551,18 +597,18 @@ struct WellbeingDebtDashboardView: View {
                     Task { await loadData() }
                 }
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.supportSecondary)
             .disabled(!recalculation.canStart)
         }
-        .padding(.top, 100)
+        .padding(.top, SupportTheme.Spacing.xl)
     }
 
     // MARK: - Helper Methods
 
     private func severityColor(_ severity: ThresholdSeverity) -> Color {
         switch severity {
-        case .safe: return .green
-        case .warning: return .orange
+        case .safe: return SupportTheme.accent
+        case .warning: return SupportTheme.accent
         case .danger: return .red
         }
     }
@@ -660,12 +706,15 @@ final class DebtRecalculation: ObservableObject {
                 let activeOwner = try await reader.transactionOwnerID()
                 try Task.checkCancellation()
                 guard owner.lowercased() == activeOwner.lowercased(),
-                      score.userId.lowercased() == owner.lowercased() else { throw CancellationError() }
+                    score.userId.lowercased() == owner.lowercased()
+                else { throw CancellationError() }
                 guard score.isCurrentSourceCalculation(requireSnapshot: true) else {
-                    throw WellbeingDebtError.needsMoreData("The calculation is out of date. Tap Retry to calculate the current window.")
+                    throw WellbeingDebtError.needsMoreData(
+                        "The calculation is out of date. Tap Retry to calculate the current window.")
                 }
                 stageMilliseconds["details"] = Self.milliseconds(since: detailsStarted)
-                result = DebtRecalculationResult(score: score,
+                result = DebtRecalculationResult(
+                    score: score,
                     profile: profile?.userId.lowercased() == owner.lowercased() ? profile : nil)
             } catch {
                 if !Task.isCancelled && !(error is CancellationError) && !timedOut {
@@ -719,41 +768,47 @@ final class DebtRecalculation: ObservableObject {
     }
 }
 
-
 #if DEBUG
-/// Synthetic calendar UI only; no authentication, wellness queries or provider calls.
-struct DebtCalendarUITestView: View {
-    private let reader = DebtCalendarUITestReader()
-    var body: some View {
-        NavigationStack {
-            VStack {
-                WellbeingDebtCard(reader: reader)
-                NavigationLink("Open Debt Dashboard") { WellbeingDebtDashboardView(reader: reader) }
+    /// Synthetic calendar UI only; no authentication, wellness queries or provider calls.
+    struct DebtCalendarUITestView: View {
+        private let reader = DebtCalendarUITestReader()
+        var body: some View {
+            NavigationStack {
+                VStack {
+                    WellbeingDebtCard(reader: reader)
+                    NavigationLink("Open Debt Dashboard") { WellbeingDebtDashboardView(reader: reader) }
+                }
+                .padding()
             }
-            .padding()
         }
     }
-}
-private actor DebtCalendarUITestReader: WellbeingDebtReading {
-    private let owner = "11111111-1111-4111-8111-111111111111"
-    private func score() -> DebtScore {
-        let window = DebtTransactionWindow(days: 1)
-        let records = [WellbeingTransaction(id: UUID(), userId: owner, date: window.end, type: .deposit,
-            category: .positiveEvent, amount: 8, source: .userLogged, description: "Synthetic recorded event", metadata: nil, createdAt: nil)]
-        return DebtScore(id: nil, userId: owner, date: window.end, dailyBalance: 8,
-            rollingDebt7Day: 0, rollingDebt14Day: 0, rollingDebt30Day: 0,
-            trend: TrendData(direction: .stable, velocity: 0, projection7Day: 0, available: false, observedDays: 1,
-                accountingVersion: 2, calculatedAt: Date().ISO8601Format(), timeZone: window.timezone),
-            thresholdStatus: ThresholdStatus(currentDebt: 0, threshold: nil, severity: .safe, daysUntilCrash: nil, confidence: 0),
-            createdAt: nil, sourceTransactions: records)
+    private actor DebtCalendarUITestReader: WellbeingDebtReading {
+        private let owner = "11111111-1111-4111-8111-111111111111"
+        private func score() -> DebtScore {
+            let window = DebtTransactionWindow(days: 1)
+            let records = [
+                WellbeingTransaction(
+                    id: UUID(), userId: owner, date: window.end, type: .deposit,
+                    category: .positiveEvent, amount: 8, source: .userLogged, description: "Synthetic recorded event",
+                    metadata: nil, createdAt: nil)
+            ]
+            return DebtScore(
+                id: nil, userId: owner, date: window.end, dailyBalance: 8,
+                rollingDebt7Day: 0, rollingDebt14Day: 0, rollingDebt30Day: 0,
+                trend: TrendData(
+                    direction: .stable, velocity: 0, projection7Day: 0, available: false, observedDays: 1,
+                    accountingVersion: 2, calculatedAt: Date().ISO8601Format(), timeZone: window.timezone),
+                thresholdStatus: ThresholdStatus(
+                    currentDebt: 0, threshold: nil, severity: .safe, daysUntilCrash: nil, confidence: 0),
+                createdAt: nil, sourceTransactions: records)
+        }
+        func transactionOwnerID() async throws -> String { owner }
+        func fetchTransactions(from: String, to: String) async throws -> [WellbeingTransaction] { [] }
+        func fetchLatestDebtScore() async throws -> DebtScore? { score() }
+        func refreshDebtScoreIfNeeded() async throws -> DebtScore? { score() }
+        func fetchProfile() async throws -> WellbeingDebtProfile? { nil }
+        func fetchActiveRecoveryProgram() async throws -> RecoveryProgram? { nil }
+        func calculateDebtScore(for date: String?) async throws -> DebtScore { score() }
+        func backfillTransactions(days: Int) async throws -> Int { 0 }
     }
-    func transactionOwnerID() async throws -> String { owner }
-    func fetchTransactions(from: String, to: String) async throws -> [WellbeingTransaction] { [] }
-    func fetchLatestDebtScore() async throws -> DebtScore? { score() }
-    func refreshDebtScoreIfNeeded() async throws -> DebtScore? { score() }
-    func fetchProfile() async throws -> WellbeingDebtProfile? { nil }
-    func fetchActiveRecoveryProgram() async throws -> RecoveryProgram? { nil }
-    func calculateDebtScore(for date: String?) async throws -> DebtScore { score() }
-    func backfillTransactions(days: Int) async throws -> Int { 0 }
-}
 #endif

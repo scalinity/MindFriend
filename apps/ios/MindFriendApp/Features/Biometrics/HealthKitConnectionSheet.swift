@@ -11,63 +11,66 @@ struct HealthKitConnectionSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-              VStack(spacing: 24) {
+                VStack(spacing: SupportTheme.Spacing.l) {
 
-                Image(systemName: "heart.text.square.fill")
-                    .font(.system(size: 80))
-                    .foregroundStyle(.pink.gradient)
+                    Image(systemName: "heart.text.square.fill")
+                        .font(.system(size: 80))
+                        .foregroundStyle(SupportTheme.accent.gradient)
 
-                Text("Connect Apple Health")
-                    .font(.title.bold())
+                    Text("Connect Apple Health")
+                        .font(.title.bold())
+                        .accessibilityAddTraits(.isHeader)
 
-                Text("Powered by HealthKit")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.pink)
+                    Text("Powered by HealthKit")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(SupportTheme.accent)
 
-                Text("Choose the data MindFriend may read from Apple Health. Recorded samples can help you explore patterns; they do not establish how you feel. Apple keeps your read choices private.")
+                    Text(
+                        "Choose the data MindFriend may read from Apple Health. Recorded samples can help you explore patterns; they do not establish how you feel. Apple keeps your read choices private."
+                    )
                     .multilineTextAlignment(.center)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .padding(.horizontal)
 
-                VStack(alignment: .leading, spacing: 16) {
-                    ForEach(HealthKitDataType.allCases, id: \.self) { type in
-                        HealthDataTypeRow(type: type)
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
+                        ForEach(HealthKitDataType.allCases, id: \.self) { type in
+                            HealthDataTypeRow(type: type)
+                        }
+                    }
+                    .padding()
+                    .background(SupportTheme.surface, in: RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
+
+                    VStack(spacing: SupportTheme.Spacing.s) {
+                        if let error = error {
+                            Text(error.localizedDescription)
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                                .multilineTextAlignment(.center)
+                        }
+
+                        Button {
+                            connect()
+                        } label: {
+                            if isConnecting {
+                                ProgressView()
+                                    .frame(maxWidth: .infinity)
+                            } else {
+                                Text("Connect")
+                                    .frame(maxWidth: .infinity)
+                            }
+                        }
+                        .buttonStyle(.supportPrimary)
+                        .controlSize(.large)
+                        .disabled(isConnecting || !healthKit.isHealthKitAvailable)
+
+                        if !healthKit.isHealthKitAvailable {
+                            Text("HealthKit is not available on this device")
+                                .font(.caption)
+                                .foregroundStyle(SupportTheme.textSecondary)
+                        }
                     }
                 }
                 .padding()
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
-
-                VStack(spacing: 12) {
-                    if let error = error {
-                        Text(error.localizedDescription)
-                            .font(.caption)
-                            .foregroundStyle(.red)
-                            .multilineTextAlignment(.center)
-                    }
-
-                    Button {
-                        connect()
-                    } label: {
-                        if isConnecting {
-                            ProgressView()
-                                .frame(maxWidth: .infinity)
-                        } else {
-                            Text("Connect")
-                                .frame(maxWidth: .infinity)
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .disabled(isConnecting || !healthKit.isHealthKitAvailable)
-
-                    if !healthKit.isHealthKitAvailable {
-                        Text("HealthKit is not available on this device")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-              .padding()
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -103,10 +106,10 @@ struct HealthDataTypeRow: View {
     let type: HealthKitDataType
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: SupportTheme.Spacing.s) {
             Image(systemName: type.icon)
                 .font(.title2)
-                .foregroundStyle(.pink)
+                .foregroundStyle(SupportTheme.accent)
                 .frame(width: 32)
 
             VStack(alignment: .leading) {
@@ -114,7 +117,7 @@ struct HealthDataTypeRow: View {
                     .font(.subheadline.bold())
                 Text(type.description)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
         }
         .accessibilityElement(children: .combine)

@@ -1,5 +1,5 @@
-import SwiftUI
 import Charts
+import SwiftUI
 
 /// 7-day sleep trend graph
 struct SleepTrendGraph: View {
@@ -29,19 +29,19 @@ struct SleepTrendGraph: View {
                     x: .value("Date", data.date, unit: .day),
                     y: .value("Score", data.score)
                 )
-                .foregroundStyle(.blue)
+                .foregroundStyle(SupportTheme.accent)
                 .interpolationMethod(.catmullRom)
 
                 PointMark(
                     x: .value("Date", data.date, unit: .day),
                     y: .value("Score", data.score)
                 )
-                .foregroundStyle(.blue)
+                .foregroundStyle(SupportTheme.accent)
             }
 
             // Target line at 80
             RuleMark(y: .value("Target", 80))
-                .foregroundStyle(.green.opacity(0.3))
+                .foregroundStyle(SupportTheme.accent.opacity(0.3))
                 .lineStyle(StrokeStyle(dash: [5, 5]))
         }
         .chartYScale(domain: 0...100)
@@ -62,7 +62,7 @@ struct SleepTrendGraph: View {
         VStack {
             Text("Not enough data")
                 .font(.caption)
-                .foregroundColor(.secondary)
+                .foregroundColor(SupportTheme.textSecondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

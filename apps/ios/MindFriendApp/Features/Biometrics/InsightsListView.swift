@@ -30,6 +30,8 @@ struct InsightsListView: View {
             }
         }
         .listStyle(.plain)
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle("All Insights")
         .sheet(item: $selectedInsight) { insight in
             InsightDetailView(insight: insight, healthKit: healthKit)
@@ -38,10 +40,10 @@ struct InsightsListView: View {
 
     private func categoryColor(for category: BiometricInsight.InsightCategory) -> Color {
         switch category {
-        case .sleep: return .indigo
-        case .activity: return .green
-        case .stress: return .orange
-        case .general: return .blue
+        case .sleep: return SupportTheme.accent
+        case .activity: return SupportTheme.accent
+        case .stress: return SupportTheme.accent
+        case .general: return SupportTheme.accent
         }
     }
 }
@@ -56,7 +58,7 @@ struct InsightDetailView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.l) {
                     // Header
                     HStack {
                         Image(systemName: insight.insightCategory.icon)
@@ -66,9 +68,10 @@ struct InsightDetailView: View {
                         VStack(alignment: .leading) {
                             Text(insight.insightCategory.displayName)
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                             Text(insight.title)
                                 .font(.title2.bold())
+                                .accessibilityAddTraits(.isHeader)
                         }
                     }
 
@@ -79,10 +82,10 @@ struct InsightDetailView: View {
                                 .font(.caption.bold())
                             Text("correlation")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                         }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
+                        .padding(.horizontal, SupportTheme.Spacing.s)
+                        .padding(.vertical, SupportTheme.Spacing.xs)
                         .background(categoryColor.opacity(0.2))
                         .clipShape(Capsule())
                     }
@@ -95,39 +98,42 @@ struct InsightDetailView: View {
                     if let dataPoints = insight.dataPointsCount {
                         HStack {
                             Image(systemName: "chart.bar.doc.horizontal")
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                             Text("Based on \(dataPoints) days of data")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                         }
                     }
 
                     if let confidence = insight.confidenceScore {
                         HStack {
                             Image(systemName: "checkmark.seal")
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                             Text("Confidence: \(Int(confidence * 100))%")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                         }
                     }
 
                     Divider()
 
                     // Rating
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                         Text("Was this insight helpful?")
                             .font(.subheadline.bold())
 
-                        HStack(spacing: 16) {
+                        HStack(spacing: SupportTheme.Spacing.m) {
                             ForEach(1...5, id: \.self) { star in
                                 Button {
                                     rating = star
                                 } label: {
                                     Image(systemName: star <= rating ? "star.fill" : "star")
                                         .font(.title2)
-                                        .foregroundStyle(star <= rating ? .yellow : .gray)
+                                        .foregroundStyle(
+                                            star <= rating ? SupportTheme.Celebration.gold : SupportTheme.textSecondary)
                                 }
+                                .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                                .accessibilityLabel("Rate \(star) out of 5")
                             }
                         }
                     }
@@ -162,10 +168,10 @@ struct InsightDetailView: View {
 
     private var categoryColor: Color {
         switch insight.insightCategory {
-        case .sleep: return .indigo
-        case .activity: return .green
-        case .stress: return .orange
-        case .general: return .blue
+        case .sleep: return SupportTheme.accent
+        case .activity: return SupportTheme.accent
+        case .stress: return SupportTheme.accent
+        case .general: return SupportTheme.accent
         }
     }
 

@@ -22,27 +22,29 @@ struct PrivacyLockSettingsView: View {
                 Section {
                     HStack {
                         Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.yellow)
+                            .foregroundStyle(SupportTheme.Celebration.gold)
                         VStack(alignment: .leading) {
                             Text("Biometrics Unavailable")
                                 .font(.headline)
+                                .accessibilityAddTraits(.isHeader)
                             Text("Enable Face ID, Touch ID, or a passcode in your device settings to use App Lock.")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                         }
                     }
-                    .padding(.vertical, 4)
+                    .padding(.vertical, SupportTheme.Spacing.xxs)
                 }
+                .listRowBackground(SupportTheme.surface)
             }
 
             Section {
                 Toggle(isOn: $appLockEnabled) {
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                         Text("Enable App Lock")
                             .font(.body)
                         Text("Requires \(lockManager.biometricType.displayName) to unlock")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                 }
                 .disabled(isSaving)
@@ -58,6 +60,8 @@ struct PrivacyLockSettingsView: View {
             } footer: {
                 Text("When enabled, MindFriend will require authentication to access your data.")
             }
+
+            .listRowBackground(SupportTheme.surface)
 
             if appLockEnabled {
                 Section {
@@ -77,6 +81,7 @@ struct PrivacyLockSettingsView: View {
                 } footer: {
                     Text("The app will automatically lock after the selected period of inactivity.")
                 }
+                .listRowBackground(SupportTheme.surface)
 
                 Section {
                     Picker("Method", selection: $quickLockMethod) {
@@ -104,6 +109,8 @@ struct PrivacyLockSettingsView: View {
                 } footer: {
                     Text(quickLockMethod.description)
                 }
+
+                .listRowBackground(SupportTheme.surface)
             }
 
             Section {
@@ -116,7 +123,11 @@ struct PrivacyLockSettingsView: View {
                 }
                 .disabled(!appLockEnabled || isSaving)
             }
+
+            .listRowBackground(SupportTheme.surface)
         }
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle("App Lock")
         .navigationBarTitleDisplayMode(.inline)
         .disabled(isSaving)
@@ -129,7 +140,7 @@ struct PrivacyLockSettingsView: View {
             await loadSettings()
         }
         .alert("Error", isPresented: $showError) {
-            Button("OK", role: .cancel) { }
+            Button("OK", role: .cancel) {}
         } message: {
             Text(errorMessage)
         }

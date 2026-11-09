@@ -29,7 +29,7 @@ struct WellbeingDebtCard: View {
     @State private var errorMessage: String?
 
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             if isLoading {
                 loadingView
             } else if let error = errorMessage {
@@ -41,20 +41,23 @@ struct WellbeingDebtCard: View {
             }
         }
         .frame(maxWidth: .infinity)
-        .padding()
-        .background(Color(uiColor: .secondarySystemBackground))
-        .cornerRadius(16)
+        .supportCard()
         .task(id: appState.currentUser?.id) {
             await loadDebtScore()
         }
-        .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)
-            .merge(with: NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification))) { _ in
+        .onReceive(
+            NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)
+                .merge(with: NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification))
+        ) { _ in
             Task { await loadDebtScore() }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
             Task { await loadDebtScore() }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .wellbeingDebtSourcesDidChange).debounce(for: .seconds(1), scheduler: RunLoop.main)) { _ in
+        .onReceive(
+            NotificationCenter.default.publisher(for: .wellbeingDebtSourcesDidChange).debounce(
+                for: .seconds(1), scheduler: RunLoop.main)
+        ) { _ in
             Task { await loadDebtScore() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .wellbeingDebtDidRecalculate)) { _ in
@@ -68,23 +71,27 @@ struct WellbeingDebtCard: View {
 
     @ViewBuilder
     private func debtScoreView(_ score: DebtScore) -> some View {
-        HStack(alignment: .top, spacing: 16) {
+        HStack(alignment: .top, spacing: SupportTheme.Spacing.m) {
             // Info section
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
+                HStack(spacing: SupportTheme.Spacing.xs) {
                     Circle()
-                        .fill(score.thresholdStatus.confidence > 0 ? severityColor(score.thresholdStatus.severity) : .secondary)
+                        .fill(
+                            score.thresholdStatus.confidence > 0
+                                ? severityColor(score.thresholdStatus.severity) : SupportTheme.textSecondary
+                        )
                         .frame(width: 10, height: 10)
 
                     Text("Wellbeing Balance")
                         .font(.headline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                        .accessibilityAddTraits(.isHeader)
+                        .foregroundStyle(SupportTheme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
                         .minimumScaleFactor(0.8)
                 }
 
                 // Trend indicator
-                HStack(spacing: 4) {
+                HStack(spacing: SupportTheme.Spacing.xxs) {
                     Image(systemName: trendIcon(score.trend.direction))
                         .font(.caption)
                     Text(score.trend.available == true ? trendLabel(score.trend.direction) : "Trend unavailable")
@@ -94,7 +101,7 @@ struct WellbeingDebtCard: View {
 
                 // Threshold status
                 if score.thresholdStatus.severity != .safe {
-                    HStack(spacing: 4) {
+                    HStack(spacing: SupportTheme.Spacing.xxs) {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .font(.caption)
                         Text(score.thresholdStatus.severity.displayName)
@@ -109,7 +116,7 @@ struct WellbeingDebtCard: View {
                 if score.trend.available == true && abs(velocityValue) >= 0.5 {
                     Text("\(velocityValue >= 0 ? "+" : "")\(String(format: "%.1f", velocityValue)) pts/day")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
             }
 
@@ -123,10 +130,11 @@ struct WellbeingDebtCard: View {
             )
         }
 
-        Text(score.date).accessibilityIdentifier("debt.home.date").font(.caption2).foregroundStyle(.secondary)
+        Text(score.date).accessibilityIdentifier("debt.home.date").font(.caption2).foregroundStyle(
+            SupportTheme.textSecondary)
 
         // Quick stats row
-        HStack(spacing: 16) {
+        HStack(spacing: SupportTheme.Spacing.m) {
             quickStat(label: String(localized: "7-Day"), value: score.rollingDebt7Day)
             quickStat(label: String(localized: "14-Day"), value: score.rollingDebt14Day)
             quickStat(label: String(localized: "30-Day"), value: score.rollingDebt30Day)
@@ -137,23 +145,23 @@ struct WellbeingDebtCard: View {
             Spacer()
             Text("Tap for details")
                 .font(.caption2)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(SupportTheme.textSecondary)
             Image(systemName: "chevron.right")
                 .font(.caption2)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
     }
 
     @ViewBuilder
     private func quickStat(label: String, value: Decimal) -> some View {
-        VStack(spacing: 4) {
+        VStack(spacing: SupportTheme.Spacing.xxs) {
             Text(label)
                 .font(.caption2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
             Text(value.formatted())
                 .font(.subheadline)
                 .fontWeight(.semibold)
-                .foregroundStyle(.primary)
+                .foregroundStyle(SupportTheme.textPrimary)
         }
         .frame(maxWidth: .infinity)
     }
@@ -161,51 +169,52 @@ struct WellbeingDebtCard: View {
     // MARK: - Loading/Error/Empty Views
 
     private var loadingView: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: SupportTheme.Spacing.s) {
             ProgressView()
             Text("Loading wellbeing data...")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
         .frame(maxWidth: .infinity, minHeight: 100)
     }
 
     @ViewBuilder
     private func errorView(_ message: String) -> some View {
-        VStack(spacing: 8) {
+        VStack(spacing: SupportTheme.Spacing.xs) {
             Image(systemName: "exclamationmark.circle")
                 .font(.title2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
             Text("Couldn’t refresh your debt score. Check your connection and tap Retry.")
             Button("Retry") { Task { await loadDebtScore() } }
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
         .frame(maxWidth: .infinity, minHeight: 100)
     }
 
     private var noDataView: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: SupportTheme.Spacing.s) {
             Image(systemName: "chart.line.uptrend.xyaxis")
                 .font(.title)
-                .foregroundStyle(.blue)
+                .foregroundStyle(SupportTheme.accent)
 
             Text("Wellbeing Balance")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
             Text("Start tracking to see your wellness trends")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .multilineTextAlignment(.center)
 
             HStack {
                 Spacer()
                 Text("Tap to get started")
                     .font(.caption)
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(SupportTheme.accent)
                 Image(systemName: "chevron.right")
                     .font(.caption)
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(SupportTheme.accent)
             }
         }
         .frame(maxWidth: .infinity, minHeight: 100)
@@ -225,8 +234,9 @@ struct WellbeingDebtCard: View {
             let score = try await service.refreshDebtScoreIfNeeded()
             let activeOwner = try await service.transactionOwnerID()
             guard loadID == requestID, !Task.isCancelled, owner == activeOwner else { return }
-            latestScore = score?.userId.lowercased() == owner.lowercased() &&
-                score?.isCurrentSourceCalculation(requireSnapshot: true) == true ? score : nil
+            latestScore =
+                score?.userId.lowercased() == owner.lowercased()
+                    && score?.isCurrentSourceCalculation(requireSnapshot: true) == true ? score : nil
         } catch {
             guard loadID == requestID, !Task.isCancelled else { return }
             errorMessage = "Failed to load"
@@ -235,8 +245,8 @@ struct WellbeingDebtCard: View {
 
     private func severityColor(_ severity: ThresholdSeverity) -> Color {
         switch severity {
-        case .safe: return .green
-        case .warning: return .orange
+        case .safe: return SupportTheme.accent
+        case .warning: return SupportTheme.accent
         case .danger: return .red
         }
     }
@@ -259,9 +269,9 @@ struct WellbeingDebtCard: View {
 
     private func trendColor(_ direction: DebtTrendDirection) -> Color {
         switch direction {
-        case .improving: return .green
-        case .worsening: return .orange
-        case .stable: return .secondary
+        case .improving: return SupportTheme.accent
+        case .worsening: return SupportTheme.accent
+        case .stable: return SupportTheme.textSecondary
         }
     }
 }
@@ -270,6 +280,7 @@ struct WellbeingDebtCard: View {
 
 /// Circular ring showing debt score with severity coloring
 struct DebtScoreRing: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let score: Decimal
     let severity: ThresholdSeverity?
     let size: CGFloat
@@ -287,10 +298,10 @@ struct DebtScoreRing: View {
 
     private var ringColor: Color {
         switch severity {
-        case .safe: return .green
-        case .warning: return .orange
+        case .safe: return SupportTheme.accent
+        case .warning: return SupportTheme.accent
         case .danger: return .red
-        case nil: return .secondary
+        case nil: return SupportTheme.textSecondary
         }
     }
 
@@ -302,7 +313,7 @@ struct DebtScoreRing: View {
 
             // Progress ring
             Circle()
-                .trim(from: 0, to: animatedProgress)
+                .trim(from: 0, to: reduceMotion ? normalizedProgress : animatedProgress)
                 .stroke(
                     ringColor.gradient,
                     style: StrokeStyle(
@@ -310,22 +321,23 @@ struct DebtScoreRing: View {
                         lineCap: .round
                     )
                 )
+                .opacity(reduceMotion ? (animatedProgress > 0 ? 1 : 0) : 1)
                 .rotationEffect(.degrees(-90))
 
             // Score text
-            VStack(spacing: 2) {
+            VStack(spacing: SupportTheme.Spacing.xxs) {
                 Text(score.formatted())
                     .font(.system(size: size * 0.3, weight: .bold, design: .rounded))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(SupportTheme.textPrimary)
 
                 Text("Debt")
                     .font(.system(size: size * 0.12, weight: .medium))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
         }
         .frame(width: size, height: size)
         .onAppear {
-            withAnimation(.easeOut(duration: 0.8)) {
+            withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : (.easeOut(duration: 0.8))) {
                 animatedProgress = normalizedProgress
             }
         }

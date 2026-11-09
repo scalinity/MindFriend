@@ -15,23 +15,24 @@ struct MoodPredictionCard: View {
                 showDetailSheet = true
             }
         } label: {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                 // Header row
                 HStack {
                     // Mood icon and outlook
-                    HStack(spacing: 8) {
+                    HStack(spacing: SupportTheme.Spacing.xs) {
                         Image(systemName: prediction.moodIcon)
                             .font(.title2)
-                            .foregroundColor(prediction.moodColor)
+                            .foregroundColor(SupportTheme.accent)
 
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                             Text("Today's Outlook")
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(SupportTheme.textSecondary)
 
                             Text(prediction.outlookLabel)
                                 .font(.headline)
-                                .foregroundColor(.primary)
+                                .accessibilityAddTraits(.isHeader)
+                                .foregroundColor(SupportTheme.textPrimary)
                         }
                     }
 
@@ -48,10 +49,10 @@ struct MoodPredictionCard: View {
                 if !prediction.factors.isEmpty {
                     Divider()
 
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                         Text("Contributing Factors")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(SupportTheme.textSecondary)
 
                         ForEach(prediction.factors.prefix(3)) { factor in
                             FactorRow(factor: factor)
@@ -61,27 +62,27 @@ struct MoodPredictionCard: View {
 
                 // Low mood alert
                 if prediction.isLowMoodPredicted {
-                    HStack(spacing: 8) {
+                    HStack(spacing: SupportTheme.Spacing.xs) {
                         Image(systemName: "shield.fill")
-                            .foregroundColor(.blue)
+                            .foregroundColor(SupportTheme.accent)
 
                         Text("Tap for preparation tips")
                             .font(.caption)
-                            .foregroundColor(.blue)
+                            .foregroundColor(SupportTheme.accent)
 
                         Spacer()
 
                         Image(systemName: "chevron.right")
                             .font(.caption)
-                            .foregroundColor(.blue)
+                            .foregroundColor(SupportTheme.accent)
                     }
-                    .padding(.top, 4)
+                    .padding(.top, SupportTheme.Spacing.xxs)
                 }
             }
-            .padding(16)
-            .background(Color(.systemBackground))
-            .cornerRadius(16)
-            .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
+            .padding(SupportTheme.Spacing.m)
+            .background(SupportTheme.canvas)
+            .cornerRadius(SupportTheme.controlRadius)
+            .shadow(color: SupportTheme.canvas.opacity(0.05), radius: 8, x: 0, y: 2)
         }
         .buttonStyle(PlainButtonStyle())
         .accessibilityElement(children: .combine)
@@ -96,7 +97,7 @@ struct MoodPredictionCard: View {
         var components = [
             "Today's outlook: \(prediction.outlookLabel)",
             "Predicted mood: \(String(format: "%.1f", prediction.predictedMoodValue)) out of 10",
-            "\(prediction.confidencePercent) percent confidence"
+            "\(prediction.confidencePercent) percent confidence",
         ]
 
         if !prediction.factors.isEmpty {
@@ -120,14 +121,14 @@ struct ConfidenceBadge: View {
 
     var color: Color {
         switch confidence {
-        case 0..<50: return .gray
-        case 50..<75: return .yellow
-        default: return .green
+        case 0..<50: return SupportTheme.textSecondary
+        case 50..<75: return SupportTheme.Celebration.gold
+        default: return SupportTheme.accent
         }
     }
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: SupportTheme.Spacing.xxs) {
             Text("\(confidence)%")
                 .font(.caption)
                 .fontWeight(.semibold)
@@ -136,10 +137,10 @@ struct ConfidenceBadge: View {
                 .font(.caption2)
         }
         .foregroundColor(color)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
+        .padding(.horizontal, SupportTheme.Spacing.xs)
+        .padding(.vertical, SupportTheme.Spacing.xxs)
         .background(color.opacity(0.1))
-        .cornerRadius(8)
+        .cornerRadius(SupportTheme.controlRadius)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(confidence) percent confidence, \(label)")
     }
@@ -151,16 +152,16 @@ struct FactorRow: View {
     let factor: MoodPredictionFactor
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: SupportTheme.Spacing.s) {
             Image(systemName: factor.icon)
                 .font(.caption)
-                .foregroundColor(factor.impactColor)
+                .foregroundColor(SupportTheme.accent)
                 .frame(width: 20)
                 .accessibilityHidden(true)
 
             Text(factor.description)
                 .font(.caption)
-                .foregroundColor(.primary)
+                .foregroundColor(SupportTheme.textPrimary)
                 .lineLimit(2)
 
             Spacer()
@@ -168,7 +169,7 @@ struct FactorRow: View {
             Text(factor.impactLabel)
                 .font(.caption)
                 .fontWeight(.medium)
-                .foregroundColor(factor.impactColor)
+                .foregroundColor(SupportTheme.accent)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(factor.description). Impact: \(factor.impactLabel)")
@@ -184,23 +185,24 @@ struct PredictionDetailSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: SupportTheme.Spacing.l) {
                     // Mood visualization
-                    VStack(spacing: 8) {
+                    VStack(spacing: SupportTheme.Spacing.xs) {
                         Image(systemName: prediction.moodIcon)
                             .font(.system(size: 60))
-                            .foregroundColor(prediction.moodColor)
+                            .foregroundColor(SupportTheme.accent)
 
                         Text(prediction.outlookLabel)
                             .font(.title)
+                            .accessibilityAddTraits(.isHeader)
                             .fontWeight(.bold)
 
-                        HStack(spacing: 4) {
+                        HStack(spacing: SupportTheme.Spacing.xxs) {
                             Text("Predicted mood:")
                             Text(String(format: "%.1f", prediction.predictedMoodValue))
                                 .fontWeight(.semibold)
                             Text("/ 10")
-                                .foregroundColor(.secondary)
+                                .foregroundColor(SupportTheme.textSecondary)
                         }
                         .font(.subheadline)
 
@@ -209,69 +211,69 @@ struct PredictionDetailSheet: View {
                             label: "\(prediction.confidenceLabel) confidence"
                         )
                     }
-                    .padding(.vertical, 24)
+                    .padding(.vertical, SupportTheme.Spacing.l)
 
                     // All factors
                     if !prediction.factors.isEmpty {
-                        VStack(alignment: .leading, spacing: 12) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                             Text("What's Influencing Your Day")
                                 .font(.headline)
+                                .accessibilityAddTraits(.isHeader)
 
                             ForEach(prediction.factors) { factor in
                                 DetailedFactorRow(factor: factor)
                             }
                         }
-                        .padding()
-                        .background(Color(.secondarySystemBackground))
-                        .cornerRadius(12)
+                        .supportCard()
                     }
 
                     // Accuracy info (if available)
                     if let accuracy = prediction.predictionAccuracy {
                         HStack {
                             Image(systemName: "chart.line.uptrend.xyaxis")
-                                .foregroundColor(.green)
+                                .foregroundColor(SupportTheme.accent)
 
                             Text("This model has \(Int(Double(truncating: accuracy as NSNumber) * 100))% accuracy")
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(SupportTheme.textSecondary)
                         }
                     }
 
                     // Tips section for low mood days
                     if prediction.isLowMoodPredicted {
-                        VStack(alignment: .leading, spacing: 12) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                             Text("Preparation Tips")
                                 .font(.headline)
+                                .accessibilityAddTraits(.isHeader)
 
                             TipRow(
                                 icon: "moon.zzz.fill",
-                                color: .purple,
+                                color: SupportTheme.accent,
                                 title: "Prioritize Rest",
                                 description: "Give yourself permission to take it easy today"
                             )
 
                             TipRow(
                                 icon: "figure.walk",
-                                color: .green,
+                                color: SupportTheme.accent,
                                 title: "Gentle Movement",
                                 description: "A short walk can boost your mood"
                             )
 
                             TipRow(
                                 icon: "person.2.fill",
-                                color: .blue,
+                                color: SupportTheme.accent,
                                 title: "Reach Out",
                                 description: "Connect with someone supportive"
                             )
                         }
-                        .padding()
-                        .background(Color(.secondarySystemBackground))
-                        .cornerRadius(12)
+                        .supportCard()
                     }
                 }
                 .padding()
             }
+            .supportScreen()
+            .foregroundStyle(SupportTheme.textPrimary)
             .navigationTitle("Today's Prediction")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -291,24 +293,24 @@ struct DetailedFactorRow: View {
     let factor: MoodPredictionFactor
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: SupportTheme.Spacing.s) {
             ZStack {
                 Circle()
-                    .fill(factor.impactColor.opacity(0.1))
+                    .fill(SupportTheme.accent.opacity(0.1))
                     .frame(width: 36, height: 36)
 
                 Image(systemName: factor.icon)
-                    .foregroundColor(factor.impactColor)
+                    .foregroundColor(SupportTheme.accent)
             }
             .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text(factor.description)
                     .font(.subheadline)
 
                 Text(factor.isPositive ? "Positive influence" : "Challenging factor")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(SupportTheme.textSecondary)
             }
 
             Spacer()
@@ -316,11 +318,13 @@ struct DetailedFactorRow: View {
             Text(factor.impactLabel)
                 .font(.subheadline)
                 .fontWeight(.semibold)
-                .foregroundColor(factor.impactColor)
+                .foregroundColor(SupportTheme.accent)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, SupportTheme.Spacing.xxs)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(factor.description). \(factor.isPositive ? "Positive influence" : "Challenging factor"). Impact: \(factor.impactLabel)")
+        .accessibilityLabel(
+            "\(factor.description). \(factor.isPositive ? "Positive influence" : "Challenging factor"). Impact: \(factor.impactLabel)"
+        )
     }
 }
 
@@ -333,21 +337,21 @@ struct TipRow: View {
     let description: String
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: SupportTheme.Spacing.s) {
             Image(systemName: icon)
                 .font(.title3)
                 .foregroundColor(color)
                 .frame(width: 32)
                 .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text(title)
                     .font(.subheadline)
                     .fontWeight(.medium)
 
                 Text(description)
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(SupportTheme.textSecondary)
             }
         }
         .accessibilityElement(children: .combine)
@@ -358,7 +362,7 @@ struct TipRow: View {
 // MARK: - Preview
 
 #Preview {
-    VStack(spacing: 20) {
+    VStack(spacing: SupportTheme.Spacing.l) {
         // Good outlook
         MoodPredictionCard(
             prediction: MoodPrediction(
@@ -368,9 +372,11 @@ struct TipRow: View {
                 predictedMood: 7.2,
                 confidence: 0.78,
                 factors: [
-                    MoodPredictionFactor(factor: "sleep_hours", impact: 0.8, description: "Good sleep: 7.5h last night"),
-                    MoodPredictionFactor(factor: "streak", impact: 0.3, description: "5-day streak is providing stability"),
-                    MoodPredictionFactor(factor: "day_of_week", impact: 0.2, description: "Fridays are usually better for you")
+                    MoodPredictionFactor(
+                        factor: "sleep_hours", impact: 0.8, description: "Good sleep: 7.5h last night"),
+
+                    MoodPredictionFactor(
+                        factor: "day_of_week", impact: 0.2, description: "Fridays are usually better for you"),
                 ],
                 modelVersion: "v1.0",
                 featuresUsed: nil as [String: AnyCodableValue]?,
@@ -392,8 +398,10 @@ struct TipRow: View {
                 confidence: 0.65,
                 factors: [
                     MoodPredictionFactor(factor: "sleep_hours", impact: -1.2, description: "Only 5h sleep last night"),
-                    MoodPredictionFactor(factor: "mood_trend", impact: -0.5, description: "Your mood has been trending down"),
-                    MoodPredictionFactor(factor: "day_of_week", impact: -0.3, description: "Mondays tend to be harder for you")
+                    MoodPredictionFactor(
+                        factor: "mood_trend", impact: -0.5, description: "Your mood has been trending down"),
+                    MoodPredictionFactor(
+                        factor: "day_of_week", impact: -0.3, description: "Mondays tend to be harder for you"),
                 ],
                 modelVersion: "v1.0",
                 featuresUsed: nil as [String: AnyCodableValue]?,
@@ -406,5 +414,5 @@ struct TipRow: View {
         )
     }
     .padding()
-    .background(Color(.systemGroupedBackground))
+    .background(SupportTheme.canvas)
 }

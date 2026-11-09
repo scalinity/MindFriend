@@ -5,6 +5,7 @@ import SwiftUI
 
 /// Post-intervention rating and mood capture
 struct SOSCheckInView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject var container: DependencyContainer
 
     var sosCoordinator: SOSCoordinator {
@@ -17,42 +18,40 @@ struct SOSCheckInView: View {
     @State private var moodAfter: Int = 3
 
     var body: some View {
-        VStack(spacing: 32) {
+        VStack(spacing: SupportTheme.Spacing.xl) {
             // Header
-            VStack(spacing: 12) {
+            VStack(spacing: SupportTheme.Spacing.s) {
                 Image(systemName: "heart.circle.fill")
                     .font(.system(size: 60))
                     .foregroundStyle(
-                        LinearGradient(
-                            colors: [.cyan, .blue],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
+                        SupportTheme.surface
                     )
 
                 Text("You did great")
                     .font(.title)
+                    .accessibilityAddTraits(.isHeader)
                     .fontWeight(.bold)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(SupportTheme.textPrimary)
 
                 Text("Taking a moment to breathe takes courage.")
                     .font(.body)
-                    .foregroundStyle(.white.opacity(0.8))
+                    .foregroundStyle(SupportTheme.textPrimary.opacity(0.8))
                     .multilineTextAlignment(.center)
             }
-            .padding(.top, 60)
+            .padding(.top, SupportTheme.Spacing.xl)
 
             Divider()
-                .background(Color.white.opacity(0.2))
-                .padding(.horizontal, 40)
+                .background(SupportTheme.textPrimary.opacity(0.2))
+                .padding(.horizontal, SupportTheme.Spacing.xl)
 
             // Rating section
-            VStack(spacing: 16) {
+            VStack(spacing: SupportTheme.Spacing.m) {
                 Text("Was this helpful?")
                     .font(.headline)
-                    .foregroundStyle(.white)
+                    .accessibilityAddTraits(.isHeader)
+                    .foregroundStyle(SupportTheme.textPrimary)
 
-                HStack(spacing: 12) {
+                HStack(spacing: SupportTheme.Spacing.s) {
                     ForEach(1...5, id: \.self) { rating in
                         Button {
                             helpfulnessRating = rating
@@ -60,7 +59,9 @@ struct SOSCheckInView: View {
                         } label: {
                             Image(systemName: rating <= helpfulnessRating ? "star.fill" : "star")
                                 .font(.system(size: 32))
-                                .foregroundStyle(rating <= helpfulnessRating ? .yellow : .white.opacity(0.3))
+                                .foregroundStyle(
+                                    rating <= helpfulnessRating
+                                        ? SupportTheme.Celebration.gold : SupportTheme.textPrimary.opacity(0.3))
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("\(rating) star\(rating == 1 ? "" : "s")")
@@ -70,12 +71,13 @@ struct SOSCheckInView: View {
             }
 
             // Mood after
-            VStack(spacing: 16) {
+            VStack(spacing: SupportTheme.Spacing.m) {
                 Text("How do you feel now?")
                     .font(.headline)
-                    .foregroundStyle(.white)
+                    .accessibilityAddTraits(.isHeader)
+                    .foregroundStyle(SupportTheme.textPrimary)
 
-                HStack(spacing: 16) {
+                HStack(spacing: SupportTheme.Spacing.m) {
                     ForEach(1...5, id: \.self) { mood in
                         Button {
                             moodAfter = mood
@@ -83,7 +85,7 @@ struct SOSCheckInView: View {
                         } label: {
                             Text(moodEmoji(for: mood))
                                 .font(.system(size: 36))
-                                .scaleEffect(moodAfter == mood ? 1.2 : 1.0)
+                                .scaleEffect(reduceMotion ? 1 : (moodAfter == mood ? 1.2 : 1.0))
                                 .opacity(moodAfter == mood ? 1.0 : 0.5)
                         }
                         .buttonStyle(.plain)
@@ -96,17 +98,17 @@ struct SOSCheckInView: View {
             Spacer()
 
             // Encouragement
-            VStack(spacing: 8) {
+            VStack(spacing: SupportTheme.Spacing.xs) {
                 Text("Remember: You can use the SOS button anytime.")
                     .font(.subheadline)
-                    .foregroundStyle(.white.opacity(0.7))
+                    .foregroundStyle(SupportTheme.textPrimary.opacity(0.7))
 
                 Text("We're always here. 💙")
                     .font(.subheadline)
-                    .foregroundStyle(.white.opacity(0.7))
+                    .foregroundStyle(SupportTheme.textPrimary.opacity(0.7))
             }
             .multilineTextAlignment(.center)
-            .padding(.horizontal, 40)
+            .padding(.horizontal, SupportTheme.Spacing.xl)
 
             // Complete button
             Button {
@@ -114,33 +116,22 @@ struct SOSCheckInView: View {
             } label: {
                 Text("Back to Home")
                     .font(.body.weight(.semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(SupportTheme.textPrimary)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
+                    .padding(.vertical, SupportTheme.Spacing.m)
                     .background(
-                        LinearGradient(
-                            colors: [.blue, .purple],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
+                        SupportTheme.surface
                     )
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
             }
-            .padding(.horizontal, 24)
-            .padding(.bottom, 40)
+            .padding(.horizontal, SupportTheme.Spacing.l)
+            .padding(.bottom, SupportTheme.Spacing.xl)
             .disabled(helpfulnessRating == 0)
             .opacity(helpfulnessRating == 0 ? 0.5 : 1.0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(
-            LinearGradient(
-                colors: [
-                    Color(red: 0.12, green: 0.15, blue: 0.3),
-                    Color(red: 0.08, green: 0.1, blue: 0.2)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
+            SupportTheme.surface
         )
     }
 

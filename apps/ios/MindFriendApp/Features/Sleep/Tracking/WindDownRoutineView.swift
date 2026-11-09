@@ -2,6 +2,7 @@ import SwiftUI
 
 /// Wind-down routine view for guided bedtime preparation
 struct WindDownRoutineView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var dependencies: DependencyContainer
     @StateObject private var viewModel = WindDownRoutineViewModel()
@@ -17,6 +18,8 @@ struct WindDownRoutineView: View {
                     setupView
                 }
             }
+            .supportScreen()
+            .foregroundStyle(SupportTheme.textPrimary)
             .navigationTitle("Wind-Down Routine")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -36,10 +39,10 @@ struct WindDownRoutineView: View {
 
     @ViewBuilder
     private var loadingView: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             ProgressView()
             Text("Creating your routine...")
-                .foregroundColor(.secondary)
+                .foregroundColor(SupportTheme.textSecondary)
         }
     }
 
@@ -48,25 +51,27 @@ struct WindDownRoutineView: View {
     @ViewBuilder
     private var setupView: some View {
         ScrollView {
-            VStack(spacing: 24) {
+            VStack(spacing: SupportTheme.Spacing.l) {
                 Image(systemName: "moon.stars.fill")
                     .font(.system(size: 60))
-                    .foregroundColor(.purple)
+                    .foregroundColor(SupportTheme.accent)
 
                 Text("Prepare for Better Sleep")
                     .font(.title2)
+                    .accessibilityAddTraits(.isHeader)
                     .fontWeight(.semibold)
 
                 Text("A personalized wind-down routine helps you relax and prepare for restful sleep")
                     .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(SupportTheme.textSecondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal)
 
                 // Duration Picker
-                VStack(spacing: 12) {
+                VStack(spacing: SupportTheme.Spacing.s) {
                     Text("How much time do you have?")
                         .font(.headline)
+                        .accessibilityAddTraits(.isHeader)
 
                     Picker("Duration", selection: $viewModel.durationMinutes) {
                         Text("15 min").tag(15)
@@ -78,8 +83,8 @@ struct WindDownRoutineView: View {
                     .pickerStyle(.segmented)
                 }
                 .padding()
-                .background(Color(.systemGray6))
-                .cornerRadius(12)
+                .background(SupportTheme.field)
+                .cornerRadius(SupportTheme.controlRadius)
 
                 // Start Button
                 Button {
@@ -89,11 +94,11 @@ struct WindDownRoutineView: View {
                 } label: {
                     Text("Start Wind-Down")
                         .fontWeight(.semibold)
-                        .foregroundColor(.white)
+                        .foregroundColor(SupportTheme.onAccent)
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(Color.accentColor)
-                        .cornerRadius(12)
+                        .background(SupportTheme.accent)
+                        .cornerRadius(SupportTheme.controlRadius)
                 }
             }
             .padding()
@@ -105,7 +110,7 @@ struct WindDownRoutineView: View {
     @ViewBuilder
     private func routineView(_ session: WindDownSession) -> some View {
         ScrollView {
-            VStack(spacing: 20) {
+            VStack(spacing: SupportTheme.Spacing.l) {
                 // Progress
                 progressSection(session)
 
@@ -130,89 +135,95 @@ struct WindDownRoutineView: View {
 
     @ViewBuilder
     private func progressSection(_ session: WindDownSession) -> some View {
-        VStack(spacing: 12) {
+        VStack(spacing: SupportTheme.Spacing.s) {
             Text("\(session.routine.filter { $0.completed }.count)/\(session.routine.count) Activities")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
                     Rectangle()
-                        .fill(Color(.systemGray4))
+                        .fill(SupportTheme.field)
                         .frame(height: 8)
-                        .cornerRadius(4)
+                        .cornerRadius(SupportTheme.controlRadius)
 
                     Rectangle()
-                        .fill(Color.accentColor)
+                        .fill(SupportTheme.accent)
                         .frame(width: geometry.size.width * session.progress, height: 8)
-                        .cornerRadius(4)
-                        .animation(.spring(), value: session.progress)
+                        .cornerRadius(SupportTheme.controlRadius)
+                        .id(reduceMotion ? session.progress : 0)
+                        .transition(.opacity)
+                        .animation(reduceMotion ? .easeInOut(duration: 0.2) : (.spring()), value: session.progress)
                 }
             }
             .frame(height: 8)
         }
         .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(12)
+        .background(SupportTheme.field)
+        .cornerRadius(SupportTheme.controlRadius)
     }
 
     @ViewBuilder
     private func currentActivitySection(_ activity: WindDownActivity) -> some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             Image(systemName: activity.icon)
                 .font(.system(size: 50))
-                .foregroundColor(.accentColor)
+                .foregroundColor(SupportTheme.accent)
 
             Text(activity.name)
                 .font(.title2)
+                .accessibilityAddTraits(.isHeader)
                 .fontWeight(.semibold)
 
             Text("\(activity.durationMinutes) minutes")
                 .font(.subheadline)
-                .foregroundColor(.secondary)
+                .foregroundColor(SupportTheme.textSecondary)
 
             Button {
                 viewModel.completeActivity(activity, trackingService: dependencies.sleepTrackingService)
             } label: {
                 Text("Complete")
                     .fontWeight(.semibold)
-                    .foregroundColor(.white)
+                    .foregroundColor(SupportTheme.onAccent)
                     .frame(maxWidth: .infinity)
                     .padding()
-                    .background(Color.green)
-                    .cornerRadius(12)
+                    .background(SupportTheme.accent)
+                    .cornerRadius(SupportTheme.controlRadius)
             }
         }
         .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(12)
+        .background(SupportTheme.field)
+        .cornerRadius(SupportTheme.controlRadius)
     }
 
     @ViewBuilder
     private var completedSection: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 60))
-                .foregroundColor(.green)
+                .foregroundColor(SupportTheme.accent)
 
             Text("Routine Complete!")
                 .font(.title2)
+                .accessibilityAddTraits(.isHeader)
                 .fontWeight(.semibold)
 
             Text("Great job preparing for sleep. Sweet dreams!")
                 .font(.subheadline)
-                .foregroundColor(.secondary)
+                .foregroundColor(SupportTheme.textSecondary)
                 .multilineTextAlignment(.center)
         }
         .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(12)
+        .background(SupportTheme.field)
+        .cornerRadius(SupportTheme.controlRadius)
     }
 
     @ViewBuilder
     private func activitiesListSection(_ session: WindDownSession) -> some View {
-        VStack(spacing: 12) {
+        VStack(spacing: SupportTheme.Spacing.s) {
             Text("Activities")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             ForEach(session.routine) { activity in
@@ -223,37 +234,38 @@ struct WindDownRoutineView: View {
 
     @ViewBuilder
     private func activityRow(_ activity: WindDownActivity) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: SupportTheme.Spacing.s) {
             Image(systemName: activity.completed ? "checkmark.circle.fill" : "circle")
-                .foregroundColor(activity.completed ? .green : .gray)
+                .foregroundColor(activity.completed ? SupportTheme.accent : SupportTheme.textSecondary)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text(activity.name)
                     .font(.subheadline)
                     .fontWeight(.medium)
 
                 Text("\(activity.durationMinutes) min • \(activity.type.capitalized)")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(SupportTheme.textSecondary)
             }
 
             Spacer()
 
             Image(systemName: activity.icon)
-                .foregroundColor(.secondary)
+                .foregroundColor(SupportTheme.textSecondary)
         }
         .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(8)
+        .background(SupportTheme.field)
+        .cornerRadius(SupportTheme.controlRadius)
     }
 
     @ViewBuilder
     private var feedbackSection: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             Text("How was the routine?")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
-            HStack(spacing: 16) {
+            HStack(spacing: SupportTheme.Spacing.m) {
                 ForEach(1...5, id: \.self) { rating in
                     Button {
                         viewModel.feedbackRating = rating
@@ -263,14 +275,18 @@ struct WindDownRoutineView: View {
                     } label: {
                         Image(systemName: rating <= viewModel.feedbackRating ? "star.fill" : "star")
                             .font(.title2)
-                            .foregroundColor(rating <= viewModel.feedbackRating ? .yellow : .gray)
+                            .foregroundColor(
+                                rating <= viewModel.feedbackRating
+                                    ? SupportTheme.Celebration.gold : SupportTheme.textSecondary)
                     }
+                    .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                    .accessibilityLabel("Rate \(rating) out of 5")
                 }
             }
         }
         .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(12)
+        .background(SupportTheme.field)
+        .cornerRadius(SupportTheme.controlRadius)
     }
 }
 

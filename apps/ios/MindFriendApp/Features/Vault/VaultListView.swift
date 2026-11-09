@@ -21,6 +21,8 @@ struct VaultListView: View {
                 unavailableView(reason: reason)
             }
         }
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle("Private Vault")
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
@@ -64,7 +66,9 @@ struct VaultListView: View {
                 }
             }
         } message: {
-            Text("This will permanently delete all vault entries and create a new encryption key. This action cannot be undone.")
+            Text(
+                "This will permanently delete all vault entries and create a new encryption key. This action cannot be undone."
+            )
         }
         .onDisappear {
             // Lock vault when leaving the view
@@ -75,24 +79,25 @@ struct VaultListView: View {
     // MARK: - Locked State View
 
     private var lockedView: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: SupportTheme.Spacing.l) {
             Spacer()
 
             Image(systemName: "lock.shield.fill")
                 .font(.system(size: 80))
-                .foregroundStyle(.blue)
+                .foregroundStyle(SupportTheme.accent)
                 .accessibilityHidden(true)
 
-            VStack(spacing: 8) {
+            VStack(spacing: SupportTheme.Spacing.xs) {
                 Text("Private Vault")
                     .font(.title)
+                    .accessibilityAddTraits(.isHeader)
                     .fontWeight(.bold)
 
                 Text("Your entries are encrypted and stored only on this device. They are never synced or used by AI.")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
+                    .padding(.horizontal, SupportTheme.Spacing.xl)
             }
 
             Button {
@@ -104,11 +109,11 @@ struct VaultListView: View {
                     .font(.headline)
                     .frame(maxWidth: .infinity)
                     .padding()
-                    .background(.blue)
-                    .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .background(SupportTheme.accent)
+                    .foregroundStyle(SupportTheme.onAccent)
+                    .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
             }
-            .padding(.horizontal, 32)
+            .padding(.horizontal, SupportTheme.Spacing.xl)
             .accessibilityHint("Authenticate to access your private vault entries")
 
             Spacer()
@@ -122,7 +127,7 @@ struct VaultListView: View {
             // Search bar
             HStack {
                 Image(systemName: "magnifyingglass")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                 TextField("Search entries", text: $viewModel.searchText)
                     .textFieldStyle(.plain)
 
@@ -131,16 +136,16 @@ struct VaultListView: View {
                         viewModel.searchText = ""
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                     .accessibilityLabel("Clear search")
                 }
             }
-            .padding(12)
-            .background(Color(.systemGray6))
-            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .padding(SupportTheme.Spacing.s)
+            .background(SupportTheme.field)
+            .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
             .padding(.horizontal)
-            .padding(.vertical, 8)
+            .padding(.vertical, SupportTheme.Spacing.xs)
 
             if viewModel.isLoading {
                 Spacer()
@@ -187,23 +192,26 @@ struct VaultListView: View {
     // MARK: - Empty State
 
     private var emptyStateView: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             Spacer()
 
             Image(systemName: viewModel.searchText.isEmpty ? "book.closed" : "magnifyingglass")
                 .font(.system(size: 60))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .accessibilityHidden(true)
 
             Text(viewModel.searchText.isEmpty ? "No entries yet" : "No matching entries")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
-            Text(viewModel.searchText.isEmpty
-                 ? "Tap + to create your first private journal entry"
-                 : "Try a different search term")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+            Text(
+                viewModel.searchText.isEmpty
+                    ? "Tap + to create your first private journal entry"
+                    : "Try a different search term"
+            )
+            .font(.subheadline)
+            .foregroundStyle(SupportTheme.textSecondary)
+            .multilineTextAlignment(.center)
 
             if viewModel.searchText.isEmpty {
                 Button {
@@ -212,13 +220,13 @@ struct VaultListView: View {
                 } label: {
                     Label("Create Entry", systemImage: "plus")
                         .font(.headline)
-                        .padding(.horizontal, 24)
-                        .padding(.vertical, 12)
-                        .background(.blue)
-                        .foregroundStyle(.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .padding(.horizontal, SupportTheme.Spacing.l)
+                        .padding(.vertical, SupportTheme.Spacing.s)
+                        .background(SupportTheme.accent)
+                        .foregroundStyle(SupportTheme.onAccent)
+                        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
                 }
-                .padding(.top, 8)
+                .padding(.top, SupportTheme.Spacing.xs)
             }
 
             Spacer()
@@ -229,24 +237,27 @@ struct VaultListView: View {
     // MARK: - Key Missing State
 
     private var keyMissingView: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: SupportTheme.Spacing.l) {
             Spacer()
 
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 60))
-                .foregroundStyle(.orange)
+                .foregroundStyle(SupportTheme.accent)
                 .accessibilityHidden(true)
 
-            VStack(spacing: 8) {
+            VStack(spacing: SupportTheme.Spacing.xs) {
                 Text("Encryption Key Not Found")
                     .font(.title2)
+                    .accessibilityAddTraits(.isHeader)
                     .fontWeight(.bold)
 
-                Text("Your vault entries cannot be recovered because the encryption key is missing. This may happen if you removed your device passcode or restored from a backup.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
+                Text(
+                    "Your vault entries cannot be recovered because the encryption key is missing. This may happen if you removed your device passcode or restored from a backup."
+                )
+                .font(.subheadline)
+                .foregroundStyle(SupportTheme.textSecondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, SupportTheme.Spacing.xl)
             }
 
             Button {
@@ -254,13 +265,14 @@ struct VaultListView: View {
             } label: {
                 Text("Reset Vault")
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
                     .frame(maxWidth: .infinity)
                     .padding()
-                    .background(.orange)
-                    .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .background(SupportTheme.accent)
+                    .foregroundStyle(SupportTheme.onAccent)
+                    .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
             }
-            .padding(.horizontal, 32)
+            .padding(.horizontal, SupportTheme.Spacing.xl)
 
             Spacer()
         }
@@ -269,24 +281,25 @@ struct VaultListView: View {
     // MARK: - Unavailable State
 
     private func unavailableView(reason: String) -> some View {
-        VStack(spacing: 24) {
+        VStack(spacing: SupportTheme.Spacing.l) {
             Spacer()
 
             Image(systemName: "lock.slash")
                 .font(.system(size: 60))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .accessibilityHidden(true)
 
-            VStack(spacing: 8) {
+            VStack(spacing: SupportTheme.Spacing.xs) {
                 Text("Vault Unavailable")
                     .font(.title2)
+                    .accessibilityAddTraits(.isHeader)
                     .fontWeight(.bold)
 
                 Text(reason)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
+                    .padding(.horizontal, SupportTheme.Spacing.xl)
             }
 
             Spacer()
@@ -300,23 +313,24 @@ struct VaultEntryRow: View {
     let entry: VaultEntry
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             Text(entry.displayTitle)
                 .font(.headline)
-                .lineLimit(1)
+                .accessibilityAddTraits(.isHeader)
+                .fixedSize(horizontal: false, vertical: true)
 
             if entry.title != nil && !entry.body.isEmpty {
                 Text(entry.body)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .lineLimit(2)
             }
 
             Text(entry.updatedAt, style: .relative)
                 .font(.caption)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, SupportTheme.Spacing.xxs)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(entry.displayTitle), updated \(entry.updatedAt.formatted())")
     }

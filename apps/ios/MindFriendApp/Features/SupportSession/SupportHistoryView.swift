@@ -21,8 +21,10 @@ private final class SupportHistoryModel: ObservableObject {
         let includeStandalone: Bool
     }
 
-    func configure(_ scope: Scope, coordinator: SupportSessionCoordinator, appState: AppState,
-                   container: DependencyContainer) {
+    func configure(
+        _ scope: Scope, coordinator: SupportSessionCoordinator, appState: AppState,
+        container: DependencyContainer
+    ) {
         guard self.scope != scope else { return }
         loader?.invalidate()
         self.scope = scope
@@ -48,8 +50,9 @@ private final class SupportHistoryModel: ObservableObject {
                     await MainActor.run {
                         // App owner, auth service owner and the SDK session owner must all still be this account.
                         guard let appState, let container, appState.currentUser?.id == ownerID,
-                              appState.accountEpoch == epoch, container.supabaseAuthService.userId == ownerID,
-                              container.supabaseClient.auth.currentSession?.user.id == ownerID else { return nil }
+                            appState.accountEpoch == epoch, container.supabaseAuthService.userId == ownerID,
+                            container.supabaseClient.auth.currentSession?.user.id == ownerID
+                        else { return nil }
                         return owner
                     }
                 })
@@ -67,9 +70,10 @@ struct SupportHistoryView: View {
     @StateObject private var model = SupportHistoryModel()
 
     private var scope: SupportHistoryModel.Scope {
-        .init(identity: coordinator.identity, coordinatorID: ObjectIdentifier(coordinator),
-              syncID: container.supportSync.map(ObjectIdentifier.init), accountEpoch: appState.accountEpoch,
-              includeStandalone: !unfinishedOnly)
+        .init(
+            identity: coordinator.identity, coordinatorID: ObjectIdentifier(coordinator),
+            syncID: container.supportSync.map(ObjectIdentifier.init), accountEpoch: appState.accountEpoch,
+            includeStandalone: !unfinishedOnly)
     }
 
     var body: some View {
@@ -94,14 +98,14 @@ private struct SupportHistoryContent: View {
     @EnvironmentObject private var coordinator: SupportSessionCoordinator
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var deepLinkRouter: DeepLinkRouter
-    @Environment(\.dynamicTypeSize) private var typeSize
     @State private var filter = SupportHistoryFilter.all
     @State private var query = ""
     @State private var error: String?
 
     private var items: [SupportHistoryItem] {
-        SupportHistoryMerge.items(journal: coordinator.journal, cloud: loader.cloudRows, standalone: loader.standalone,
-                                  filter: filter, query: query, unfinishedOnly: unfinishedOnly)
+        SupportHistoryMerge.items(
+            journal: coordinator.journal, cloud: loader.cloudRows, standalone: loader.standalone,
+            filter: filter, query: query, unfinishedOnly: unfinishedOnly)
     }
 
     var body: some View {
@@ -112,6 +116,7 @@ private struct SupportHistoryContent: View {
             statusSection
             if groups.isEmpty {
                 Section { emptyState }
+                    .listRowBackground(SupportTheme.surface)
             }
             ForEach(groups) { group in
                 Section {
@@ -123,6 +128,7 @@ private struct SupportHistoryContent: View {
                         Text("Undated")
                     }
                 }
+                .listRowBackground(SupportTheme.surface)
             }
             if loader.hasMore {
                 Section {
@@ -131,19 +137,28 @@ private struct SupportHistoryContent: View {
                     } label: {
                         HStack {
                             Text("Load older")
-                            if loader.isLoading { Spacer(); ProgressView() }
+                            if loader.isLoading {
+                                Spacer()
+                                ProgressView()
+                            }
                         }
                         .frame(minHeight: SupportTheme.minimumTarget)
                     }
                     .disabled(loader.isLoading)
                 }
+                .listRowBackground(SupportTheme.surface)
             }
             if let error { Section { Label(error, systemImage: "exclamationmark.circle") } }
         }
         .supportCanvas()
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle(unfinishedOnly ? "Unfinished sessions" : "History")
         .navigationBarTitleDisplayMode(.inline)
-        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: Text("Search titles and saved steps"))
+        .searchable(
+            text: $query, placement: .navigationBarDrawer(displayMode: .always),
+            prompt: Text("Search titles and saved steps")
+        )
         .refreshable { await loader.reset() }
     }
 
@@ -156,29 +171,27 @@ private struct SupportHistoryContent: View {
                 Text("The session was removed from this device. Its account copy has not been confirmed removed.")
                 Button("Try removing the account copy again") {
                     Task {
-                        do { try await coordinator.retryDeletion(failure.sessionID) }
-                        catch { self.error = SupportSessionCoordinator.message(for: error) }
+                        do { try await coordinator.retryDeletion(failure.sessionID) } catch {
+                            self.error = SupportSessionCoordinator.message(for: error)
+                        }
                     }
                 }
                 .frame(minHeight: SupportTheme.minimumTarget)
             }
+            .listRowBackground(SupportTheme.surface)
         }
     }
 
     private var filterSection: some View {
         Section {
-            if typeSize.isAccessibilitySize {
-                Picker("Show", selection: $filter) {
-                    ForEach(SupportHistoryFilter.allCases) { Text($0.title).tag($0) }
-                }
-                .pickerStyle(.menu)
-            } else {
-                Picker("Show", selection: $filter) {
-                    ForEach(SupportHistoryFilter.allCases) { Text($0.title).tag($0) }
-                }
-                .pickerStyle(.segmented)
+            Picker("Show", selection: $filter) {
+                ForEach(SupportHistoryFilter.allCases) { Text($0.title).tag($0) }
             }
+            .pickerStyle(.menu)
+            .frame(minHeight: SupportTheme.minimumTarget)
+
         }
+        .listRowBackground(SupportTheme.surface)
     }
 
     private var statusSection: some View {
@@ -194,14 +207,20 @@ private struct SupportHistoryContent: View {
             if loader.activeSources.isEmpty {
                 Label("Account history isn't available right now.", systemImage: "icloud.slash")
             } else if loader.isLoading {
-                HStack { ProgressView(); Text("Loading account history…").padding(.leading, 8) }
-                    .accessibilityElement(children: .combine)
+                HStack {
+                    ProgressView()
+                    Text("Loading account history…").padding(.leading, SupportTheme.Spacing.xs)
+                }
+                .accessibilityElement(children: .combine)
             }
         } footer: {
-            Text(unfinishedOnly
-                 ? "Older unfinished sessions in your account appear after you choose Load older."
-                 : "Search covers titles and saved steps on this device. Account-only sessions are matched by title and by the activity and saved-step counts your account reports.")
+            Text(
+                unfinishedOnly
+                    ? "Older unfinished sessions in your account appear after you choose Load older."
+                    : "Search covers titles and saved steps on this device. Account-only sessions are matched by title and by the activity and saved-step counts your account reports."
+            )
         }
+        .listRowBackground(SupportTheme.surface)
     }
 
     @ViewBuilder
@@ -223,14 +242,24 @@ private struct SupportHistoryContent: View {
     private func row(_ item: SupportHistoryItem) -> some View {
         switch item.kind {
         case .session:
-            NavigationLink { SupportHistoryDetailView(sessionID: item.recordID, accountRevision: item.remoteRevision) } label: { SupportHistoryRowLabel(item: item) }
+            NavigationLink {
+                SupportHistoryDetailView(sessionID: item.recordID, accountRevision: item.remoteRevision)
+            } label: {
+                SupportHistoryRowLabel(item: item)
+            }
         case .journal:
-            NavigationLink { JournalDetailView(entryId: item.recordID.uuidString) } label: { SupportHistoryRowLabel(item: item) }
+            NavigationLink {
+                JournalDetailView(entryId: item.recordID.uuidString)
+            } label: {
+                SupportHistoryRowLabel(item: item)
+            }
         case .conversation:
             Button {
                 appState.selectedTab = .chat
                 deepLinkRouter.handleRoute(.chat(conversationId: item.recordID.uuidString), appState: appState)
-            } label: { SupportHistoryRowLabel(item: item) }
+            } label: {
+                SupportHistoryRowLabel(item: item)
+            }
             .buttonStyle(.plain)
         case .exercise:
             // The app has no detail screen for a finished exercise record, so this row is informational only.
@@ -251,7 +280,8 @@ private struct SupportHistoryRowLabel: View {
                     .font(.footnote).foregroundStyle(SupportTheme.textSecondary)
             }
             if item.kind == .session, let updated = item.updatedAt, let created = item.date,
-               updated.timeIntervalSince(created) > 60 {
+                updated.timeIntervalSince(created) > 60
+            {
                 Text("Updated \(updated.formatted(date: .abbreviated, time: .shortened))")
                     .font(.footnote).foregroundStyle(SupportTheme.textSecondary)
             }
@@ -389,7 +419,9 @@ struct SupportHistoryDetailView: View {
     }
 
     private func capture() -> Guard {
-        Guard(coordinator: coordinator, identity: coordinator.identity, epoch: appState.accountEpoch, sync: container.supportSync)
+        Guard(
+            coordinator: coordinator, identity: coordinator.identity, epoch: appState.accountEpoch,
+            sync: container.supportSync)
     }
 
     private func holds(_ g: Guard) -> Bool {
@@ -404,23 +436,35 @@ struct SupportHistoryDetailView: View {
             if let session {
                 sessionSections(session)
             } else if isLoadingRemote {
-                Section { HStack { ProgressView(); Text("Loading from your account…").padding(.leading, 8) } }
+                Section {
+                    HStack {
+                        ProgressView()
+                        Text("Loading from your account…").padding(.leading, SupportTheme.Spacing.xs)
+                    }
+                }
+                .listRowBackground(SupportTheme.surface)
             } else {
                 Section {
                     SupportUnavailableState(
                         title: "Session unavailable",
-                        message: loadError ?? "This session isn't on this device or in your account. It may have been deleted.",
+                        message: loadError
+                            ?? "This session isn't on this device or in your account. It may have been deleted.",
                         actionTitle: loadError == nil ? "Back to History" : "Try again",
                         action: { if loadError == nil { dismiss() } else { loadAttempt = UUID() } })
                 }
+                .listRowBackground(SupportTheme.surface)
             }
             if let notice { Section { Label(notice, systemImage: "info.circle") } }
             if let loadError, session != nil { Section { Label(loadError, systemImage: "exclamationmark.circle") } }
             if let message = actionError { Section { Label(message, systemImage: "exclamationmark.circle") } }
-            if let message = coordinator.localSaveError { Section { Label(message, systemImage: "exclamationmark.circle") } }
+            if let message = coordinator.localSaveError {
+                Section { Label(message, systemImage: "exclamationmark.circle") }
+            }
         }
         .disabled(isWorking)
         .supportCanvas()
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle(session?.title ?? "Session")
         .navigationBarTitleDisplayMode(.inline)
         .task(id: loadAttempt) { await refreshIfNeeded() }
@@ -429,7 +473,9 @@ struct SupportHistoryDetailView: View {
             TextField("Title", text: $renameText)
             Button("Save") { rename() }
             Button("Cancel", role: .cancel) {}
-        } message: { Text("Up to \(SupportSessionLimits.titleMaxCharacters) characters.") }
+        } message: {
+            Text("Up to \(SupportSessionLimits.titleMaxCharacters) characters.")
+        }
         .alert("Close this session?", isPresented: $showClose) {
             Button("Save and leave") { run(leaveAfter: true) { try await coordinator.doneForNow(sessionID) } }
             Button("End unfinished work and close", role: .destructive) { run { try await closeSession(sessionID) } }
@@ -443,7 +489,9 @@ struct SupportHistoryDetailView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This removes the session, its saved steps and its activity notes from this device and, once synced, your account. A conversation, exercise record or journal entry connected to it is a separate record: it stays in its own history until you delete it there.")
+            Text(
+                "This removes the session, its saved steps and its activity notes from this device and, once synced, your account. A conversation, exercise record or journal entry connected to it is a separate record: it stays in its own history until you delete it there."
+            )
         }
     }
 
@@ -465,15 +513,19 @@ struct SupportHistoryDetailView: View {
             }
             if let previous = session.previousSessionID {
                 if coordinator.journal.sessions[previous] != nil {
-                    NavigationLink("Continued from an earlier session") { SupportHistoryDetailView(sessionID: previous) }
+                    NavigationLink("Continued from an earlier session") {
+                        SupportHistoryDetailView(sessionID: previous)
+                    }
                 } else {
                     Text("Continued from an earlier session")
                 }
             }
         }
+        .listRowBackground(SupportTheme.surface)
 
         if let concern = session.concern?.trimmingCharacters(in: .whitespacesAndNewlines), !concern.isEmpty {
             Section("What you brought") { Text(concern) }
+                .listRowBackground(SupportTheme.surface)
         }
 
         Section {
@@ -491,15 +543,21 @@ struct SupportHistoryDetailView: View {
                 }
             }
             Button("Context") { showContext = true }.frame(minHeight: SupportTheme.minimumTarget)
-            Button("Rename") { renameText = session.title; showRename = true }.frame(minHeight: SupportTheme.minimumTarget)
+            Button("Rename") {
+                renameText = session.title
+                showRename = true
+            }.frame(minHeight: SupportTheme.minimumTarget)
             if session.status == .open {
                 Button("Close session") { requestClose(session) }.frame(minHeight: SupportTheme.minimumTarget)
             }
             Button("Delete", role: .destructive) { showDelete = true }.frame(minHeight: SupportTheme.minimumTarget)
         }
 
+        .listRowBackground(SupportTheme.surface)
+
         ForEach(coordinator.journal.activities(in: sessionID)) { activity in
             Section(activity.templateKey.title) { activityRows(activity, session: session) }
+                .listRowBackground(SupportTheme.surface)
         }
 
         Section("Timeline") {
@@ -515,6 +573,8 @@ struct SupportHistoryDetailView: View {
                 .accessibilityElement(children: .combine)
             }
         }
+
+        .listRowBackground(SupportTheme.surface)
     }
 
     @ViewBuilder
@@ -525,7 +585,8 @@ struct SupportHistoryDetailView: View {
         }
         if let step = activity.step {
             VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
-                Text(SupportHistoryText.stepState(step.state)).font(.subheadline).foregroundStyle(SupportTheme.textSecondary)
+                Text(SupportHistoryText.stepState(step.state)).font(.subheadline).foregroundStyle(
+                    SupportTheme.textSecondary)
                 if !step.actionText.isEmpty { Text(step.actionText) }
                 if let confirmed = step.confirmedAt {
                     Text(confirmed.formatted(date: .abbreviated, time: .shortened))
@@ -568,7 +629,8 @@ struct SupportHistoryDetailView: View {
             switch SupportHistoryContinuation.plan(for: session, journal: coordinator.journal) {
             case .resumeActivity(let id):
                 try coordinator.selectSession(session.id)
-                try await coordinator.resume(id, origin: session.conversationID.map { .chat(conversationID: $0) } ?? .today)
+                try await coordinator.resume(
+                    id, origin: session.conversationID.map { .chat(conversationID: $0) } ?? .today)
             case .openConversation(let conversation):
                 try coordinator.selectSession(session.id)
                 openConversation(conversation, guard: g)
@@ -580,7 +642,8 @@ struct SupportHistoryDetailView: View {
             case .startLinkedSession(let previous, let scope):
                 // A new session; the old conversation is not reused. The blank Chat creates a conversation only
                 // when a message is deliberately sent.
-                let next = try await coordinator.createSession(conversationID: nil, previousSessionID: previous, scope: scope)
+                let next = try await coordinator.createSession(
+                    conversationID: nil, previousSessionID: previous, scope: scope)
                 guard holds(g) else { return }
                 try coordinator.selectSession(next.id)
                 appState.selectedTab = .chat
@@ -598,7 +661,8 @@ struct SupportHistoryDetailView: View {
     private func resume(_ activity: SupportActivity, session: SupportSession) {
         run {
             try coordinator.selectSession(session.id)
-            try await coordinator.resume(activity.id, origin: session.conversationID.map { .chat(conversationID: $0) } ?? .today)
+            try await coordinator.resume(
+                activity.id, origin: session.conversationID.map { .chat(conversationID: $0) } ?? .today)
         }
     }
 
@@ -635,9 +699,9 @@ struct SupportHistoryDetailView: View {
             do {
                 try await body()
                 if leaveAfter, holds(g) { dismiss() }
+            } catch is CancellationError {} catch {
+                if holds(g) { actionError = SupportSessionCoordinator.message(for: error) }
             }
-            catch is CancellationError { }
-            catch { if holds(g) { actionError = SupportSessionCoordinator.message(for: error) } }
         }
     }
 
@@ -650,9 +714,11 @@ struct SupportHistoryDetailView: View {
         if coordinator.journal.tombstones[sessionID] != nil { return }
         if let local {
             guard let accountRevision,
-                  let installed = coordinator.journal.serverRevisions[sessionID], accountRevision > installed else { return }
+                let installed = coordinator.journal.serverRevisions[sessionID], accountRevision > installed
+            else { return }
             guard local.syncStatus == .synced, !coordinator.journal.hasUnresolvedConflict(sessionID: sessionID) else {
-                notice = "A newer copy is in your account. Your changes on this device sync first; nothing here is overwritten."
+                notice =
+                    "A newer copy is in your account. Your changes on this device sync first; nothing here is overwritten."
                 return
             }
         }
@@ -698,7 +764,13 @@ struct SupportReadOnlyConversationView: View {
         List {
             switch phase {
             case .loading:
-                Section { HStack { ProgressView(); Text("Loading conversation…").padding(.leading, 8) } }
+                Section {
+                    HStack {
+                        ProgressView()
+                        Text("Loading conversation…").padding(.leading, SupportTheme.Spacing.xs)
+                    }
+                }
+                .listRowBackground(SupportTheme.surface)
             case .failed:
                 Section {
                     SupportUnavailableState(
@@ -706,9 +778,11 @@ struct SupportReadOnlyConversationView: View {
                         message: "It may have been deleted, or you may be offline. The session itself is unchanged.",
                         actionTitle: "Try again", action: { attempt = UUID() })
                 }
+                .listRowBackground(SupportTheme.surface)
             case .loaded:
                 if messages.isEmpty {
                     Section { Text("There are no messages to show.") }
+                        .listRowBackground(SupportTheme.surface)
                 } else {
                     Section {
                         ForEach(messages) { message in
@@ -720,25 +794,35 @@ struct SupportReadOnlyConversationView: View {
                             .listRowSeparator(.hidden)
                         }
                     } footer: {
-                        Text("Read only. Showing up to the latest 100 messages. Use “Continue as a new session” to talk about it again.")
+                        Text(
+                            "Read only. Showing up to the latest 100 messages. Use “Continue as a new session” to talk about it again."
+                        )
                     }
+                    .listRowBackground(SupportTheme.surface)
                 }
             }
         }
         .supportCanvas()
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .task(id: attempt) { await load() }
     }
 
     private func load() async {
-        guard let ownerID = appState.currentUser?.id else { phase = .failed; return }
+        guard let ownerID = appState.currentUser?.id else {
+            phase = .failed
+            return
+        }
         let epoch = appState.accountEpoch
         phase = .loading
         do {
-            let loaded = try await container.chatService.getMessages(conversationId: conversationID.uuidString, limit: 100)
+            let loaded = try await container.chatService.getMessages(
+                conversationId: conversationID.uuidString, limit: 100)
             guard !Task.isCancelled, appState.currentUser?.id == ownerID, appState.accountEpoch == epoch,
-                  container.supabaseAuthService.userId == ownerID else { return }
+                container.supabaseAuthService.userId == ownerID
+            else { return }
             messages = loaded
             phase = .loaded
         } catch is CancellationError {

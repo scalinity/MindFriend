@@ -87,18 +87,9 @@ final class MindFriendAppUITests: XCTestCase {
         let signInWithAppleButton = app.buttons["Sign in with Apple"]
         XCTAssertTrue(signInWithAppleButton.waitForExistence(timeout: 5))
 
-        // Check feature descriptions are visible
-        let features = [
-            "Daily wellness quests",
-            "AI-powered chat support",
-            "Track your mood journey",
-            "Connect with friends"
-        ]
-
-        for feature in features {
-            let featureText = app.staticTexts[feature]
-            XCTAssertTrue(featureText.exists, "Feature '\(feature)' should be visible")
-        }
+        // One calm line says what the app is, in place of a feature list.
+        let description = app.staticTexts["A quiet place to reflect, find support and care for your wellbeing."]
+        XCTAssertTrue(description.exists, "The sign-in description should be visible")
     }
 
     // MARK: - Accessibility Tests

@@ -9,29 +9,30 @@ import SwiftUI
 
 /// Step 3: Show skill progression system
 struct AchievementsSkillsStep: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let onComplete: () -> Void
 
     @State private var showSkills = false
 
     private let skills: [(icon: String, color: Color, name: String, level: Int, maxLevel: Int)] = [
-        ("wind", .cyan, "Breathing", 3, 5),
-        ("sparkles", .purple, "Meditation", 2, 5),
-        ("hand.raised.fill", .green, "Grounding", 1, 5),
-        ("figure.walk", .orange, "Movement", 4, 5)
+        ("wind", SupportTheme.accent, "Breathing", 3, 5),
+        ("sparkles", SupportTheme.accent, "Meditation", 2, 5),
+        ("hand.raised.fill", SupportTheme.accent, "Grounding", 1, 5),
+        ("figure.walk", SupportTheme.accent, "Movement", 4, 5),
     ]
 
     var body: some View {
         TutorialStepView(
             icon: "chart.bar.xaxis.ascending",
-            iconColor: .teal,
+            iconColor: SupportTheme.accent,
             headline: "Track Your Skills",
             subheadline: "Build mastery in different wellness areas. Each practice levels up your skills.",
             primaryLabel: "View Achievements",
             primaryAction: onComplete
         ) {
-            VStack(spacing: 8) {
+            VStack(spacing: SupportTheme.Spacing.xs) {
                 ForEach(Array(skills.enumerated()), id: \.element.name) { index, skill in
-                    HStack(spacing: 12) {
+                    HStack(spacing: SupportTheme.Spacing.s) {
                         // Icon
                         ZStack {
                             Circle()
@@ -42,33 +43,34 @@ struct AchievementsSkillsStep: View {
                         }
 
                         // Info
-                        VStack(alignment: .leading, spacing: 4) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                             HStack {
                                 Text(skill.name)
                                     .font(.subheadline.weight(.medium))
                                 Spacer()
                                 Text("Level \(skill.level)")
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(SupportTheme.textSecondary)
                             }
 
                             // Progress dots
-                            HStack(spacing: 4) {
+                            HStack(spacing: SupportTheme.Spacing.xxs) {
                                 ForEach(1...skill.maxLevel, id: \.self) { level in
                                     Circle()
-                                        .fill(level <= skill.level ? skill.color : Color(.systemGray5))
+                                        .fill(level <= skill.level ? skill.color : SupportTheme.field)
                                         .frame(width: 8, height: 8)
                                 }
                             }
                         }
                     }
-                    .padding(12)
-                    .background(Color(.secondarySystemBackground))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .padding(SupportTheme.Spacing.s)
+                    .background(SupportTheme.surface)
+                    .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
                     .opacity(showSkills ? 1 : 0)
-                    .offset(x: showSkills ? 0 : 20)
+                    .offset(x: reduceMotion ? 0 : (showSkills ? 0 : 20))
                     .animation(
-                        .easeOut(duration: 0.3).delay(0.3 + Double(index) * 0.1),
+                        reduceMotion
+                            ? .easeInOut(duration: 0.2) : (.easeOut(duration: 0.3).delay(0.3 + Double(index) * 0.1)),
                         value: showSkills
                     )
                 }
@@ -76,14 +78,14 @@ struct AchievementsSkillsStep: View {
                 // Explanation
                 Text("Complete exercises to level up the corresponding skill tree")
                     .font(.caption)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 20)
-                    .padding(.top, 6)
+                    .padding(.horizontal, SupportTheme.Spacing.l)
+                    .padding(.top, SupportTheme.Spacing.xs)
                     .opacity(showSkills ? 1 : 0)
             }
-            .padding(.horizontal, 20)
+            .padding(.horizontal, SupportTheme.Spacing.l)
             .onAppear { showSkills = true }
         }
     }

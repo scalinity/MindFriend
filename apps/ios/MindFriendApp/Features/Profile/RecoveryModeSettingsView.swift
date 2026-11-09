@@ -16,57 +16,68 @@ struct RecoveryModeSettingsView: View {
         List {
             // Status Section
             Section {
-                HStack(spacing: 16) {
+                HStack(spacing: SupportTheme.Spacing.m) {
                     ZStack {
                         Circle()
-                            .fill(recoveryState.isActive ? Color.pink.opacity(0.15) : Color.secondary.opacity(0.1))
+                            .fill(
+                                recoveryState.isActive
+                                    ? SupportTheme.accent.opacity(0.15) : SupportTheme.textSecondary.opacity(0.1)
+                            )
                             .frame(width: 56, height: 56)
 
                         Image(systemName: recoveryState.isActive ? "heart.fill" : "heart")
                             .font(.title2)
-                            .foregroundStyle(recoveryState.isActive ? .pink : .secondary)
+                            .foregroundStyle(recoveryState.isActive ? SupportTheme.accent : SupportTheme.textSecondary)
                     }
 
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                         Text(recoveryState.isActive ? "Recovery Mode Active" : "Recovery Mode Off")
                             .font(.headline)
+                            .accessibilityAddTraits(.isHeader)
 
                         if recoveryState.isActive {
                             if let reason = recoveryState.reason {
                                 Text(reason.displayText)
                                     .font(.subheadline)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(SupportTheme.textSecondary)
                             }
                         } else {
                             Text("Enable when you need a gentler experience")
                                 .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                         }
                     }
                 }
-                .padding(.vertical, 8)
+                .padding(.vertical, SupportTheme.Spacing.xs)
             }
+
+            .listRowBackground(SupportTheme.surface)
 
             // Description
             Section {
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                     Text("What is Recovery Mode?")
                         .font(.headline)
+                        .accessibilityAddTraits(.isHeader)
 
-                    Text("Recovery Mode simplifies your experience when you're going through a difficult time. It reduces notifications, shows only essential actions, and removes any pressure.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                    Text(
+                        "Recovery Mode simplifies your experience when you're going through a difficult time. It reduces notifications, shows only essential actions, and removes any pressure."
+                    )
+                    .font(.subheadline)
+                    .foregroundStyle(SupportTheme.textSecondary)
 
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                         benefitRow(icon: "bell.slash", text: "Fewer notifications")
                         benefitRow(icon: "square.stack", text: "Simplified home screen")
-                        benefitRow(icon: "hand.raised", text: "No streak pressure")
+                        benefitRow(icon: "hand.raised", text: "Move at your own pace")
                         benefitRow(icon: "heart.text.square", text: "Crisis resources always available")
                     }
-                    .padding(.top, 4)
+                    .padding(.top, SupportTheme.Spacing.xxs)
                 }
-                .padding(.vertical, 8)
+                .padding(.vertical, SupportTheme.Spacing.xs)
             }
+
+            .listRowBackground(SupportTheme.surface)
 
             // Toggle Section
             Section {
@@ -93,7 +104,7 @@ struct RecoveryModeSettingsView: View {
                     if !recoveryState.canManuallyExit, let timeRemaining = recoveryState.timeUntilExitFormatted {
                         Text("You can exit in \(timeRemaining). This helps ensure you have time to rest.")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                 } else {
                     // Enable button
@@ -104,16 +115,20 @@ struct RecoveryModeSettingsView: View {
                             Image(systemName: "heart.circle.fill")
                             Text("Enable Recovery Mode")
                         }
-                        .foregroundStyle(.pink)
+                        .foregroundStyle(SupportTheme.accent)
                     }
                 }
             } footer: {
                 if recoveryState.isActive {
-                    Text("Recovery Mode will automatically turn off after 7 days, or when you've logged 3 days of improved mood.")
+                    Text(
+                        "Recovery Mode will automatically turn off after 7 days, or when you've logged 3 days of improved mood."
+                    )
                 } else {
                     Text("Recovery Mode can also be enabled automatically when you've had several difficult days.")
                 }
             }
+
+            .listRowBackground(SupportTheme.surface)
 
             // Error display
             if let error = errorMessage {
@@ -122,8 +137,11 @@ struct RecoveryModeSettingsView: View {
                         .font(.subheadline)
                         .foregroundStyle(.red)
                 }
+                .listRowBackground(SupportTheme.surface)
             }
         }
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle("Recovery Mode")
         .navigationBarTitleDisplayMode(.inline)
         .task {
@@ -161,15 +179,15 @@ struct RecoveryModeSettingsView: View {
     // MARK: - Helper Views
 
     private func benefitRow(icon: String, text: String) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: SupportTheme.Spacing.s) {
             Image(systemName: icon)
                 .font(.subheadline)
-                .foregroundStyle(.pink)
+                .foregroundStyle(SupportTheme.accent)
                 .frame(width: 20)
 
             Text(text)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
     }
 

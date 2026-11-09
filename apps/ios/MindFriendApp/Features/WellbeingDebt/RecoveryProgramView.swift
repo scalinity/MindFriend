@@ -9,6 +9,7 @@
 import SwiftUI
 
 struct RecoveryProgramView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject var container: DependencyContainer
     @Environment(\.dismiss) var dismiss
 
@@ -38,11 +39,11 @@ struct RecoveryProgramView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: SupportTheme.Spacing.l) {
                     if isLoading {
                         ProgressView("Loading...")
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .padding(.top, 100)
+                            .padding(.top, SupportTheme.Spacing.xl)
                     } else if isGenerating {
                         generatingView
                     } else if needsMoreData, let message = errorMessage {
@@ -57,6 +58,8 @@ struct RecoveryProgramView: View {
                 }
                 .padding()
             }
+            .supportScreen()
+            .foregroundStyle(SupportTheme.textPrimary)
             .navigationTitle("Recovery Program")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
@@ -90,35 +93,37 @@ struct RecoveryProgramView: View {
 
     @ViewBuilder
     private var startView: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: SupportTheme.Spacing.l) {
             // Header
-            VStack(spacing: 8) {
+            VStack(spacing: SupportTheme.Spacing.xs) {
                 Image(systemName: "heart.circle.fill")
                     .font(.system(size: 60))
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(SupportTheme.accent)
 
                 Text("Start Recovery Program")
                     .font(.title2.bold())
+                    .accessibilityAddTraits(.isHeader)
 
                 Text("Generate a personalized 7-day plan to reduce your wellbeing debt and explore a steadier pace.")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal)
             }
 
             // Intensity selector
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                 Text("Program Intensity")
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
 
                 ForEach(Intensity.allCases, id: \.self) { intensity in
                     intensityOption(intensity)
                 }
             }
             .padding()
-            .background(Color(.systemGray6))
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .background(SupportTheme.field)
+            .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
 
             // Generate button
             Button {
@@ -130,9 +135,9 @@ struct RecoveryProgramView: View {
                     .font(.headline)
                     .frame(maxWidth: .infinity)
                     .padding()
-                    .background(Color.blue)
-                    .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .background(SupportTheme.accent)
+                    .foregroundStyle(SupportTheme.onAccent)
+                    .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
             }
             .disabled(isGenerating)
         }
@@ -144,26 +149,26 @@ struct RecoveryProgramView: View {
             selectedIntensity = intensity
         } label: {
             HStack {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     Text(intensity.rawValue)
                         .font(.subheadline.bold())
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(SupportTheme.textPrimary)
 
                     Text(intensity.description)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
 
                 Spacer()
 
                 if selectedIntensity == intensity {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(SupportTheme.accent)
                 }
             }
             .padding()
-            .background(selectedIntensity == intensity ? Color.blue.opacity(0.1) : Color.clear)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .background(selectedIntensity == intensity ? SupportTheme.accent.opacity(0.1) : Color.clear)
+            .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
         }
         .buttonStyle(.plain)
     }
@@ -172,7 +177,7 @@ struct RecoveryProgramView: View {
 
     @ViewBuilder
     private func programView(_ program: RecoveryProgram) -> some View {
-        VStack(spacing: 20) {
+        VStack(spacing: SupportTheme.Spacing.l) {
             // Program header
             programHeader(program)
 
@@ -185,19 +190,22 @@ struct RecoveryProgramView: View {
 
     @ViewBuilder
     private func programHeader(_ program: RecoveryProgram) -> some View {
-        VStack(spacing: 12) {
+        VStack(spacing: SupportTheme.Spacing.s) {
             HStack {
                 Image(systemName: "flag.checkered.circle.fill")
                     .font(.title2)
-                    .foregroundStyle(.green)
+                    .foregroundStyle(SupportTheme.accent)
 
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     Text("7-Day Recovery Plan")
                         .font(.headline)
+                        .accessibilityAddTraits(.isHeader)
 
-                    Text("Target: Reduce debt by \(Int(truncating: program.targetDebtReduction as NSDecimalNumber)) points")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    Text(
+                        "Target: Reduce debt by \(Int(truncating: program.targetDebtReduction as NSDecimalNumber)) points"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(SupportTheme.textSecondary)
                 }
 
                 Spacer()
@@ -207,19 +215,19 @@ struct RecoveryProgramView: View {
 
             Text("Follow these daily actions to replenish your wellbeing reserves and avoid crashes.")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
         .padding()
-        .background(Color.green.opacity(0.1))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .background(SupportTheme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
     }
 
     @ViewBuilder
     private func dayCard(_ daily: DailyActions) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             // Day header
             Button {
-                withAnimation {
+                withAnimation(reduceMotion ? nil : .default) {
                     if expandedDays.contains(daily.day) {
                         expandedDays.remove(daily.day)
                     } else {
@@ -228,30 +236,31 @@ struct RecoveryProgramView: View {
                 }
             } label: {
                 HStack {
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                         Text("Day \(daily.day)")
                             .font(.headline)
+                            .accessibilityAddTraits(.isHeader)
 
                         Text(daily.date)
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
 
                         Text("Focus: \(formatFocusArea(daily.focusArea))")
                             .font(.caption.bold())
-                            .foregroundStyle(.blue)
+                            .foregroundStyle(SupportTheme.accent)
                     }
 
                     Spacer()
 
                     Image(systemName: expandedDays.contains(daily.day) ? "chevron.up" : "chevron.down")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
             }
             .buttonStyle(.plain)
 
             // Actions list (expandable)
             if expandedDays.contains(daily.day) {
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                     Divider()
 
                     ForEach(Array(daily.actions.enumerated()), id: \.offset) { index, action in
@@ -262,29 +271,29 @@ struct RecoveryProgramView: View {
                     HStack {
                         Text("Daily Target")
                             .font(.caption.bold())
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
 
                         Spacer()
 
                         Text("+\(daily.actions.reduce(0) { $0 + $1.targetPoints }) points")
                             .font(.caption.bold())
-                            .foregroundStyle(.green)
+                            .foregroundStyle(SupportTheme.accent)
                     }
-                    .padding(.top, 4)
+                    .padding(.top, SupportTheme.Spacing.xxs)
                 }
             }
         }
         .padding()
-        .background(Color(.systemGray6))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .background(SupportTheme.field)
+        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
     }
 
     @ViewBuilder
     private func actionRow(_ action: RecoveryAction, index: Int) -> some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: SupportTheme.Spacing.s) {
             // Checkbox (non-functional, visual only)
             Image(systemName: "circle")
-                .foregroundStyle(.blue)
+                .foregroundStyle(SupportTheme.accent)
 
             Text(action.action)
                 .font(.subheadline)
@@ -293,7 +302,7 @@ struct RecoveryProgramView: View {
 
             Text("+\(action.targetPoints)")
                 .font(.caption.bold())
-                .foregroundStyle(.green)
+                .foregroundStyle(SupportTheme.accent)
         }
     }
 
@@ -301,45 +310,47 @@ struct RecoveryProgramView: View {
 
     @ViewBuilder
     private var generatingView: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: SupportTheme.Spacing.l) {
             ProgressView()
                 .scaleEffect(1.5)
 
             Text("Generating your personalized recovery program...")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
                 .multilineTextAlignment(.center)
 
             Text("Analyzing your patterns and selecting optimal actions")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .multilineTextAlignment(.center)
         }
-        .padding(.top, 100)
+        .padding(.top, SupportTheme.Spacing.xl)
     }
 
     // MARK: - Needs More Data View
 
     @ViewBuilder
     private func needsMoreDataView(_ message: String) -> some View {
-        VStack(spacing: 20) {
+        VStack(spacing: SupportTheme.Spacing.l) {
             Image(systemName: "chart.line.uptrend.xyaxis")
                 .font(.system(size: 60))
-                .foregroundStyle(.blue)
+                .foregroundStyle(SupportTheme.accent)
 
             Text("Track More Data First")
                 .font(.title2.bold())
+                .accessibilityAddTraits(.isHeader)
 
             Text(message)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
 
             // Tips for generating data
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                 Text("Here's how to get started:")
                     .font(.caption.bold())
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
 
                 dataActionRow(icon: "face.smiling", text: "Log your mood daily")
                 dataActionRow(icon: "moon.zzz", text: "Track your sleep patterns")
@@ -347,22 +358,22 @@ struct RecoveryProgramView: View {
                 dataActionRow(icon: "checkmark.circle", text: "Finish your daily quests")
             }
             .padding()
-            .background(Color(.systemGray6))
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .background(SupportTheme.field)
+            .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
 
             Button("Close") {
                 dismiss()
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.supportSecondary)
         }
-        .padding(.top, 40)
+        .padding(.top, SupportTheme.Spacing.xl)
     }
 
     @ViewBuilder
     private func dataActionRow(icon: String, text: String) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: SupportTheme.Spacing.s) {
             Image(systemName: icon)
-                .foregroundStyle(.blue)
+                .foregroundStyle(SupportTheme.accent)
                 .frame(width: 24)
 
             Text(text)
@@ -374,17 +385,18 @@ struct RecoveryProgramView: View {
 
     @ViewBuilder
     private func errorView(_ error: String) -> some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             Image(systemName: "exclamationmark.triangle")
                 .font(.system(size: 60))
                 .foregroundStyle(.red)
 
             Text("Generation Failed")
                 .font(.title2.bold())
+                .accessibilityAddTraits(.isHeader)
 
             Text(error)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
 
@@ -393,9 +405,9 @@ struct RecoveryProgramView: View {
                     await generateProgram()
                 }
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.supportSecondary)
         }
-        .padding(.top, 100)
+        .padding(.top, SupportTheme.Spacing.xl)
     }
 
     // MARK: - Helper Methods
@@ -428,16 +440,16 @@ struct RecoveryProgramView: View {
             isGenerating = false
         }
     }
-    
+
     private func saveAndDismiss() async {
         // Only save if we have a generated program
         guard let program = recoveryProgram else {
             dismiss()
             return
         }
-        
+
         isSaving = true
-        
+
         do {
             _ = try await container.wellbeingDebtService.saveRecoveryProgram(program)
             isSaving = false
@@ -449,10 +461,10 @@ struct RecoveryProgramView: View {
             dismiss()
         }
     }
-    
+
     private func loadExistingProgram() async {
         isLoading = true
-        
+
         do {
             if let existingProgram = try await container.wellbeingDebtService.fetchActiveRecoveryProgram() {
                 recoveryProgram = existingProgram
@@ -461,7 +473,7 @@ struct RecoveryProgramView: View {
         } catch {
             // No existing program or error - user can generate a new one
         }
-        
+
         isLoading = false
     }
 

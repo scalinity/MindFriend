@@ -29,87 +29,71 @@ struct HabitDetailView: View {
 
     private var categoryColor: Color {
         switch habit.category {
-        case .breathing: return .cyan
-        case .meditation: return .purple
-        case .journaling: return .orange
-        case .movement: return .green
-        case .custom: return .blue
+        case .breathing: return SupportTheme.accent
+        case .meditation: return SupportTheme.accent
+        case .journaling: return SupportTheme.accent
+        case .movement: return SupportTheme.accent
+        case .custom: return SupportTheme.accent
         }
     }
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 24) {
+            VStack(spacing: SupportTheme.Spacing.l) {
                 // Header
-                VStack(spacing: 12) {
+                VStack(spacing: SupportTheme.Spacing.s) {
                     Text(categoryEmoji)
                         .font(.system(size: 60))
 
                     Text(habit.name)
                         .font(.title)
+                        .accessibilityAddTraits(.isHeader)
                         .fontWeight(.bold)
 
                     Text(habit.fullHabitStatement)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                         .multilineTextAlignment(.center)
 
                     // Category and difficulty badges
-                    HStack(spacing: 8) {
+                    HStack(spacing: SupportTheme.Spacing.xs) {
                         HabitBadge(text: habit.category.displayName, color: categoryColor)
-                        HabitBadge(text: habit.difficulty.displayName, color: .gray)
+                        HabitBadge(text: habit.difficulty.displayName, color: SupportTheme.textSecondary)
                     }
                 }
                 .padding()
 
                 // Stats section
-                VStack(spacing: 16) {
-                    HStack(spacing: 20) {
-                        HabitStatCard(
-                            title: "Current Streak",
-                            value: "\(streakInfo.currentStreak)",
-                            icon: "flame.fill",
-                            color: .orange
-                        )
-
-                        HabitStatCard(
-                            title: "Longest Streak",
-                            value: "\(streakInfo.longestStreak)",
-                            icon: "trophy.fill",
-                            color: .yellow
-                        )
-                    }
-
+                VStack(spacing: SupportTheme.Spacing.m) {
                     // Completion rate
                     let completionRate = weeklyStats.filter { $0 == 1 }.count
-                    HStack(spacing: 20) {
+                    HStack(spacing: SupportTheme.Spacing.l) {
                         HabitStatCard(
                             title: "This Week",
                             value: "\(completionRate)/7",
                             icon: "calendar",
-                            color: .blue
+                            color: SupportTheme.accent
                         )
 
                         HabitStatCard(
                             title: "Duration",
                             value: "\(habit.durationSeconds / 60)m",
                             icon: "clock.fill",
-                            color: .purple
+                            color: SupportTheme.accent
                         )
                     }
                 }
                 .padding(.horizontal)
 
                 // Weekly completion grid
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                     Text("This Week")
                         .font(.headline)
+                        .accessibilityAddTraits(.isHeader)
 
                     WeeklyCompletionGrid(stats: weeklyStats)
                 }
-                .padding()
-                .background(Color(uiColor: .secondarySystemBackground))
-                .cornerRadius(16)
+                .supportCard()
                 .padding(.horizontal)
 
                 // Complete button
@@ -120,7 +104,7 @@ struct HabitDetailView: View {
                         HStack {
                             if isCompleting {
                                 ProgressView()
-                                    .tint(.white)
+                                    .tint(SupportTheme.textPrimary)
                             } else {
                                 Image(systemName: "checkmark.circle.fill")
                             }
@@ -130,22 +114,22 @@ struct HabitDetailView: View {
                         .frame(maxWidth: .infinity)
                         .padding()
                         .background(categoryColor)
-                        .foregroundStyle(.white)
-                        .cornerRadius(12)
+                        .foregroundStyle(SupportTheme.onAccent)
+                        .cornerRadius(SupportTheme.controlRadius)
                     }
                     .disabled(isCompleting)
                     .padding(.horizontal)
                 } else {
                     HStack {
                         Image(systemName: "checkmark.circle.fill")
-                            .foregroundStyle(.green)
+                            .foregroundStyle(SupportTheme.accent)
                         Text("Completed today!")
                             .fontWeight(.medium)
                     }
                     .padding()
                     .frame(maxWidth: .infinity)
-                    .background(Color.green.opacity(0.1))
-                    .cornerRadius(12)
+                    .background(SupportTheme.surface)
+                    .cornerRadius(SupportTheme.controlRadius)
                     .padding(.horizontal)
                 }
 
@@ -157,7 +141,7 @@ struct HabitDetailView: View {
                         value: habit.reminderTime != nil ? formatTime(habit.reminderTime!) : "Off"
                     )
 
-                    Divider().padding(.leading, 44)
+                    Divider().padding(.leading, SupportTheme.minimumTarget)
 
                     Button {
                         showDeleteConfirmation = true
@@ -170,13 +154,15 @@ struct HabitDetailView: View {
                         )
                     }
                 }
-                .background(Color(uiColor: .secondarySystemBackground))
-                .cornerRadius(12)
+                .background(SupportTheme.surface)
+                .cornerRadius(SupportTheme.controlRadius)
                 .padding(.horizontal)
 
-                Spacer(minLength: 32)
+                Spacer(minLength: SupportTheme.Spacing.xl)
             }
         }
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle("Habit Details")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -275,10 +261,10 @@ struct HabitBadge: View {
             .font(.caption)
             .fontWeight(.medium)
             .foregroundStyle(color)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 4)
+            .padding(.horizontal, SupportTheme.Spacing.s)
+            .padding(.vertical, SupportTheme.Spacing.xxs)
             .background(color.opacity(0.15))
-            .cornerRadius(8)
+            .cornerRadius(SupportTheme.controlRadius)
     }
 }
 
@@ -289,23 +275,22 @@ struct HabitStatCard: View {
     let color: Color
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: SupportTheme.Spacing.xs) {
             Image(systemName: icon)
                 .font(.title2)
                 .foregroundStyle(color)
 
             Text(value)
                 .font(.title2)
+                .accessibilityAddTraits(.isHeader)
                 .fontWeight(.bold)
 
             Text(title)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
         .frame(maxWidth: .infinity)
-        .padding()
-        .background(Color(uiColor: .secondarySystemBackground))
-        .cornerRadius(12)
+        .supportCard()
     }
 }
 
@@ -315,23 +300,23 @@ struct WeeklyCompletionGrid: View {
     private let weekdays = ["M", "T", "W", "T", "F", "S", "S"]
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: SupportTheme.Spacing.xs) {
             ForEach(0..<7, id: \.self) { index in
-                VStack(spacing: 4) {
+                VStack(spacing: SupportTheme.Spacing.xxs) {
                     Circle()
-                        .fill(stats[index] == 1 ? Color.green : Color(uiColor: .tertiarySystemFill))
+                        .fill(stats[index] == 1 ? SupportTheme.accent : Color(uiColor: .tertiarySystemFill))
                         .frame(width: 32, height: 32)
                         .overlay(
                             stats[index] == 1
-                            ? Image(systemName: "checkmark")
-                                .font(.caption.bold())
-                                .foregroundStyle(.white)
-                            : nil
+                                ? Image(systemName: "checkmark")
+                                    .font(.caption.bold())
+                                    .foregroundStyle(SupportTheme.textPrimary)
+                                : nil
                         )
 
                     Text(weekdays[index])
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
             }
         }
@@ -348,17 +333,17 @@ struct SettingsRow: View {
         HStack {
             Image(systemName: icon)
                 .font(.body)
-                .foregroundStyle(isDestructive ? .red : .secondary)
+                .foregroundStyle(isDestructive ? .red : SupportTheme.textSecondary)
                 .frame(width: 24)
 
             Text(title)
-                .foregroundStyle(isDestructive ? .red : .primary)
+                .foregroundStyle(isDestructive ? .red : SupportTheme.textPrimary)
 
             Spacer()
 
             if let value = value {
                 Text(value)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
         }
         .padding()

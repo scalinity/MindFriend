@@ -1,5 +1,5 @@
 // MindFriend Achievements View
-// Main achievements hub showing XP, badges, skill trees, and streaks
+// Main achievements hub showing XP, badges and skill trees
 
 import SwiftUI
 
@@ -15,20 +15,18 @@ struct AchievementsView: View {
     enum AchievementTab: String, CaseIterable {
         case badges = "Badges"
         case skills = "Skills"
-        case streaks = "Streaks"
 
         var icon: String {
             switch self {
             case .badges: return "star.circle.fill"
             case .skills: return "chart.bar.fill"
-            case .streaks: return "flame.fill"
             }
         }
     }
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 24) {
+            VStack(spacing: SupportTheme.Spacing.l) {
                 // XP and Level Header
                 XPProgressView()
 
@@ -39,7 +37,7 @@ struct AchievementsView: View {
                             .tag(tab)
                     }
                 }
-                .pickerStyle(.segmented)
+                .pickerStyle(.menu)
                 .padding(.horizontal)
 
                 // Tab Content
@@ -48,12 +46,12 @@ struct AchievementsView: View {
                     BadgeCollectionView()
                 case .skills:
                     SkillTreesListView()
-                case .streaks:
-                    StreaksListView()
                 }
             }
             .padding(.vertical)
         }
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle("Achievements")
         .navigationBarTitleDisplayMode(.large)
         .refreshable {
@@ -63,8 +61,9 @@ struct AchievementsView: View {
         }
         .task {
             // Check if data is stale (> 5 minutes old)
-            let shouldRefresh = achievementService.lastLoadTime == nil ||
-                Date().timeIntervalSince(achievementService.lastLoadTime!) > 300
+            let shouldRefresh =
+                achievementService.lastLoadTime == nil
+                || Date().timeIntervalSince(achievementService.lastLoadTime!) > 300
 
             if shouldRefresh {
                 // Check badge progress first to catch up on any missed badges
@@ -87,8 +86,8 @@ struct AchievementsView: View {
                         }
                     }
                 )
-                .padding(.top, 8)
-                .transition(.move(edge: .top).combined(with: .opacity))
+                .padding(.top, SupportTheme.Spacing.xs)
+                .transition(.opacity)
             }
         }
         // Level-Up Celebration (NEW)
@@ -129,6 +128,7 @@ struct AchievementsView: View {
 // MARK: - XP Progress View
 
 struct XPProgressView: View {
+    @Environment(\.dynamicTypeSize) private var typeSize
     @EnvironmentObject private var achievementService: AchievementService
 
     private var experience: UserExperience? {
@@ -136,70 +136,65 @@ struct XPProgressView: View {
     }
 
     var body: some View {
-        VStack(spacing: 16) {
-            HStack(spacing: 20) {
-                // Level Badge
-                ZStack {
-                    Circle()
-                        .fill(LinearGradient(
-                            colors: [.purple, .blue],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ))
-                        .frame(width: 80, height: 80)
+        VStack(spacing: SupportTheme.Spacing.m) {
+            (typeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: SupportTheme.Spacing.m))
+                : AnyLayout(HStackLayout(spacing: SupportTheme.Spacing.m))) {
+                    CelebrationEmblem(
+                        .text("\(experience?.currentLevel ?? 1)"), tint: SupportTheme.accent, diameter: 80
+                    )
+                    .accessibilityLabel("Level \(experience?.currentLevel ?? 1)")
 
-                    Text("\(experience?.currentLevel ?? 1)")
-                        .font(.title)
-                        .fontWeight(.bold)
-                        .foregroundStyle(.white)
-                }
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
+                        // XP Progress
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
+                            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
+                                Text("Level \(experience?.currentLevel ?? 1)")
+                                    .font(.headline)
+                                    .accessibilityAddTraits(.isHeader)
+                                Text("\(experience?.totalXp ?? 0) XP")
+                                    .font(.headline)
+                                    .accessibilityAddTraits(.isHeader)
 
-                VStack(alignment: .leading, spacing: 8) {
-                    // XP Progress
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack {
-                            Text("\(experience?.totalXp ?? 0) XP")
-                                .font(.headline)
+                                Spacer()
 
-                            Spacer()
+                                Text("\(experience?.xpToNextLevel ?? 100) to next level")
+                                    .font(.caption)
+                                    .foregroundStyle(SupportTheme.textSecondary)
+                            }
 
-                            Text("\(experience?.xpToNextLevel ?? 100) to next level")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                            ProgressView(value: experience?.progressToNextLevel ?? 0)
+                                .tint(SupportTheme.accent)
                         }
 
-                        ProgressView(value: experience?.progressToNextLevel ?? 0)
-                            .tint(.purple)
-                    }
+                        // Daily/Weekly Stats
+                        (typeSize.isAccessibilitySize
+                            ? AnyLayout(VStackLayout(alignment: .leading, spacing: SupportTheme.Spacing.s))
+                            : AnyLayout(HStackLayout(spacing: SupportTheme.Spacing.m))) {
+                                AchievementStatBadge(
+                                    label: "Today",
+                                    value: "\(experience?.dailyXp ?? 0) XP",
+                                    color: SupportTheme.accent
+                                )
 
-                    // Daily/Weekly Stats
-                    HStack(spacing: 16) {
-                        AchievementStatBadge(
-                            label: "Today",
-                            value: "\(experience?.dailyXp ?? 0) XP",
-                            color: .green
-                        )
+                                AchievementStatBadge(
+                                    label: "This Week",
+                                    value: "\(experience?.weeklyXp ?? 0) XP",
+                                    color: SupportTheme.accent
+                                )
 
-                        AchievementStatBadge(
-                            label: "This Week",
-                            value: "\(experience?.weeklyXp ?? 0) XP",
-                            color: .blue
-                        )
-
-                        if let multiplier = experience?.xpMultiplier, multiplier > 1.0 {
-                            AchievementStatBadge(
-                                label: "Bonus",
-                                value: String(format: "%.1fx", multiplier),
-                                color: .orange
-                            )
-                        }
+                                if let multiplier = experience?.xpMultiplier, multiplier > 1.0 {
+                                    AchievementStatBadge(
+                                        label: "Bonus",
+                                        value: String(format: "%.1fx", multiplier),
+                                        color: SupportTheme.accent
+                                    )
+                                }
+                            }
                     }
                 }
-            }
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .supportCard()
         .padding(.horizontal)
     }
 }
@@ -210,7 +205,7 @@ struct AchievementStatBadge: View {
     let color: Color
 
     var body: some View {
-        VStack(spacing: 2) {
+        VStack(spacing: SupportTheme.Spacing.xxs) {
             Text(value)
                 .font(.subheadline)
                 .fontWeight(.semibold)
@@ -218,7 +213,7 @@ struct AchievementStatBadge: View {
 
             Text(label)
                 .font(.caption2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
     }
 }
@@ -236,16 +231,16 @@ struct BadgeCollectionView: View {
 
     private var displayedBadges: [AchievementBadge] {
         if let category = selectedCategory {
-            return achievementService.badgesInCategory(category)
+            return achievementService.badgesInCategory(category).filter { $0.category != .streaks }
         }
-        return achievementService.badges
+        return achievementService.badges.filter { $0.category != .streaks }
     }
 
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             // Category Filter
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
+                HStack(spacing: SupportTheme.Spacing.xs) {
                     AchievementCategoryChip(
                         title: "All",
                         isSelected: selectedCategory == nil,
@@ -264,7 +259,7 @@ struct BadgeCollectionView: View {
             }
 
             // Stats Summary
-            HStack(spacing: 24) {
+            HStack(spacing: SupportTheme.Spacing.l) {
                 BadgeStatView(
                     count: achievementService.earnedBadges.count,
                     total: achievementService.badges.count,
@@ -284,9 +279,11 @@ struct BadgeCollectionView: View {
             .padding(.horizontal)
 
             // Badge Grid
-            LazyVGrid(columns: [
-                GridItem(.adaptive(minimum: 100), spacing: 16)
-            ], spacing: 16) {
+            LazyVGrid(
+                columns: [
+                    GridItem(.adaptive(minimum: 100), spacing: SupportTheme.Spacing.m)
+                ], spacing: SupportTheme.Spacing.m
+            ) {
                 ForEach(displayedBadges) { badge in
                     NavigationLink {
                         BadgeDetailView(badge: badge)
@@ -315,10 +312,10 @@ struct AchievementCategoryChip: View {
             Text(title)
                 .font(.subheadline)
                 .fontWeight(isSelected ? .semibold : .regular)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(isSelected ? Color.accentColor : Color(.tertiarySystemBackground))
-                .foregroundStyle(isSelected ? .white : .primary)
+                .padding(.horizontal, SupportTheme.Spacing.s)
+                .padding(.vertical, SupportTheme.Spacing.xs)
+                .background(isSelected ? SupportTheme.accent : SupportTheme.surface)
+                .foregroundStyle(isSelected ? SupportTheme.onAccent : SupportTheme.textPrimary)
                 .clipShape(Capsule())
         }
     }
@@ -330,20 +327,22 @@ struct BadgeStatView: View {
     let label: String
 
     var body: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: SupportTheme.Spacing.xxs) {
             if let total = total {
                 Text("\(count)/\(total)")
                     .font(.title2)
+                    .accessibilityAddTraits(.isHeader)
                     .fontWeight(.bold)
             } else {
                 Text("\(count)")
                     .font(.title2)
+                    .accessibilityAddTraits(.isHeader)
                     .fontWeight(.bold)
             }
 
             Text(label)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
     }
 }
@@ -355,22 +354,26 @@ struct BadgeGridItem: View {
     private var isEarned: Bool {
         progress?.isEarned ?? false
     }
-    
+
     /// Tier color with consistent opacity for earned/unearned state
     private var tierColor: Color {
         guard let tier = badge.tier else { return .clear }
-        let baseColor = Color(hex: tier.color) ?? .gray
-        return isEarned ? baseColor : .gray
+        let baseColor = SupportTheme.accent
+        return isEarned ? baseColor : SupportTheme.textSecondary
     }
 
     var body: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: SupportTheme.Spacing.xs) {
             ZStack {
                 // Badge Icon (using SF Symbols)
                 Image(systemName: badge.sfSymbolName)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .foregroundStyle(isEarned ? (badge.tier != nil ? (Color(hex: badge.tier!.color) ?? .yellow) : .yellow) : .gray)
+                    .foregroundStyle(
+                        isEarned
+                            ? (badge.tier != nil ? (SupportTheme.accent) : SupportTheme.Celebration.gold)
+                            : SupportTheme.textSecondary
+                    )
                     .frame(width: 56, height: 56)
                     .opacity(isEarned ? 1.0 : 0.35)
 
@@ -378,7 +381,7 @@ struct BadgeGridItem: View {
                 if !isEarned, let progress = progress {
                     Circle()
                         .trim(from: 0, to: progress.progressPercentage)
-                        .stroke(Color.accentColor, lineWidth: 3)
+                        .stroke(SupportTheme.accent, lineWidth: 3)
                         .rotationEffect(.degrees(-90))
                         .frame(width: 66, height: 66)
                 }
@@ -393,24 +396,24 @@ struct BadgeGridItem: View {
             }
             .frame(height: 70)
 
-            VStack(spacing: 2) {
+            VStack(spacing: SupportTheme.Spacing.xxs) {
                 Text(badge.name)
                     .font(.caption)
                     .fontWeight(.medium)
-                    .lineLimit(2, reservesSpace: true)
+                    .fixedSize(horizontal: false, vertical: true)
                     .multilineTextAlignment(.center)
-                    .foregroundStyle(isEarned ? .primary : .secondary)
+                    .foregroundStyle(isEarned ? SupportTheme.textPrimary : SupportTheme.textSecondary)
 
                 Text(badge.tier?.displayName ?? " ")
                     .font(.caption2)
                     .foregroundStyle(tierColor)
             }
-            .frame(height: 44)
+            .fixedSize(horizontal: false, vertical: true)
         }
-        .frame(width: 100, height: 130)
-        .padding(.vertical, 8)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .frame(maxWidth: .infinity, minHeight: 130)
+        .padding(.vertical, SupportTheme.Spacing.xs)
+        .background(SupportTheme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
     }
 }
 
@@ -428,139 +431,142 @@ struct BadgeDetailView: View {
     private var isEarned: Bool {
         progress?.isEarned ?? false
     }
-    
+
     /// Tier color based on earned state
     private var tierColor: Color {
-        guard let tier = badge.tier else { return .gray }
-        return isEarned ? (Color(hex: tier.color) ?? .gray) : .gray
+        guard let tier = badge.tier else { return SupportTheme.textSecondary }
+        return isEarned ? (SupportTheme.accent) : SupportTheme.textSecondary
     }
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 24) {
+            VStack(spacing: SupportTheme.Spacing.l) {
                 // Badge Icon (using SF Symbols)
                 Image(systemName: badge.sfSymbolName)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .foregroundStyle(isEarned ? (badge.tier != nil ? (Color(hex: badge.tier!.color) ?? .purple) : .purple) : .gray)
+                    .foregroundStyle(
+                        isEarned
+                            ? (badge.tier != nil ? (SupportTheme.accent) : SupportTheme.accent)
+                            : SupportTheme.textSecondary
+                    )
                     .frame(width: 120, height: 120)
                     .opacity(isEarned ? 1.0 : 0.4)
 
                 // Badge Info
-                VStack(spacing: 8) {
+                VStack(spacing: SupportTheme.Spacing.xs) {
                     Text(badge.name)
                         .font(.title2)
+                        .accessibilityAddTraits(.isHeader)
                         .fontWeight(.bold)
 
                     if let tier = badge.tier {
                         Text(tier.displayName)
                             .font(.subheadline)
                             .foregroundStyle(tierColor)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 4)
+                            .padding(.horizontal, SupportTheme.Spacing.s)
+                            .padding(.vertical, SupportTheme.Spacing.xxs)
                             .background(tierColor.opacity(0.2))
                             .clipShape(Capsule())
                     }
 
                     Text(badge.description)
                         .font(.body)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal)
                 }
-                
+
                 // Tier Progression (NEW - for tiered badges)
                 if badge.tier != nil {
                     TierProgressView(badge: badge, progress: progress)
                         .padding(.horizontal)
                 }
-                
+
                 // How to Progress (NEW - for non-earned badges)
                 if !isEarned, let target = progress?.progressTarget {
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                         Text("How to Progress")
                             .font(.headline)
-                        
+                            .accessibilityAddTraits(.isHeader)
+
                         let remaining = target - (progress?.progressCurrent ?? 0)
                         Text(getProgressTip(badge: badge, remaining: remaining))
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding()
-                    .background(Color(.tertiarySystemBackground))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .supportCard()
                     .padding(.horizontal)
                 }
 
                 // Progress Section
                 if let progress = progress {
-                    VStack(spacing: 12) {
+                    VStack(spacing: SupportTheme.Spacing.s) {
                         if progress.isEarned {
                             Label("Earned!", systemImage: "checkmark.circle.fill")
                                 .font(.headline)
-                                .foregroundStyle(.green)
+                                .foregroundStyle(SupportTheme.accent)
 
                             if let earnedAt = progress.earnedAt {
                                 Text("on \(earnedAt.formatted(date: .abbreviated, time: .omitted))")
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(SupportTheme.textSecondary)
                             }
                         } else if let target = progress.progressTarget {
-                            VStack(spacing: 8) {
+                            VStack(spacing: SupportTheme.Spacing.xs) {
                                 Text("Progress: \(progress.progressCurrent)/\(target)")
                                     .font(.subheadline)
 
                                 ProgressView(value: progress.progressPercentage)
-                                    .tint(.accentColor)
+                                    .tint(SupportTheme.accent)
                                     .frame(maxWidth: 200)
                             }
                         }
                     }
-                    .padding()
-                    .background(Color(.secondarySystemBackground))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .supportCard()
                     .padding(.horizontal)
                 }
 
                 // Stats
                 HStack(spacing: 0) {
-                    VStack(spacing: 4) {
+                    VStack(spacing: SupportTheme.Spacing.xxs) {
                         Text("\(badge.xpReward)")
                             .font(.title3)
+                            .accessibilityAddTraits(.isHeader)
                             .fontWeight(.bold)
-                            .foregroundStyle(.purple)
+                            .foregroundStyle(SupportTheme.accent)
                         Text("XP Reward")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                     .frame(maxWidth: .infinity)
 
-                    VStack(spacing: 4) {
+                    VStack(spacing: SupportTheme.Spacing.xxs) {
                         Text(badge.rarity.displayName)
                             .font(.title3)
+                            .accessibilityAddTraits(.isHeader)
                             .fontWeight(.bold)
-                            .lineLimit(1)
+                            .fixedSize(horizontal: false, vertical: true)
                             .minimumScaleFactor(0.8)
                         Text("Rarity")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                     .frame(maxWidth: .infinity)
 
-                    VStack(spacing: 4) {
+                    VStack(spacing: SupportTheme.Spacing.xxs) {
                         Text("\(badge.earnedByCount)")
                             .font(.title3)
+                            .accessibilityAddTraits(.isHeader)
                             .fontWeight(.bold)
                         Text("Earned By")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                     .frame(maxWidth: .infinity)
                 }
-                .padding()
-                .background(Color(.secondarySystemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .supportCard()
                 .padding(.horizontal)
 
                 // Favorite Button
@@ -579,13 +585,15 @@ struct BadgeDetailView: View {
                         )
                         .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(progress?.isFavorite == true ? .red : .accentColor)
+                    .buttonStyle(.supportPrimary)
+                    .tint(progress?.isFavorite == true ? .red : SupportTheme.accent)
                     .padding(.horizontal)
                 }
             }
             .padding()
         }
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle(badge.category.displayName)
         .navigationBarTitleDisplayMode(.inline)
         .task {
@@ -594,13 +602,13 @@ struct BadgeDetailView: View {
             }
         }
     }
-    
+
     private func getProgressTip(badge: AchievementBadge, remaining: Int) -> String {
         switch badge.requirementType {
         case "quest_count":
             return "Complete \(remaining) more daily quests to unlock this badge."
         case "streak_days":
-            return "Keep your streak going! \(remaining) more days to go."
+            return "Explore another activity whenever you feel ready."
         case "exercise_count":
             return "Practice \(remaining) more exercises to earn this badge."
         case "meditation_minutes":
@@ -619,7 +627,7 @@ struct SkillTreesListView: View {
     @EnvironmentObject private var achievementService: AchievementService
 
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             ForEach(achievementService.skillTrees) { tree in
                 NavigationLink {
                     SkillTreeDetailView(tree: tree)
@@ -644,21 +652,22 @@ struct SkillTreeCard: View {
     }
 
     var body: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: SupportTheme.Spacing.m) {
             // Tree Icon (using SF Symbols)
             Image(systemName: "chart.bar.fill")
                 .resizable()
                 .aspectRatio(contentMode: .fit)
-                .foregroundStyle(Color(hex: tree.color) ?? .blue)
+                .foregroundStyle(SupportTheme.accent)
                 .frame(width: 50, height: 50)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text(tree.name)
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
 
                 Text(tree.description)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .lineLimit(2)
 
                 if let progress = progress {
@@ -666,10 +675,10 @@ struct SkillTreeCard: View {
                         Text("Level \(progress.currentLevel)")
                             .font(.caption)
                             .fontWeight(.semibold)
-                            .foregroundStyle(Color(hex: tree.color) ?? .blue)
+                            .foregroundStyle(SupportTheme.accent)
 
                         ProgressView(value: progress.progressToNextLevel)
-                            .tint(Color(hex: tree.color))
+                            .tint(SupportTheme.accent)
                     }
                 }
             }
@@ -677,11 +686,9 @@ struct SkillTreeCard: View {
             Spacer()
 
             Image(systemName: "chevron.right")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .supportCard()
     }
 }
 
@@ -709,45 +716,47 @@ struct SkillTreeDetailView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 24) {
+            VStack(spacing: SupportTheme.Spacing.l) {
                 // Header
-                VStack(spacing: 12) {
+                VStack(spacing: SupportTheme.Spacing.s) {
                     // Tree Icon (using SF Symbols)
                     Image(systemName: "chart.bar.fill")
                         .resizable()
                         .aspectRatio(contentMode: .fit)
-                        .foregroundStyle(Color(hex: tree.color) ?? .blue)
+                        .foregroundStyle(SupportTheme.accent)
                         .frame(width: 80, height: 80)
 
                     Text(tree.name)
                         .font(.title2)
+                        .accessibilityAddTraits(.isHeader)
                         .fontWeight(.bold)
 
                     Text(tree.description)
                         .font(.body)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                         .multilineTextAlignment(.center)
 
                     if let progress = progress {
-                        VStack(spacing: 8) {
+                        VStack(spacing: SupportTheme.Spacing.xs) {
                             Text("Level \(progress.currentLevel) / \(tree.maxLevel)")
                                 .font(.headline)
-                                .foregroundStyle(Color(hex: tree.color) ?? .blue)
+                                .accessibilityAddTraits(.isHeader)
+                                .foregroundStyle(SupportTheme.accent)
 
                             ProgressView(value: progress.progressToNextLevel)
-                                .tint(Color(hex: tree.color))
+                                .tint(SupportTheme.accent)
                                 .frame(maxWidth: 200)
 
                             Text("\(progress.currentXp) XP")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                         }
                     }
                 }
                 .padding()
 
                 // Nodes
-                VStack(spacing: 16) {
+                VStack(spacing: SupportTheme.Spacing.m) {
                     ForEach(tree.nodes) { node in
                         SkillNodeRow(
                             node: node,
@@ -759,6 +768,8 @@ struct SkillTreeDetailView: View {
                 .padding(.horizontal)
             }
         }
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle(tree.name)
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -770,286 +781,67 @@ struct SkillNodeRow: View {
     let treeColor: String
 
     var body: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: SupportTheme.Spacing.m) {
             // Node Icon
             ZStack {
                 Circle()
-                    .fill(isUnlocked ? (Color(hex: treeColor) ?? .blue) : Color.gray.opacity(0.3))
+                    .fill(isUnlocked ? (SupportTheme.accent) : SupportTheme.textSecondary.opacity(0.3))
                     .frame(width: 44, height: 44)
 
                 if isUnlocked {
                     Image(systemName: "checkmark")
-                        .foregroundStyle(.white)
+                        .foregroundStyle(SupportTheme.textPrimary)
                         .fontWeight(.bold)
                 } else {
                     Image(systemName: "lock.fill")
-                        .foregroundStyle(.gray)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
             }
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text(node.name)
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
                     .opacity(isUnlocked ? 1.0 : 0.6)
 
                 Text(node.description)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .lineLimit(2)
 
                 if !isUnlocked {
                     Text("Requires Level \(node.levelRequired) • \(node.xpRequired) XP")
                         .font(.caption2)
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(SupportTheme.accent)
                 }
             }
 
             Spacer()
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .supportCard()
         .opacity(isUnlocked ? 1.0 : 0.7)
     }
 }
 
-// MARK: - Streaks List View
-
-struct StreaksListView: View {
-    @EnvironmentObject private var achievementService: AchievementService
-    @EnvironmentObject private var appState: AppState
-
-    var body: some View {
-        VStack(spacing: 16) {
-            // Show streaks from user_streaks_v2 table
-            ForEach(achievementService.streaks) { streak in
-                AchievementStreakCard(streak: streak)
-            }
-
-            // Fallback: Show quest streak from user_stats if v2 table is empty
-            if achievementService.streaks.isEmpty && appState.currentStreak > 0 {
-                SimpleStreakCard(
-                    currentStreak: appState.currentStreak,
-                    longestStreak: appState.currentUser?.stats?.longestStreakDays ?? appState.currentStreak,
-                    shieldsRemaining: appState.currentUser?.stats?.streakShieldsRemaining ?? 1,
-                    shieldsMax: appState.currentUser?.stats?.streakShieldsMax ?? 1
-                )
-            }
-
-            // Only show empty state if no streaks anywhere
-            if achievementService.streaks.isEmpty && appState.currentStreak == 0 {
-                ContentUnavailableView(
-                    "No Streaks Yet",
-                    systemImage: "flame",
-                    description: Text("Complete activities to start building streaks!")
-                )
-            }
-        }
-        .padding(.horizontal)
-    }
-}
-
-/// Simple streak card using data from user_stats (fallback when user_streaks_v2 is empty)
-struct SimpleStreakCard: View {
-    let currentStreak: Int
-    let longestStreak: Int
-    let shieldsRemaining: Int
-    let shieldsMax: Int
-
-    var body: some View {
-        VStack(spacing: 12) {
-            HStack {
-                // Streak Icon
-                ZStack {
-                    Circle()
-                        .fill(Color.orange)
-                        .frame(width: 50, height: 50)
-
-                    Image(systemName: "flame.fill")
-                        .font(.title2)
-                        .foregroundStyle(.white)
-                }
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Quest Streak")
-                        .font(.headline)
-
-                    HStack(spacing: 4) {
-                        Text("\(currentStreak)")
-                            .font(.title)
-                            .fontWeight(.bold)
-                            .foregroundStyle(.orange)
-
-                        Text("days")
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                Spacer()
-
-                // Shield indicator
-                VStack(alignment: .trailing, spacing: 4) {
-                    HStack(spacing: 2) {
-                        ForEach(0..<shieldsMax, id: \.self) { index in
-                            Image(systemName: index < shieldsRemaining ? "shield.fill" : "shield")
-                                .foregroundStyle(index < shieldsRemaining ? .blue : .gray)
-                                .font(.caption)
-                        }
-                    }
-                    Text(shieldStatusText)
-                        .font(.caption2)
-                        .foregroundStyle(shieldStatusColor)
-                }
-            }
-
-            // Best streak
-            HStack {
-                Image(systemName: "trophy.fill")
-                    .foregroundStyle(.yellow)
-                Text("Best: \(longestStreak) days")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Spacer()
-            }
-        }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-    }
-
-    private var shieldStatusText: String {
-        if shieldsRemaining == 0 {
-            return "No protection"
-        } else if currentStreak > 0 {
-            return "Protected"
-        } else {
-            return shieldsRemaining == 1 ? "1 Shield ready" : "\(shieldsRemaining) Shields ready"
-        }
-    }
-
-    private var shieldStatusColor: Color {
-        if shieldsRemaining == 0 {
-            return .orange
-        } else if currentStreak > 0 {
-            return .green
-        } else {
-            return .blue
-        }
-    }
-}
-
-struct AchievementStreakCard: View {
-    @EnvironmentObject private var achievementService: AchievementService
-
-    let streak: UserStreak
-
-    @State private var showingShieldAlert = false
-
-    var body: some View {
-        VStack(spacing: 12) {
-            HStack {
-                // Streak Icon
-                ZStack {
-                    Circle()
-                        .fill(streak.isAtRisk ? Color.orange : Color.red)
-                        .frame(width: 50, height: 50)
-
-                    Image(systemName: "flame.fill")
-                        .font(.title2)
-                        .foregroundStyle(.white)
-                }
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(streak.streakType.displayName)
-                        .font(.headline)
-
-                    HStack(spacing: 4) {
-                        Text("\(streak.currentCount)")
-                            .font(.title)
-                            .fontWeight(.bold)
-                            .foregroundStyle(streak.isAtRisk ? .orange : .primary)
-
-                        Text("day streak")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                Spacer()
-
-                VStack(alignment: .trailing, spacing: 4) {
-                    Text("Best: \(streak.longestCount)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-
-                    if streak.shieldsRemaining > 0 {
-                        Label("\(streak.shieldsRemaining)", systemImage: "shield.fill")
-                            .font(.caption)
-                            .foregroundStyle(.blue)
-                    }
-                }
-            }
-
-            if streak.isAtRisk {
-                HStack {
-                    Label("At risk! Complete today's activity", systemImage: "exclamationmark.triangle.fill")
-                        .font(.caption)
-                        .foregroundStyle(.orange)
-
-                    Spacer()
-
-                    if streak.shieldsRemaining > 0 {
-                        Button("Use Shield") {
-                            showingShieldAlert = true
-                        }
-                        .font(.caption)
-                        .buttonStyle(.borderedProminent)
-                        .tint(.blue)
-                    }
-                }
-            }
-
-            if let freezeUntil = streak.freezeUntil, freezeUntil > Date() {
-                Label("Protected until \(freezeUntil.formatted(date: .abbreviated, time: .omitted))", systemImage: "shield.fill")
-                    .font(.caption)
-                    .foregroundStyle(.blue)
-            }
-        }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .alert("Use Streak Shield?", isPresented: $showingShieldAlert) {
-            Button("Cancel", role: .cancel) { }
-            Button("Use Shield") {
-                Task {
-                    try? await achievementService.useStreakShield(streakType: streak.streakType)
-                }
-            }
-        } message: {
-            Text("This will protect your streak for 24 hours. You have \(streak.shieldsRemaining) shield\(streak.shieldsRemaining == 1 ? "" : "s") remaining.")
-        }
-    }
-}
-
-// MARK: - Error Banner
+// MARK: - Inline load error
 
 struct ErrorBanner: View {
     let message: String
     let onRetry: () -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: SupportTheme.Spacing.s) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.orange)
+                .foregroundStyle(SupportTheme.accent)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text("Error Loading Data")
                     .font(.subheadline)
                     .fontWeight(.semibold)
 
                 Text(message)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .lineLimit(2)
             }
 
@@ -1058,13 +850,11 @@ struct ErrorBanner: View {
             Button("Retry") {
                 onRetry()
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.supportSecondary)
             .controlSize(.small)
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 4)
+        .supportCard()
+        .shadow(color: SupportTheme.canvas.opacity(0.1), radius: 8, x: 0, y: 4)
         .padding(.horizontal)
     }
 }
@@ -1089,5 +879,8 @@ extension Color {
 
 #Preview {
     AchievementsView()
-        .environmentObject(AchievementService(supabase: DependencyContainer.shared.supabaseClient, authService: DependencyContainer.shared.supabaseAuthService))
+        .environmentObject(
+            AchievementService(
+                supabase: DependencyContainer.shared.supabaseClient,
+                authService: DependencyContainer.shared.supabaseAuthService))
 }

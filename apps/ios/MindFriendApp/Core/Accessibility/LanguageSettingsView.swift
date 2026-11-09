@@ -18,7 +18,7 @@ struct LanguageSettingsView: View {
         ("it", "Italiano"),
         ("ja", "日本語"),
         ("zh", "中文"),
-        ("ar", "العربية")
+        ("ar", "العربية"),
     ]
 
     let regions = [
@@ -29,7 +29,7 @@ struct LanguageSettingsView: View {
         ("MX", "Mexico"),
         ("ES", "Spain"),
         ("FR", "France"),
-        ("DE", "Germany")
+        ("DE", "Germany"),
     ]
 
     var body: some View {
@@ -42,6 +42,7 @@ struct LanguageSettingsView: View {
                 }
                 .pickerStyle(.menu)
             }
+            .listRowBackground(SupportTheme.surface)
 
             Section("Region") {
                 Picker("Region", selection: $selectedRegion) {
@@ -52,12 +53,16 @@ struct LanguageSettingsView: View {
                 .pickerStyle(.menu)
             }
 
+            .listRowBackground(SupportTheme.surface)
+
             Section("Current Setting") {
                 Label("Language Code", systemImage: "globe")
                 Text("\(selectedLanguage)_\(selectedRegion)")
                     .font(.system(.body, design: .monospaced))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(SupportTheme.textSecondary)
             }
+
+            .listRowBackground(SupportTheme.surface)
 
             Section("Format Settings") {
                 Toggle("Use Regional Date Format", isOn: $dateFormatEnabled)
@@ -67,7 +72,11 @@ struct LanguageSettingsView: View {
                 Toggle("Use Regional Number Format", isOn: $numberFormatEnabled)
                     .accessibilityLabel("Use Regional Number Format")
             }
+
+            .listRowBackground(SupportTheme.surface)
         }
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle("Language")
         .navigationBarTitleDisplayMode(.inline)
     }

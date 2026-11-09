@@ -21,11 +21,6 @@ struct BriefingExpandedView: View {
         return String(format: String(localized: "Hello, %@!"), name)
     }
 
-    /// Current streak from user stats
-    private var currentStreak: Int {
-        appState.currentStreak
-    }
-
     /// Recent badges (earned in last 7 days)
     private var recentBadges: [UserBadgeProgress] {
         let sevenDaysAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
@@ -42,10 +37,12 @@ struct BriefingExpandedView: View {
                     briefingContent(briefing)
                 } else {
                     Text("No briefing available")
-                        .foregroundColor(.secondary)
+                        .foregroundColor(SupportTheme.textSecondary)
                         .padding()
                 }
             }
+            .supportScreen()
+            .foregroundStyle(SupportTheme.textPrimary)
             .navigationTitle("Daily Briefing")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -62,6 +59,8 @@ struct BriefingExpandedView: View {
                     } label: {
                         Image(systemName: "arrow.clockwise")
                     }
+                    .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                    .accessibilityLabel("Refresh")
                     .disabled(viewModel.isLoading)
                 }
             }
@@ -72,14 +71,9 @@ struct BriefingExpandedView: View {
 
     @ViewBuilder
     private func briefingContent(_ briefing: DailyBriefing) -> some View {
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.l) {
             // Greeting Section
             greetingSection(briefing)
-
-            // Streak Section (show if active streak)
-            if currentStreak > 0 {
-                streakSection
-            }
 
             // Mood Prediction Section
             if briefing.predictedMood != nil {
@@ -110,86 +104,87 @@ struct BriefingExpandedView: View {
     // MARK: - Sections
 
     private func greetingSection(_ briefing: DailyBriefing) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             Text(currentGreeting)
                 .font(.title2)
+                .accessibilityAddTraits(.isHeader)
                 .fontWeight(.semibold)
 
             if let context = briefing.moodContext {
                 Text(context)
                     .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(SupportTheme.textSecondary)
             }
         }
     }
 
     private func moodSection(_ briefing: DailyBriefing) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             HStack {
                 Text("Mood Prediction")
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
                 Spacer()
                 if let outlook = briefing.moodOutlook {
                     Text(outlook.emoji)
                         .font(.title)
+                        .accessibilityAddTraits(.isHeader)
                 }
             }
 
             if let mood = briefing.predictedMood, let outlook = briefing.moodOutlook {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     Text(outlook.displayText)
                         .font(.subheadline)
                         .fontWeight(.medium)
                     Text(String(format: "%.1f/10", mood))
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(SupportTheme.textSecondary)
                 }
             }
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .cornerRadius(12)
+        .supportCard()
     }
 
     private func questSection(_ briefing: DailyBriefing) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             HStack {
                 Text("Today's Quest")
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
                 Spacer()
                 if appState.todayQuest?.status == .completed {
                     Label("Done", systemImage: "checkmark.circle.fill")
                         .font(.caption)
-                        .foregroundColor(.green)
+                        .foregroundColor(SupportTheme.accent)
                 }
             }
 
             if let questTitle = briefing.questTitle {
                 HStack {
                     Image(systemName: "target")
-                        .foregroundColor(.blue)
+                        .foregroundColor(SupportTheme.accent)
                     Text(questTitle)
                         .font(.subheadline)
                 }
             }
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .cornerRadius(12)
+        .supportCard()
     }
 
     private func calendarSection(_ briefing: DailyBriefing) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("Calendar (Next 24h)")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
             ForEach(briefing.calendarEvents) { event in
-                HStack(alignment: .top, spacing: 12) {
+                HStack(alignment: .top, spacing: SupportTheme.Spacing.s) {
                     Image(systemName: "calendar")
-                        .foregroundColor(.orange)
+                        .foregroundColor(SupportTheme.accent)
                         .frame(width: 20)
 
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                         Text(event.title)
                             .font(.subheadline)
                             .fontWeight(.medium)
@@ -202,89 +197,58 @@ struct BriefingExpandedView: View {
                             }
                         }
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(SupportTheme.textSecondary)
 
                         if event.isSoon {
                             Text(event.timeUntilStart)
                                 .font(.caption)
-                                .foregroundColor(.orange)
+                                .foregroundColor(SupportTheme.accent)
                                 .fontWeight(.medium)
                         }
                     }
                 }
             }
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .cornerRadius(12)
+        .supportCard()
     }
 
     private func suggestionSection(_ briefing: DailyBriefing) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             Text("Suggestion")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
             Text(briefing.suggestion)
                 .font(.subheadline)
-                .foregroundColor(.primary)
+                .foregroundColor(SupportTheme.textPrimary)
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .cornerRadius(12)
+        .supportCard()
     }
 
     // MARK: - Streak Section
 
-    private var streakSection: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "flame.fill")
-                .font(.title2)
-                .foregroundColor(.orange)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text("You're on a \(currentStreak)-day streak!")
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-
-                Text("Keep it going!")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-
-            Spacer()
-        }
-        .padding()
-        .background(
-            LinearGradient(
-                colors: [.orange.opacity(0.1), .yellow.opacity(0.1)],
-                startPoint: .leading,
-                endPoint: .trailing
-            )
-        )
-        .cornerRadius(12)
-    }
-
     // MARK: - Achievements Section
 
     private var achievementsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("Recent Achievements")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
             ForEach(recentBadges.prefix(3)) { badgeProgress in
-                HStack(spacing: 12) {
+                HStack(spacing: SupportTheme.Spacing.s) {
                     Image(systemName: "medal.fill")
-                        .foregroundColor(.yellow)
+                        .foregroundColor(SupportTheme.Celebration.gold)
 
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                         Text(badgeProgress.badge.name)
                             .font(.subheadline)
                             .fontWeight(.medium)
 
                         Text(badgeProgress.badge.description)
                             .font(.caption)
-                            .foregroundColor(.secondary)
-                            .lineLimit(1)
+                            .foregroundColor(SupportTheme.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
 
                     Spacer()
@@ -292,12 +256,10 @@ struct BriefingExpandedView: View {
                     Text("+\(badgeProgress.badge.xpReward) XP")
                         .font(.caption)
                         .fontWeight(.semibold)
-                        .foregroundColor(.blue)
+                        .foregroundColor(SupportTheme.accent)
                 }
             }
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .cornerRadius(12)
+        .supportCard()
     }
 }
