@@ -1,7 +1,9 @@
 -- Free accounts get 30 AI chat messages per server (UTC) day. Every writer
 -- of the free limit uses the same value: sign-up, lazy profile creation, the
 -- insert guard, entitlement refresh, family expiry and the quota admission's
--- own profile creation. Bodies match production except for the limit.
+-- own profile creation. Bodies match production except for the limit, and
+-- the admission also reports the UTC day it counted the message in
+-- (quota_day), so clients attribute a late or replayed receipt to that day.
 BEGIN;
 
 ALTER TABLE public.profiles ALTER COLUMN daily_ai_quota SET DEFAULT 30;
@@ -198,19 +200,19 @@ BEGIN
   -- Premium users
   IF p_is_premium THEN
     UPDATE profiles SET daily_ai_used = v_quota_used + 1 WHERE id = p_user_id;
-    v_result := json_build_object('allowed', TRUE, 'quota_used', v_quota_used + 1, 'quota_limit', -1, 'was_reset', v_was_reset);
+    v_result := json_build_object('allowed', TRUE, 'quota_used', v_quota_used + 1, 'quota_limit', -1, 'was_reset', v_was_reset, 'quota_day', CURRENT_DATE);
     RETURN v_result;
   END IF;
 
   -- Free users quota check
   IF v_quota_used >= v_quota_limit THEN
-    v_result := json_build_object('allowed', FALSE, 'quota_used', v_quota_used, 'quota_limit', v_quota_limit, 'was_reset', v_was_reset);
+    v_result := json_build_object('allowed', FALSE, 'quota_used', v_quota_used, 'quota_limit', v_quota_limit, 'was_reset', v_was_reset, 'quota_day', CURRENT_DATE);
     RETURN v_result;
   END IF;
 
   -- Increment
   UPDATE profiles SET daily_ai_used = v_quota_used + 1 WHERE id = p_user_id;
-  v_result := json_build_object('allowed', TRUE, 'quota_used', v_quota_used + 1, 'quota_limit', v_quota_limit, 'was_reset', v_was_reset);
+  v_result := json_build_object('allowed', TRUE, 'quota_used', v_quota_used + 1, 'quota_limit', v_quota_limit, 'was_reset', v_was_reset, 'quota_day', CURRENT_DATE);
   RETURN v_result;
 END;
 $function$;
