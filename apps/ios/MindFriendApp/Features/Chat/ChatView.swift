@@ -255,7 +255,11 @@ struct ChatView: View {
         }
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
-                if resolvedSessionID != nil { Button("Context") { showSupportContext = true } }
+                if resolvedSessionID != nil {
+                    // An icon, not the word: the title keeps its width in the navigation bar.
+                    Button { showSupportContext = true } label: { Image(systemName: "brain.head.profile") }
+                        .accessibilityLabel("Context")
+                }
                 Button {
                     if appState.entitlements.tier == .premium {
                         voiceAccess = SessionVoiceAccess(container: container, appState: appState,

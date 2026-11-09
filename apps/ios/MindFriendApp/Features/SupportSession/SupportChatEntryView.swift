@@ -55,7 +55,9 @@ struct SupportChatEntryView: View {
                 .navigationTitle(dynamicTypeSize.isAccessibilitySize ? "Chat" : coordinator.journal.sessions[sessionID]?.title ?? "Conversation")
                 .toolbar {
                     ToolbarItemGroup(placement: .topBarTrailing) {
-                        Button("Context") { showContext = true }
+                        // An icon, not the word: the title keeps its width in the navigation bar.
+                        Button { showContext = true } label: { Image(systemName: "brain.head.profile") }
+                            .accessibilityLabel("Context")
                         Button {
                             guard appState.entitlements.tier == .premium else { appState.showPaywall = true; return }
                             voiceAccess = SessionVoiceAccess(container: container, appState: appState, sessionID: sessionID)
