@@ -21,7 +21,7 @@ import {
   XAI_REALTIME_MODEL,
 } from "../_shared/voice-relay.ts";
 import { SAFETY_NOTE } from "../_shared/ai-provider.ts";
-import {
+import { ContextSourcesNotFoundError,
   assembleContext,
   byteLength,
   type ContextSourceRecords,
@@ -210,6 +210,7 @@ function world(opts: Opts = {}) {
   const secrets: Array<VoiceRoute | undefined> = [];
   const connects: Array<VoiceRoute | undefined> = [];
   const state = {
+    accountPrivate: false as boolean | null,
     privacy: 5,
     bindings: new Map<string, Json>(),
     required: new Set<string>(),
@@ -393,6 +394,7 @@ function world(opts: Opts = {}) {
     }
   };
   const voiceContext = createVoiceContextPort({
+    accountPrivate: () => state.accountPrivate === null ? Promise.reject(Error("settings down")) : Promise.resolve(state.accountPrivate === true),
     rpc,
     sources: () => ({
       load: () => {
@@ -614,6 +616,23 @@ Deno.test("POST binds a frozen packet, never exposes text or provider detail, an
   }
 });
 
+Deno.test("POST: Enhanced Privacy Mode narrows a personalized voice request; an unreadable setting fails closed", async () => {
+  const w = world();
+  w.state.accountPrivate = true;
+  const prepared = await w.admit("openai");
+  assert(prepared.voice_context.context_scope === "conversation_only", JSON.stringify(prepared.voice_context));
+  const args = w.rpcs[0].args;
+  assert(args.p_scope === "conversation_only");
+  const kinds = (args.p_sources as Array<{ kind: string }>).map((s) => s.kind);
+  assert(!kinds.includes("companion_memory"), `saved memory bound for a private account: ${kinds.join()}`);
+
+  const down = world();
+  down.state.accountPrivate = null;
+  const r = await handleVoiceRelay(down.post(), down.deps);
+  assert(r.status === 503 && (await r.json()).code === "VOICE_CONTEXT_UNAVAILABLE");
+  assert(!down.calls.includes("prepare_voice_relay_context"));
+});
+
 Deno.test("POST: expected_owner is checked against the JWT before any work", async () => {
   const w = world();
   const response = await handleVoiceRelay(
@@ -651,6 +670,7 @@ Deno.test("POST: missing capability fails closed and never downgrades to the leg
 
   const sourcesDown = world();
   sourcesDown.deps.voiceContext = createVoiceContextPort({
+    accountPrivate: () => Promise.resolve(false),
     rpc: (name) => {
       sourcesDown.calls.push(name);
       return Promise.resolve({});
@@ -660,6 +680,21 @@ Deno.test("POST: missing capability fails closed and never downgrades to the leg
   const s = await handleVoiceRelay(sourcesDown.post(), sourcesDown.deps);
   assert(s.status === 503 && !(await s.text()).includes("db detail"));
   assert(sourcesDown.calls.length === 0);
+
+  // A conversation the database reports as not found for this owner is 404, not a retryable 503.
+  const missing = world();
+  missing.deps.voiceContext = createVoiceContextPort({
+    accountPrivate: () => Promise.resolve(false),
+    rpc: (name) => {
+      missing.calls.push(name);
+      return Promise.resolve({});
+    },
+    sources: () => ({ load: () => Promise.reject(new ContextSourcesNotFoundError()) }),
+  });
+  const m = await handleVoiceRelay(missing.post(), missing.deps);
+  const mBody = await m.json();
+  assert(m.status === 404 && mBody.code === "SESSION_NOT_FOUND", JSON.stringify(mBody));
+  assert(missing.calls.length === 0);
 
   // The 426 boundary precedes the contract: a body with no relay transport is old-app territory.
   const old = world();
@@ -1767,6 +1802,9 @@ Deno.test("voice-token entry point freezes the route at POST across an ambient A
       if (path === "/rest/v1/support_suppressions") {
         return Promise.resolve(json([]));
       }
+      if (path === "/rest/v1/user_settings") {
+        return Promise.resolve(json([{ privacy_mode: "standard" }]));
+      }
       // maybeSingle() reads an array: none => [], one => [row].
       if (path === "/rest/v1/support_activities") {
         return Promise.resolve(json([]));
@@ -2100,6 +2138,7 @@ Deno.test("claim echoing a different route_version than the one bound is refused
   await w.admit("openai");
   const base = w.deps.rpc;
   w.deps.voiceContext = createVoiceContextPort({
+    accountPrivate: () => Promise.resolve(false),
     rpc: async (name, args, signal) => {
       const data = await base(name, args, signal);
       return name === "claim_voice_relay_context"

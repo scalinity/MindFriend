@@ -19,6 +19,13 @@ import { sanitizeForPrompt } from "./sanitize.ts";
 import type { ContextScope, ContextSourceRef } from "./support-contract.ts";
 import { SAFETY_POLICY_SOURCE_ID } from "./support-contract.ts";
 
+/** The database reported that the conversation does not exist for this owner. */
+export class ContextSourcesNotFoundError extends Error {
+  constructor() {
+    super("context sources not found");
+  }
+}
+
 export const CONTEXT_LIMITS = {
   currentMessageChars: 4000,
   historyMessages: 20,
@@ -896,6 +903,9 @@ export function createSupabaseContextSources(
         p_include_personal: scope === "personalized" &&
           (!session || session.contextScope === "personalized"),
       });
+      if (!error && data?.ok === false && data?.code === "NOT_FOUND") {
+        throw new ContextSourcesNotFoundError();
+      }
       if (error || !data?.ok) throw new Error("context sources unavailable");
       const suppress = await admin.from("support_suppressions").select(
         "kind, ref_id",
