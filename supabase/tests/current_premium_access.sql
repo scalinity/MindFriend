@@ -20,7 +20,7 @@ INSERT INTO public.subscriptions(user_id, product_id, original_transaction_id, s
 SET LOCAL ROLE service_role;
 DO $$ DECLARE quota record; BEGIN
  IF public.refresh_user_entitlement('17100000-0000-4000-8000-000000000001') THEN RAISE EXCEPTION 'Expired purchase granted premium'; END IF;
- IF EXISTS(SELECT 1 FROM public.profiles WHERE id='17100000-0000-4000-8000-000000000001' AND (subscription_tier <> 'free' OR daily_ai_quota <> 5)) THEN RAISE EXCEPTION 'Expired profile cache retained'; END IF;
+ IF EXISTS(SELECT 1 FROM public.profiles WHERE id='17100000-0000-4000-8000-000000000001' AND (subscription_tier <> 'free' OR daily_ai_quota <> 30)) THEN RAISE EXCEPTION 'Expired profile cache retained'; END IF;
  IF public.get_voice_minutes_remaining('17100000-0000-4000-8000-000000000001') <> 3 THEN RAISE EXCEPTION 'Expired voice unlimited'; END IF;
  SELECT * INTO quota FROM public.check_and_increment_rehearsal_quota('17100000-0000-4000-8000-000000000001');
  IF quota.quota_limit <> 2 OR quota.used <> 1 THEN RAISE EXCEPTION 'Expired rehearsal unlimited'; END IF;
@@ -118,7 +118,7 @@ DO $$ DECLARE source_status text; BEGIN
   IF EXISTS(SELECT 1 FROM public.subscriptions s JOIN independent_purchase_snapshot old USING(user_id) WHERE to_jsonb(s) IS DISTINCT FROM old.value) THEN RAISE EXCEPTION 'Family refund destroyed independent personal or sponsored receipt'; END IF;
   IF EXISTS(SELECT 1 FROM public.profiles WHERE id IN ('17100000-0000-4000-8000-000000000001','17100000-0000-4000-8000-000000000003') AND (subscription_tier <> 'premium' OR daily_ai_quota <> -1)) THEN RAISE EXCEPTION 'Family refund removed independent premium profile'; END IF;
   IF EXISTS(SELECT 1 FROM public.subscriptions WHERE user_id IN ('17100000-0000-4000-8000-000000000004','17100000-0000-4000-8000-000000000005') AND (status <> 'expired' OR expires_at > now())) THEN RAISE EXCEPTION 'Family-derived access survived refund from %',source_status; END IF;
-  IF EXISTS(SELECT 1 FROM public.profiles WHERE id IN ('17100000-0000-4000-8000-000000000004','17100000-0000-4000-8000-000000000005') AND (subscription_tier <> 'free' OR daily_ai_quota <> 5)) THEN RAISE EXCEPTION 'Shared profile survived refund from %',source_status; END IF;
+  IF EXISTS(SELECT 1 FROM public.profiles WHERE id IN ('17100000-0000-4000-8000-000000000004','17100000-0000-4000-8000-000000000005') AND (subscription_tier <> 'free' OR daily_ai_quota <> 30)) THEN RAISE EXCEPTION 'Shared profile survived refund from %',source_status; END IF;
  END LOOP;
  IF (SELECT count(*) FROM public.billing_events WHERE user_id IN ('17100000-0000-4000-8000-000000000004','17100000-0000-4000-8000-000000000005') AND event_type='subscription_expired') <> 4 THEN RAISE EXCEPTION 'Family refund emitted duplicate or missing expiry events'; END IF;
  IF has_function_privilege('anon','public.compute_current_premium_access(uuid)','EXECUTE') OR
