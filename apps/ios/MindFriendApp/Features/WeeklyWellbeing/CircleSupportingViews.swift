@@ -140,7 +140,7 @@ struct CircleTemplateEditorView: View {
                             .padding(.horizontal, SupportTheme.Spacing.s)
                             .padding(.vertical, SupportTheme.Spacing.xs)
                             .background(editorVM.reminderDays.contains(day) ? SupportTheme.accent : SupportTheme.textSecondary.opacity(0.2))
-                            .foregroundStyle(editorVM.reminderDays.contains(day) ? SupportTheme.textPrimary : SupportTheme.textPrimary)
+                            .foregroundStyle(editorVM.reminderDays.contains(day) ? SupportTheme.onAccent : SupportTheme.textPrimary)
                             .clipShape(Circle())
                     }
                     .buttonStyle(.plain)

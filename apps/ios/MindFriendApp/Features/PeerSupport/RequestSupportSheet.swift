@@ -200,7 +200,7 @@ struct TopicChip: View {
             .padding(.horizontal, SupportTheme.Spacing.s)
             .padding(.vertical, SupportTheme.Spacing.xs)
             .background(isSelected ? SupportTheme.accent : SupportTheme.textSecondary.opacity(0.2))
-            .foregroundStyle(isSelected ? SupportTheme.textPrimary : SupportTheme.textPrimary)
+            .foregroundStyle(isSelected ? SupportTheme.onAccent : SupportTheme.textPrimary)
             .clipShape(Capsule())
         }
         .buttonStyle(.plain)
