@@ -673,6 +673,55 @@ final class SupportSessionFlowUITests: XCTestCase {
         try app.performAccessibilityAudit(for: [.textClipped, .sufficientElementDescription, .hitRegion])
     }
 
+    private func open(_ destination: String, in app: XCUIApplication) {
+        let tab = app.tabBars.buttons[destination]
+        if tab.exists {
+            tab.tap()
+        } else {
+            let root = app.descendants(matching: .any)["support-root-\(destination)"].firstMatch
+            XCTAssertTrue(root.waitForExistence(timeout: 5), destination + "\n" + app.debugDescription)
+            root.tap()
+        }
+        XCTAssertTrue(app.navigationBars[destination].waitForExistence(timeout: 5)
+                      || app.staticTexts[destination].firstMatch.exists, destination + "\n" + app.debugDescription)
+    }
+
+    /// Every destination at every text size: the four destinations stay reachable and each screen is captured.
+    func testEveryDestinationAtEveryTextSize() throws {
+        continueAfterFailure = false
+        let appearance = ProcessInfo.processInfo.environment["SUPPORT_APPEARANCE"] ?? "light"
+        let sizes = ["xSmall", "small", "medium", "large", "xLarge", "xxLarge", "xxxLarge",
+                     "accessibility1", "accessibility2", "accessibility3", "accessibility4", "accessibility5"]
+        for size in sizes {
+            let app = launch(size: size, appearance: appearance)
+            assertFourDestinations(in: app)
+            for destination in ["Today", "Chat", "Explore", "You"] {
+                open(destination, in: app)
+                capture("Support-\(destination)-\(appearance)-\(size)", app: app)
+            }
+            app.terminate()
+        }
+    }
+
+    /// The full system audit on every destination, under whatever accessibility settings the simulator has.
+    func testEveryDestinationPassesTheFullAccessibilityAudit() throws {
+        continueAfterFailure = true
+        let environment = ProcessInfo.processInfo.environment
+        let appearance = environment["SUPPORT_APPEARANCE"] ?? "light"
+        let size = environment["SUPPORT_TEXT_SIZE"] ?? "system"
+        let label = environment["SUPPORT_SETTINGS_LABEL"] ?? "default"
+        let app = launch(size: size, appearance: appearance)
+        defer { app.terminate() }
+        for destination in ["Today", "Chat", "Explore", "You"] {
+            open(destination, in: app)
+            capture("Audit-\(destination)-\(label)-\(appearance)-\(size)", app: app)
+            try app.performAccessibilityAudit(for: .all) { issue in
+                XCTFail("\(destination) [\(label) \(appearance) \(size)]: \(issue.auditType) \(issue.compactDescription) — \(issue.element?.debugDescription ?? "no element")")
+                return true
+            }
+        }
+    }
+
     func testAllTextSizesInBothAppearances() throws {
         continueAfterFailure = false
         let sizes = ["xSmall", "small", "medium", "large", "xLarge", "xxLarge", "xxxLarge",
