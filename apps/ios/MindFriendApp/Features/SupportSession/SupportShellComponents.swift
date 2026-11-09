@@ -923,8 +923,23 @@ struct SupportRowLabel: View {
             Image(systemName: icon)
                 .foregroundStyle(SupportTheme.accent)
         }
+        .labelStyle(SupportRowLabelStyle())
         .frame(minHeight: SupportTheme.minimumTarget, alignment: .leading)
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// A fixed icon column, scaled with Dynamic Type, beside the title and subtitle. In a List the automatic
+/// label style flows each title text under the icon at accessibility sizes, which indented a subtitle's
+/// first line and wrapped the rest back to the row's edge.
+private struct SupportRowLabelStyle: LabelStyle {
+    @ScaledMetric(relativeTo: .body) private var iconWidth: CGFloat = 28
+
+    func makeBody(configuration: LabelStyleConfiguration) -> some View {
+        HStack(spacing: SupportTheme.Spacing.s) {
+            configuration.icon.frame(width: iconWidth)
+            configuration.title
+        }
     }
 }
 
