@@ -341,21 +341,21 @@ BEGIN
     LIMIT 1;
 
     -- Sleep hours from biometric_daily_summaries (if available)
-    SELECT sleep_total_hours INTO v_sleep_hours
+    SELECT sleep_duration_minutes / 60.0 INTO v_sleep_hours
     FROM biometric_daily_summaries
     WHERE biometric_daily_summaries.user_id = p_user_id
-    AND summary_date = ((NOW() AT TIME ZONE v_timezone) - INTERVAL '1 day')::date
+    AND date = ((NOW() AT TIME ZONE v_timezone) - INTERVAL '1 day')::date
     LIMIT 1;
 
     -- Steps yesterday from biometric_daily_summaries (if available)
-    SELECT step_count INTO v_steps_yesterday
+    SELECT steps_count INTO v_steps_yesterday
     FROM biometric_daily_summaries
     WHERE biometric_daily_summaries.user_id = p_user_id
-    AND summary_date = ((NOW() AT TIME ZONE v_timezone) - INTERVAL '1 day')::date
+    AND date = ((NOW() AT TIME ZONE v_timezone) - INTERVAL '1 day')::date
     LIMIT 1;
 
     -- Exercise minutes in last 7 days
-    SELECT COALESCE(SUM(duration_minutes), 0) INTO v_exercise_minutes
+    SELECT COALESCE(SUM(EXTRACT(EPOCH FROM (completed_at - started_at)) / 60), 0)::int INTO v_exercise_minutes
     FROM exercise_sessions
     WHERE exercise_sessions.user_id = p_user_id
     AND completed_at >= NOW() - INTERVAL '7 days';
@@ -367,7 +367,7 @@ BEGIN
     SELECT EXTRACT(HOUR FROM NOW() AT TIME ZONE v_timezone)::int INTO v_hour_of_day;
 
     -- Get streak from profiles
-    SELECT COALESCE(streak_days, 0) INTO v_streak_days
+    SELECT COALESCE(current_streak_days, 0) INTO v_streak_days
     FROM profiles
     WHERE profiles.id = p_user_id;
 
@@ -594,8 +594,9 @@ DECLARE
     v_actual_mood_scaled DECIMAL;
     v_accuracy DECIMAL;
 BEGIN
-    -- Convert actual mood from 1-5 scale to 1-10 scale
-    v_actual_mood_scaled := NEW.mood_score * 2;
+    -- Moods accept 1-10 while predictions use 1-10 for 1-5 check-ins doubled; clamp so a
+    -- 6-10 score can never exceed the prediction's range.
+    v_actual_mood_scaled := LEAST(NEW.mood_score * 2, 10);
 
     -- Find today's prediction for this user
     SELECT predicted_mood INTO v_predicted_mood
@@ -621,6 +622,10 @@ BEGIN
         AND actual_mood IS NULL;
     END IF;
 
+    RETURN NEW;
+EXCEPTION WHEN OTHERS THEN
+    -- Accuracy bookkeeping is secondary; it must never roll back the user's mood entry.
+    RAISE WARNING 'update_prediction_accuracy skipped: %', SQLERRM;
     RETURN NEW;
 END;
 $function$;
@@ -665,16 +670,14 @@ DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public'
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'circadian_profiles' AND policyname = 'Users can insert own circadian profile') THEN EXECUTE $ddl$CREATE POLICY "Users can insert own circadian profile" ON public.circadian_profiles AS PERMISSIVE FOR INSERT TO public WITH CHECK ((auth.uid() = user_id))$ddl$; END IF; END $$;
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'circadian_profiles' AND policyname = 'Users can read own circadian profile') THEN EXECUTE $ddl$CREATE POLICY "Users can read own circadian profile" ON public.circadian_profiles AS PERMISSIVE FOR SELECT TO public USING ((auth.uid() = user_id))$ddl$; END IF; END $$;
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'circadian_profiles' AND policyname = 'Users can update own circadian profile') THEN EXECUTE $ddl$CREATE POLICY "Users can update own circadian profile" ON public.circadian_profiles AS PERMISSIVE FOR UPDATE TO public USING ((auth.uid() = user_id)) WITH CHECK ((auth.uid() = user_id))$ddl$; END IF; END $$;
-DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'mentorship_matches' AND policyname = 'Delete own match') THEN EXECUTE $ddl$CREATE POLICY "Delete own match" ON public.mentorship_matches AS PERMISSIVE FOR DELETE TO public USING (((mentor_id = auth.uid()) OR (mentee_id = auth.uid())))$ddl$; END IF; END $$;
+-- "Delete own match" is replaced in section 12.
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'mentorship_matches' AND policyname = 'Update own match status') THEN EXECUTE $ddl$CREATE POLICY "Update own match status" ON public.mentorship_matches AS PERMISSIVE FOR UPDATE TO public USING (((mentor_id = auth.uid()) OR (mentee_id = auth.uid()))) WITH CHECK (((mentor_id = auth.uid()) OR (mentee_id = auth.uid())))$ddl$; END IF; END $$;
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'mentorship_matches' AND policyname = 'View own match') THEN EXECUTE $ddl$CREATE POLICY "View own match" ON public.mentorship_matches AS PERMISSIVE FOR SELECT TO public USING (((mentor_id = auth.uid()) OR (mentee_id = auth.uid())))$ddl$; END IF; END $$;
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'mentorship_messages' AND policyname = 'Delete own message') THEN EXECUTE $ddl$CREATE POLICY "Delete own message" ON public.mentorship_messages AS PERMISSIVE FOR DELETE TO public USING ((sender_id = auth.uid()))$ddl$; END IF; END $$;
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'mentorship_messages' AND policyname = 'Match participants can read messages') THEN EXECUTE $ddl$CREATE POLICY "Match participants can read messages" ON public.mentorship_messages AS PERMISSIVE FOR SELECT TO public USING ((EXISTS ( SELECT 1
    FROM public.mentorship_matches
   WHERE ((mentorship_matches.id = mentorship_messages.match_id) AND ((mentorship_matches.mentor_id = auth.uid()) OR (mentorship_matches.mentee_id = auth.uid()))))))$ddl$; END IF; END $$;
-DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'mentorship_messages' AND policyname = 'Match participants can send messages') THEN EXECUTE $ddl$CREATE POLICY "Match participants can send messages" ON public.mentorship_messages AS PERMISSIVE FOR INSERT TO public WITH CHECK (((auth.uid() = sender_id) AND (match_id IN ( SELECT mentorship_matches.id
-   FROM public.mentorship_matches
-  WHERE ((mentorship_matches.status = 'active'::text) AND ((mentorship_matches.mentor_id = auth.uid()) OR (mentorship_matches.mentee_id = auth.uid())))))))$ddl$; END IF; END $$;
+-- "Match participants can send messages" is replaced in section 12.
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'mentorship_messages' AND policyname = 'Senders can delete own messages') THEN EXECUTE $ddl$CREATE POLICY "Senders can delete own messages" ON public.mentorship_messages AS PERMISSIVE FOR DELETE TO public USING ((auth.uid() = sender_id))$ddl$; END IF; END $$;
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'mentorship_messages' AND policyname = 'Update message flags') THEN EXECUTE $ddl$CREATE POLICY "Update message flags" ON public.mentorship_messages AS PERMISSIVE FOR UPDATE TO public USING ((EXISTS ( SELECT 1
    FROM public.mentorship_matches
@@ -1109,7 +1112,9 @@ BEGIN
     IF current_user NOT IN ('anon', 'authenticated') THEN
         RETURN NEW;
     END IF;
-    IF NEW.mentor_id IS DISTINCT FROM OLD.mentor_id OR NEW.mentee_id IS DISTINCT FROM OLD.mentee_id
+    IF NEW.id IS DISTINCT FROM OLD.id
+       OR NEW.mentor_response IS DISTINCT FROM OLD.mentor_response OR NEW.started_at IS DISTINCT FROM OLD.started_at
+       OR NEW.mentor_id IS DISTINCT FROM OLD.mentor_id OR NEW.mentee_id IS DISTINCT FROM OLD.mentee_id
        OR NEW.matched_at IS DISTINCT FROM OLD.matched_at OR NEW.created_at IS DISTINCT FROM OLD.created_at
        OR NEW.mentor_alias IS DISTINCT FROM OLD.mentor_alias OR NEW.mentee_alias IS DISTINCT FROM OLD.mentee_alias
        OR NEW.introduction_message IS DISTINCT FROM OLD.introduction_message
@@ -1153,7 +1158,8 @@ BEGIN
     IF current_user NOT IN ('anon', 'authenticated') THEN
         RETURN NEW;
     END IF;
-    IF NEW.match_id IS DISTINCT FROM OLD.match_id OR NEW.sender_id IS DISTINCT FROM OLD.sender_id
+    IF NEW.id IS DISTINCT FROM OLD.id
+       OR NEW.match_id IS DISTINCT FROM OLD.match_id OR NEW.sender_id IS DISTINCT FROM OLD.sender_id
        OR NEW.content IS DISTINCT FROM OLD.content OR NEW.sent_at IS DISTINCT FROM OLD.sent_at
        OR NEW.created_at IS DISTINCT FROM OLD.created_at
        OR NEW.encrypted_content IS DISTINCT FROM OLD.encrypted_content
@@ -1181,3 +1187,20 @@ ALTER FUNCTION public.update_intervention_efficacy() SET search_path = public, p
 ALTER FUNCTION public.encrypt_message_content(text) SET search_path = public, extensions, pg_temp;
 ALTER FUNCTION public.decrypt_message_content(bytea, text) SET search_path = public, extensions, pg_temp;
 ALTER FUNCTION public.decrypt_messages_batch(uuid[]) SET search_path = public, extensions, pg_temp;
+
+-- 12. Direct deletes and inserts. Deleting a match cascades through both participants' messages
+-- and the safety escalations, so a client may delete only what the released app deletes: a
+-- mentor declining a pending request. Ending an active mentorship is a status update.
+DROP POLICY IF EXISTS "Delete own match" ON public.mentorship_matches;
+CREATE POLICY "Delete own match" ON public.mentorship_matches
+    FOR DELETE TO authenticated
+    USING (mentor_id = auth.uid() AND status = 'pending');
+-- Permissive policies combine with OR; an unconditional insert policy would bypass the
+-- rate-limited one, which stays as the only direct insert path.
+DROP POLICY IF EXISTS "Match participants can send messages" ON public.mentorship_messages;
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'mentorship_messages'
+                   AND policyname = 'Match participants can send rate-limited messages') THEN
+        RAISE EXCEPTION 'Expected the rate-limited message insert policy';
+    END IF;
+END $$;
