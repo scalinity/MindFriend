@@ -98,6 +98,13 @@ Deno.serve((req) => {
     providerConfigured: (route) => !!keyFor(route),
     voiceContext: createVoiceContextPort({
       rpc,
+      // Same rule as chat: anything other than "standard" (or no settings row) is private.
+      accountPrivate: async (userId, signal) => {
+        const { data, error } = await client(signal).from("user_settings")
+          .select("privacy_mode").eq("user_id", userId).maybeSingle();
+        if (error) throw Error("PRIVACY_SETTINGS_UNAVAILABLE");
+        return data?.privacy_mode !== "standard";
+      },
       // Same ContextPolicy and sources the text path uses; every read is owner-scoped.
       sources: (signal) =>
         createSupabaseContextSources(

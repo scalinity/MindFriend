@@ -18,6 +18,7 @@ import { SAFETY_NOTE } from "./ai-provider.ts";
 import {
   assembleContext,
   byteLength,
+  ContextSourcesNotFoundError,
   type ContextFailureReason,
   type ContextPolicyDeps,
   type ContextSources,
@@ -261,6 +262,8 @@ export interface VoiceContextPort {
 export interface VoiceContextPortDeps {
   rpc(name: string, args: Json, signal: AbortSignal): Promise<Json>;
   sources(signal: AbortSignal): ContextSources;
+  /** True when the account's Privacy Mode keeps saved personal context out of AI requests. */
+  accountPrivate(userId: string, signal: AbortSignal): Promise<boolean>;
   now?: () => Date;
   sha256Hex?: (text: string) => Promise<string>;
   newId?: () => string;
@@ -381,7 +384,8 @@ export function createVoiceContextPort(
       });
     } catch (error) {
       signal.throwIfAborted();
-      void error; // never surface source/database detail
+      // Someone else's or a deleted conversation reads as not found, without any detail.
+      if (error instanceof ContextSourcesNotFoundError) throw new VoiceContextError("SESSION_NOT_FOUND");
       throw new VoiceContextError("VOICE_CONTEXT_UNAVAILABLE");
     }
     if (!result.ok) {
@@ -417,13 +421,26 @@ export function createVoiceContextPort(
 
   return {
     async admit({ userId, request, route }, signal) {
+      // Enhanced Privacy Mode narrows a personalized request exactly as the text path does.
+      // An unreadable setting fails closed: no saved personal context is used.
+      let scope = request.scope;
+      if (scope === "personalized") {
+        let isPrivate: boolean;
+        try {
+          isPrivate = await deps.accountPrivate(userId, signal);
+        } catch {
+          signal.throwIfAborted();
+          return { ok: false, status: 503, code: "VOICE_CONTEXT_UNAVAILABLE", extra: {} };
+        }
+        if (isPrivate) scope = "conversation_only";
+      }
       let frozen;
       try {
         frozen = await frozenFor({
           userId,
           supportSessionId: request.supportSessionId,
           conversationId: request.conversationId,
-          scope: request.scope,
+          scope,
           expectedPrivacyRevision: request.expectedPrivacyRevision,
           vendor: route.vendor,
         }, signal);
@@ -443,7 +460,7 @@ export function createVoiceContextPort(
         p_user_id: userId,
         p_support_session_id: request.supportSessionId,
         p_conversation_id: request.conversationId,
-        p_scope: request.scope,
+        p_scope: scope,
         p_privacy_revision: frozen.assembled.privacyRevision,
         p_packet_sha256: frozen.sha256,
         p_packet_bytes: frozen.bytes,
@@ -475,7 +492,7 @@ export function createVoiceContextPort(
           version: VOICE_CONTEXT_VERSION,
           support_session_id: request.supportSessionId,
           conversation_id: request.conversationId,
-          context_scope: request.scope,
+          context_scope: scope,
           privacy_revision: frozen.assembled.privacyRevision,
           context_receipt_id: receiptId,
           packet_sha256: frozen.sha256,
