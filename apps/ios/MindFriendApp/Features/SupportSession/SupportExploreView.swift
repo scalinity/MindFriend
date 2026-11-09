@@ -13,7 +13,6 @@ struct SupportExploreView: View {
     @State private var circles: [FriendCircle] = []
     @State private var replaceCandidate: SupportPin?
     @State private var showInviteBuddy = false
-    @State private var openCategory: SupportSection?
 
     private var isSearching: Bool {
         !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -34,6 +33,7 @@ struct SupportExploreView: View {
                             SupportActivityChoiceButton(template: template, origin: .explore)
                         }
                     }
+                    .listRowBackground(SupportTheme.surface)
                     suggestedSection
                     categorySection
                     activeProgramSection
@@ -46,7 +46,7 @@ struct SupportExploreView: View {
             .navigationDestination(for: SupportDestination.self) { destination in
                 SupportDestinationView(destination: destination)
             }
-            .navigationDestination(item: $openCategory) { section in
+            .navigationDestination(for: SupportSection.self) { section in
                 categoryPage(section)
             }
             .sheet(item: $replaceCandidate) { candidate in
@@ -139,7 +139,7 @@ struct SupportExploreView: View {
 
     /// A button rather than a NavigationLink: inside a List, links gain a disclosure chevron outside the card.
     private func categoryTile(_ section: SupportSection) -> some View {
-        Button { openCategory = section } label: {
+        Button { navigator.explorePath.append(section) } label: {
             VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                 Image(systemName: categoryIcon(section))
                     .font(.title2)
@@ -216,6 +216,7 @@ struct SupportExploreView: View {
                     togglePin(activePin)
                 }
             }
+            .listRowBackground(SupportTheme.surface)
         }
     }
 
@@ -240,6 +241,7 @@ struct SupportExploreView: View {
                 .buttonStyle(.plain)
             }
         }
+        .listRowBackground(SupportTheme.surface)
     }
 
     @ViewBuilder
@@ -268,12 +270,14 @@ struct SupportExploreView: View {
                     message: String(localized: "Try another word, or clear the search to browse everything.")
                 )
             }
+            .listRowBackground(SupportTheme.surface)
         } else {
             Section(String(localized: "Results")) {
                 ForEach(matches) { destination in
                     destinationRow(destination, showsSection: true)
                 }
             }
+            .listRowBackground(SupportTheme.surface)
         }
     }
 
@@ -358,6 +362,7 @@ struct ReplacePinSheet: View {
                         .font(.body)
                         .foregroundStyle(SupportTheme.textSecondary)
                 }
+                .listRowBackground(SupportTheme.surface)
                 Section(String(localized: "Current pins")) {
                     ForEach(pins.pins) { pinned in
                         Button {
@@ -372,6 +377,7 @@ struct ReplacePinSheet: View {
                         .buttonStyle(.plain)
                     }
                 }
+                .listRowBackground(SupportTheme.surface)
             }
             .supportScreen()
 
@@ -428,6 +434,7 @@ struct SupportJournalHub: View {
             } footer: {
                 Text("Text and voice entries are kept separately, and each list is searched on its own. Art and drawing tools are in Create.")
             }
+            .listRowBackground(SupportTheme.surface)
         }
         .supportScreen()
 
@@ -466,6 +473,7 @@ struct SupportPathwaysHub: View {
                     }
                 }
             }
+            .listRowBackground(SupportTheme.surface)
             Section {
                 NavigationLink {
                     PathwaySelectionView().environmentObject(container)
@@ -477,6 +485,7 @@ struct SupportPathwaysHub: View {
                     )
                 }
             }
+            .listRowBackground(SupportTheme.surface)
         }
         .supportScreen()
 

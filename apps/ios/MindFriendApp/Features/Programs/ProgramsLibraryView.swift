@@ -196,7 +196,7 @@ struct CategoryFilterRow: View {
 struct FilterChip: View {
     let label: String
     var icon: String? = nil
-    var color: Color = .blue
+    var color: Color = SupportTheme.accent
     let isSelected: Bool
     let action: () -> Void
 

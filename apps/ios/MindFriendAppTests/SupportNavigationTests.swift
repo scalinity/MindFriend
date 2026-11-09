@@ -1,3 +1,4 @@
+import SwiftUI
 import XCTest
 #if canImport(MindFriendApp)
 @testable import MindFriendApp
@@ -198,7 +199,7 @@ final class SupportNavigationTests: XCTestCase {
     func testNavigatorOpensIntoTheOwningTabStackOnly() {
         let navigator = SupportShellNavigator()
         navigator.open(.circles)
-        XCTAssertEqual(navigator.explorePath, [.circles])
+        XCTAssertEqual(navigator.explorePath, NavigationPath([SupportDestination.circles]))
         XCTAssertTrue(navigator.youPath.isEmpty)
         navigator.open(.settings)
         XCTAssertEqual(navigator.youPath, [.settings])
