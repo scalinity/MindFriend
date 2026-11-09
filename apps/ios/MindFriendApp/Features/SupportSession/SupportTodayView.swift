@@ -148,7 +148,8 @@ struct SupportTodayView: View {
     private var progressCard: some View {
         VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
             Text("A little progress").font(.title2.weight(.semibold)).accessibilityAddTraits(.isHeader)
-            if let quest = appState.todayQuest {
+            // The cached quest can be yesterday's when the app stays open overnight; only today's is shown.
+            if let quest = appState.todayQuest, quest.localDate == DateFormatter.dateOnly.string(from: Date()) {
                 NavigationLink { QuestDetailView(quest: quest) } label: {
                     SupportRowLabel(title: quest.template.title,
                         subtitle: quest.status == .completed ? "Today's quest is complete" : "Today's quest",
