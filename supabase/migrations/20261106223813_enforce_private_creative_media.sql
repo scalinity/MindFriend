@@ -1,9 +1,9 @@
--- Production prerequisite: release the signed-URL-compatible iOS client before
--- applying this migration, as required by operations/20261022_private_media.sql.
--- Older installed clients construct public URLs and cannot read private buckets.
--- This forward migration changes access only; it deletes no media or records.
-UPDATE storage.buckets SET public = false
-WHERE id IN ('creative-works', 'generated-audio');
+-- Owner-scoped storage policies and the voice-journal audio types for creative-works.
+-- Bucket visibility is unchanged here: making creative-works and generated-audio private
+-- stays in operations/20261022_private_media.sql until signed-URL gallery, history,
+-- playback, refresh, owner access and cross-owner denial are verified with a compatible
+-- client (issue #57). App versions 1.0.3 and earlier build public URLs for these buckets.
+-- This forward migration deletes no media or records.
 
 UPDATE storage.buckets SET allowed_mime_types = ARRAY[
   'image/png', 'image/jpeg', 'image/webp', 'image/gif',

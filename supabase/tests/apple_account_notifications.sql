@@ -7,10 +7,10 @@ INSERT INTO auth.users(id,email,raw_user_meta_data,raw_app_meta_data) VALUES
  ('18100000-0000-4000-8000-000000000001','relay@privaterelay.appleid.com','{}','{"existing":"preserve"}'),
  ('18100000-0000-4000-8000-000000000002','other@example.invalid','{"sub":"synthetic.apple.subject"}','{}');
 INSERT INTO public.profiles(id) SELECT id FROM auth.users WHERE id::text LIKE '18100000-%' ON CONFLICT(id) DO NOTHING;
-INSERT INTO auth.identities(id,user_id,provider,identity_data) VALUES
- ('18100000-0000-4000-8000-000000000011','18100000-0000-4000-8000-000000000001','apple','{"sub":"synthetic.apple.subject","email":"relay@privaterelay.appleid.com"}'),
- ('18100000-0000-4000-8000-000000000012','18100000-0000-4000-8000-000000000001','google','{"sub":"google.subject"}'),
- ('18100000-0000-4000-8000-000000000013','18100000-0000-4000-8000-000000000002','apple','{"sub":"other.apple.subject","email":"other@example.invalid"}');
+INSERT INTO auth.identities(id,user_id,provider_id,provider,identity_data) VALUES
+ ('18100000-0000-4000-8000-000000000011','18100000-0000-4000-8000-000000000001','synthetic.apple.subject','apple','{"sub":"synthetic.apple.subject","email":"relay@privaterelay.appleid.com"}'),
+ ('18100000-0000-4000-8000-000000000012','18100000-0000-4000-8000-000000000001','google.subject','google','{"sub":"google.subject"}'),
+ ('18100000-0000-4000-8000-000000000013','18100000-0000-4000-8000-000000000002','other.apple.subject','apple','{"sub":"other.apple.subject","email":"other@example.invalid"}');
 -- Use events in the recent past so ordering and later sign-ins are testable.
 CREATE TEMP TABLE apple_event_clock AS SELECT floor(extract(epoch FROM now()))::bigint - 100 AS event_time;
 INSERT INTO auth.sessions(id,user_id,created_at) VALUES
@@ -55,8 +55,8 @@ DO $$ DECLARE t bigint; result uuid; metadata jsonb; BEGIN
     has_function_privilege('authenticated','public.process_apple_account_event(text,text,bigint,text)','EXECUTE') THEN RAISE EXCEPTION 'Client can forge Apple events'; END IF;
 END $$;
 -- Ambiguous trusted identities fail rather than picking an arbitrary account.
-INSERT INTO auth.identities(id,user_id,provider,identity_data) VALUES
- ('18100000-0000-4000-8000-000000000014','18100000-0000-4000-8000-000000000002','apple','{"sub":"synthetic.apple.subject"}');
+INSERT INTO auth.identities(id,user_id,provider_id,provider,identity_data) VALUES
+ ('18100000-0000-4000-8000-000000000014','18100000-0000-4000-8000-000000000002','synthetic.apple.subject.second','apple','{"sub":"synthetic.apple.subject"}');
 DO $$ BEGIN
  BEGIN
   PERFORM public.process_apple_account_event('synthetic.apple.subject','account-deleted',(SELECT event_time FROM apple_event_clock));

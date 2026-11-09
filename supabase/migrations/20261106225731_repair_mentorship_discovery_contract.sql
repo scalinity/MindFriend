@@ -116,12 +116,24 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
 
 -- AT TIME ZONE returns a wall-clock timestamp, not a value with a TIMEZONE field.
-CREATE OR REPLACE FUNCTION public.calculate_timezone_overlap(p_tz1 text, p_tz2 text)
+-- Production names this function's parameters tz1/tz2; a fresh chain names them
+-- p_tz1/p_tz2 (20260124150000). CREATE OR REPLACE cannot rename input parameters,
+-- so keep the names already present. That preserves the existing grants without a
+-- DROP, and every caller passes the arguments positionally.
+DO $migration$
+DECLARE
+    existing text[] := (SELECT proargnames FROM pg_proc
+                        WHERE oid = to_regprocedure('public.calculate_timezone_overlap(text,text)'));
+    first_name text := COALESCE(existing[1], 'tz1');
+    second_name text := COALESCE(existing[2], 'tz2');
+BEGIN
+    EXECUTE format($definition$
+CREATE OR REPLACE FUNCTION public.calculate_timezone_overlap(%1$I text, %2$I text)
 RETURNS decimal LANGUAGE plpgsql STABLE SET search_path = public, pg_temp AS $$
 DECLARE diff_hours numeric;
 BEGIN
-    IF p_tz1 IS NULL OR p_tz2 IS NULL THEN RETURN 0.5; END IF;
-    diff_hours := abs(extract(epoch FROM ((now() AT TIME ZONE p_tz1) - (now() AT TIME ZONE p_tz2))) / 3600);
+    IF %1$I IS NULL OR %2$I IS NULL THEN RETURN 0.5; END IF;
+    diff_hours := abs(extract(epoch FROM ((now() AT TIME ZONE %1$I) - (now() AT TIME ZONE %2$I))) / 3600);
     RETURN CASE WHEN diff_hours <= 2 THEN 1.0
                 WHEN diff_hours <= 4 THEN 0.8
                 WHEN diff_hours <= 8 THEN 0.6
@@ -129,4 +141,7 @@ BEGIN
                 ELSE 0.2 END;
 EXCEPTION WHEN invalid_parameter_value THEN RETURN 0.5;
 END;
-$$;
+$$
+$definition$, first_name, second_name);
+END
+$migration$;

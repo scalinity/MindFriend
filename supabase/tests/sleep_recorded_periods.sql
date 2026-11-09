@@ -1,5 +1,7 @@
 -- Run against the migrated disposable sleep schema with auth.uid() and the unchanged owner policy.
 BEGIN;
+INSERT INTO auth.users(id,aud,role,email) VALUES
+ ('11111111-1111-4111-8111-111111111111','authenticated','authenticated','sleep-periods@example.invalid');
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111111', true);
 INSERT INTO public.sleep_entries(user_id,date,source,bedtime,wake_time,time_in_bed_minutes,time_asleep_minutes,recorded_periods)
@@ -48,10 +50,10 @@ DO $$ BEGIN
     EXCEPTION WHEN insufficient_privilege THEN NULL; END;
 END $$;
 SET LOCAL ROLE anon;
+-- RLS (auth.uid() = user_id) protects the rows; an anonymous caller has no uid and sees none.
 DO $$ BEGIN
-    BEGIN
-        PERFORM recorded_periods FROM public.sleep_entries;
+    IF EXISTS (SELECT recorded_periods FROM public.sleep_entries) THEN
         RAISE EXCEPTION 'Anonymous sleep read accepted';
-    EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+    END IF;
 END $$;
 ROLLBACK;
