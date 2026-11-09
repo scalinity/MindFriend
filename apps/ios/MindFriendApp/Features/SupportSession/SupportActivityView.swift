@@ -7,6 +7,7 @@ struct SupportActivityView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var container: DependencyContainer
+    @EnvironmentObject private var appState: AppState
     @State private var discussion: SupportActivityDiscussionSnapshot?
     @AccessibilityFocusState private var headingFocused: Bool
     @FocusState private var fieldFocused: Bool
@@ -218,6 +219,7 @@ struct SupportActivityView: View {
                 Button(outcome.displayTitle) {
                     perform {
                         try await coordinator.reflect(activity.id, outcome: outcome, note: note, includeAnswers: includeAnswers)
+                        if outcome != .skip { appState.celebrateCompletion(String(localized: "Reflection saved"), soft: true) }
                     }
                 }.buttonStyle(.bordered).frame(minHeight: 44).disabled(isSaving || note.unicodeScalars.count > 1_000)
             }
@@ -285,7 +287,13 @@ struct SupportActivityView: View {
         let last = promptIndex == activity.templateKey.prompts.count - 1
         perform {
             guard let value = checkpoint(acknowledge: true, skipped: skipped) else { return }
-            if last { try await coordinator.finish(activity.id, checkpoint: value) }
+            if last {
+                try await coordinator.finish(activity.id, checkpoint: value)
+                // Skipping every prompt records "stopped", which is not celebrated.
+                if coordinator.journal.activities[activity.id]?.status == .completed {
+                    appState.celebrateCompletion(String(localized: "Activity finished"))
+                }
+            }
             else { try await coordinator.checkpoint(activity.id, value: value); loadAnswer(); headingFocused = true }
             activeSince = Date()
         }
@@ -311,6 +319,7 @@ struct SupportActivityView: View {
     private func choose(_ choice: SupportStepChoice) {
         perform {
             try await coordinator.chooseStep(presentation.id, choice: choice, text: answer)
+            if choice == .didIt { appState.celebrateCompletion(String(localized: "Step done")) }
             if choice == .saveForLater { try await coordinator.doneForNow(presentation.sessionID); dismiss() }
         }
     }

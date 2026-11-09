@@ -223,4 +223,26 @@ final class SupportNavigationTests: XCTestCase {
         XCTAssertTrue(SupportDestination.outcomes.matches("PHQ"))
         XCTAssertFalse(SupportDestination.circles.matches("zzzz"))
     }
+
+    func testGreetingUsesTimeOfDayAndOnlyARealFirstName() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "America/New_York"))
+        let formatter = ISO8601DateFormatter()
+        let morning = try XCTUnwrap(formatter.date(from: "2026-11-09T13:00:00Z"))   // 8:00 AM EST
+        let evening = try XCTUnwrap(formatter.date(from: "2026-11-09T23:30:00Z"))   // 6:30 PM EST
+        let lateNight = try XCTUnwrap(formatter.date(from: "2026-11-10T04:00:00Z")) // 11:00 PM EST
+        XCTAssertEqual(SupportGreeting.text(displayName: "Synthetic Person", at: morning, calendar: calendar), "Good morning, Synthetic")
+        XCTAssertEqual(SupportGreeting.text(displayName: "Synthetic Person", at: evening, calendar: calendar), "Good evening, Synthetic")
+        XCTAssertEqual(SupportGreeting.text(displayName: "Synthetic", at: lateNight, calendar: calendar), "Hello, Synthetic")
+        for placeholder in [nil, "", "MindFriend User", "user_ab12cd34", "someone.example", "lowercase name"] {
+            XCTAssertEqual(SupportGreeting.text(displayName: placeholder, at: evening, calendar: calendar), "Good evening",
+                           String(describing: placeholder))
+        }
+    }
+
+    func testStreaksAreKeptOnTheServerButNotShown() {
+        XCTAssertFalse(SupportDestination.destinations(in: .progress).contains(.streaks))
+        XCTAssertFalse(SupportDestination.streaks.isPinnable)
+        XCTAssertEqual(DeepLinkRoute.streak.supportPlacement, .destination(.achievements))
+    }
 }

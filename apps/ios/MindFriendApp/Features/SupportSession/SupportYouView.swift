@@ -117,7 +117,7 @@ struct SupportYouView: View {
         Section(SupportSection.progress.title) {
             // Summary from real account stats only; nothing is shown as a score or judgment.
             HStack(alignment: .top, spacing: SupportTheme.Spacing.m) {
-                summaryItem(value: appState.currentUser?.stats?.currentStreakDays, label: String(localized: "Streak"))
+                summaryItem(value: appState.currentUser?.stats?.level, label: String(localized: "Level"))
                 summaryItem(value: appState.currentUser?.stats?.totalQuestsCompleted, label: String(localized: "Quests"))
                 summaryItem(value: badgeCount, label: String(localized: "Badges"))
             }

@@ -50,7 +50,7 @@ struct WelcomeBackView: View {
         )
         .overlay {
             if showConfetti {
-                WelcomeBackConfettiView()
+                CelebrationParticles()
             }
         }
         .onAppear {
@@ -284,57 +284,6 @@ struct WelcomeBackView: View {
 
         appState.dismissWelcomeBack()
         dismiss()
-    }
-}
-
-// MARK: - Welcome Back Confetti View (renamed to avoid conflict with CelebrationView.ConfettiView)
-
-private struct WelcomeBackConfettiView: View {
-    @State private var animate = false
-
-    var body: some View {
-        GeometryReader { geometry in
-            ForEach(0..<30, id: \.self) { index in
-                WelcomeBackConfettiPiece(
-                    color: confettiColors[index % confettiColors.count],
-                    size: CGFloat.random(in: 8...16),
-                    startX: CGFloat.random(in: 0...geometry.size.width),
-                    delay: Double.random(in: 0...0.3)
-                )
-            }
-        }
-        .allowsHitTesting(false)
-    }
-
-    private var confettiColors: [Color] {
-        [.blue, .purple, .orange, .yellow, .green, .pink]
-    }
-}
-
-private struct WelcomeBackConfettiPiece: View {
-    let color: Color
-    let size: CGFloat
-    let startX: CGFloat
-    let delay: Double
-
-    @State private var yOffset: CGFloat = -50
-    @State private var rotation: Double = 0
-    @State private var opacity: Double = 1
-
-    var body: some View {
-        Rectangle()
-            .fill(color)
-            .frame(width: size, height: size * 0.6)
-            .rotationEffect(.degrees(rotation))
-            .opacity(opacity)
-            .position(x: startX, y: yOffset)
-            .onAppear {
-                withAnimation(.easeIn(duration: 2).delay(delay)) {
-                    yOffset = UIScreen.main.bounds.height + 100
-                    rotation = Double.random(in: 360...720)
-                    opacity = 0
-                }
-            }
     }
 }
 

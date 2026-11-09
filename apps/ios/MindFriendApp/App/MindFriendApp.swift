@@ -421,10 +421,12 @@ struct SupportLoadedShell: View {
     var body: some View {
         MainTabView()
             .environmentObject(coordinator)
+            .completionMoments()
             .fullScreenCover(item: Binding(get: { coordinator.activityPresentation },
                                           set: { coordinator.activityPresentation = $0 })) { presentation in
                 SupportActivityView(coordinator: coordinator, presentation: presentation)
                     .interactiveDismissDisabled()
+                    .completionMoments()
             }
             .transaction { if reduceMotion { $0.disablesAnimations = true; $0.animation = nil } }
     }

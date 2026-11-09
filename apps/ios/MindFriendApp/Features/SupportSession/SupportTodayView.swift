@@ -15,8 +15,13 @@ struct SupportTodayView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
-                    Text("A little room for what matters to you.")
-                        .font(.body).foregroundStyle(SupportTheme.textSecondary)
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
+                        Text(SupportGreeting.text(displayName: appState.currentUser?.displayName))
+                            .font(.largeTitle.weight(.semibold)).foregroundStyle(SupportTheme.textPrimary)
+                            .accessibilityAddTraits(.isHeader)
+                        Text("A little room for what matters to you.")
+                            .font(.body).foregroundStyle(SupportTheme.textSecondary)
+                    }
                     focusCard
                     if simplerView {
                         Button("Turn off simpler view") {
@@ -154,6 +159,23 @@ struct SupportTodayView: View {
     }
 }
 
+/// "Good evening, Synthetic": the time of day and the first word of the account's name. It never
+/// infers how the person feels (spec 5.1), and leaves out placeholders, handles and email prefixes.
+enum SupportGreeting {
+    static func text(displayName: String?, at date: Date = Date(), calendar: Calendar = .current) -> String {
+        let greeting = TimeOfDay.at(hour: calendar.component(.hour, from: date)).greeting
+        guard let name = firstName(from: displayName) else { return greeting }
+        return "\(greeting), \(name)"
+    }
+
+    static func firstName(from displayName: String?) -> String? {
+        guard let first = displayName?.split(whereSeparator: \.isWhitespace).first.map(String.init),
+              first != "MindFriend", first.first?.isLowercase == false,
+              !first.contains(where: { $0 == "@" || $0 == "_" || $0 == "." || $0.isNumber }) else { return nil }
+        return first
+    }
+}
+
 struct SupportSessionListView: View {
     var unfinishedOnly = false
     var body: some View { SupportHistoryView(unfinishedOnly: unfinishedOnly) }
@@ -161,6 +183,7 @@ struct SupportSessionListView: View {
 
 struct SupportSavedStepsView: View {
     @EnvironmentObject private var coordinator: SupportSessionCoordinator
+    @EnvironmentObject private var appState: AppState
     @State private var error: String?
     @State private var isSaving = false
 
@@ -191,8 +214,10 @@ struct SupportSavedStepsView: View {
         isSaving = true
         Task {
             defer { isSaving = false }
-            do { try await coordinator.chooseStep(activity.id, choice: choice, text: activity.step?.actionText) }
-            catch { self.error = SupportSessionCoordinator.message(for: error) }
+            do {
+                try await coordinator.chooseStep(activity.id, choice: choice, text: activity.step?.actionText)
+                if choice == .didIt { appState.celebrateCompletion(String(localized: "Step done")) }
+            } catch { self.error = SupportSessionCoordinator.message(for: error) }
         }
     }
 }
@@ -204,6 +229,7 @@ struct SupportSessionDetailView: View {
 
 struct SupportSavedStepDetailView: View {
     @EnvironmentObject private var coordinator: SupportSessionCoordinator
+    @EnvironmentObject private var appState: AppState
     @Environment(\.dismiss) private var dismiss
     let activityID: UUID
     @State private var date = Date().addingTimeInterval(3_600)
@@ -263,6 +289,7 @@ struct SupportSavedStepDetailView: View {
     private func choose(_ choice: SupportStepChoice, activity: SupportActivity) {
         run {
             try await coordinator.chooseStep(activity.id, choice: choice, text: activity.step?.actionText)
+            if choice == .didIt { appState.celebrateCompletion(String(localized: "Step done")) }
             dismiss()
         }
     }

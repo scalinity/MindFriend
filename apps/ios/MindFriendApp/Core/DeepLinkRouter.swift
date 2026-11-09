@@ -382,7 +382,8 @@ extension DeepLinkRoute {
         case .moodHistory:
             return .destination(.moodHistory)
         case .streak:
-            return .destination(.streaks)
+            // Streaks are not shown; the link lands on progress instead.
+            return .destination(.achievements)
         case .progress:
             return .destination(.outcomes)
         case .breathing:
