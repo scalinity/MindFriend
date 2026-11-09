@@ -80,6 +80,15 @@ struct QuestDetailView: View {
     private func completeQuest() {
         Log.quests.debug("[Quest] completeQuest() called")
         guard !isCompleting else { return }
+        let capturedOwner = appState.currentUser?.id
+        let capturedEpoch = appState.accountEpoch
+        let submittedNote = reflectionNote.isEmpty ? nil : reflectionNote
+        let submittedRating = rating > 0 ? rating : nil
+        let ownerProof: @Sendable () async -> OfflineOwnerProof? = { @MainActor in
+            guard let capturedOwner, appState.currentUser?.id == capturedOwner,
+                  container.supabaseAuthService.userId == capturedOwner else { return nil }
+            return OfflineOwnerProof(userId: capturedOwner, epoch: appState.accountEpoch)
+        }
         isCompleting = true
 
         Task { @MainActor in
@@ -101,37 +110,37 @@ struct QuestDetailView: View {
             }
 
             do {
-                try await container.supabaseDataService.completeQuest(
-                    id: quest.id,
-                    reflectionNote: reflectionNote.isEmpty ? nil : reflectionNote,
-                    rating: rating > 0 ? rating : nil
-                )
-
-                // Award XP for quest completion
-                let xpResult = try await container.supabaseDataService.awardXP(activity: .questComplete)
+                guard let capturedOwner, let questID = UUID(uuidString: quest.id) else { throw DataError.invalidId }
+                let owner = OfflineOwnerProof(userId: capturedOwner, epoch: capturedEpoch)
+                let reward = try await AtomicCompletionRPC.completeQuest(client: container.supabaseClient,
+                    owner: owner, ownerProof: ownerProof, questId: questID,
+                    reflectionNote: submittedNote, rating: submittedRating)
 
                 // Trigger XP gain toast IMMEDIATELY for instant gratification
-                await MainActor.run {
+                if reward.xpAwarded > 0 { await MainActor.run {
+                    guard appState.currentUser?.id == owner.userId, appState.accountEpoch == owner.epoch else { return }
                     container.achievementService.triggerXPGainAnimation(
-                        amount: xpResult.amount,
+                        amount: reward.xpAwarded,
                         activity: .questComplete
                     )
-                }
+                } }
 
                 // Update event progress for quest-related activities
-                if let activityType = quest.template.type.eventActivityType {
+                if reward.xpAwarded > 0, let activityType = quest.template.type.eventActivityType {
+                    guard await ownerProof() == owner else { throw CancellationError() }
                     _ = try? await container.supabaseDataService.incrementEventProgress(activityType: activityType)
                 }
 
                 // Fetch updated profile to get new streak
                 let profile = try await container.supabaseAuthService.fetchProfile()
+                guard await ownerProof() == owner else { throw CancellationError() }
 
                 // Check for milestone celebrations
                 let milestoneCelebrations = try await container.supabaseDataService.checkMilestoneTriggers(
                     streak: profile.stats?.currentStreakDays ?? 0,
                     questCount: profile.stats?.totalQuestsCompleted ?? 0,
                     exerciseCount: nil,
-                    newLevel: xpResult.leveledUp ? xpResult.newLevel : nil,
+                    newLevel: reward.levelUp ? reward.newLevel : nil,
                     badgeId: nil
                 )
 
@@ -140,11 +149,14 @@ struct QuestDetailView: View {
                 let achievementService = container.achievementService
                 let activationService = container.activationService
                 Task.detached(priority: .utility) {
+                    guard await ownerProof() == owner else { return }
                     _ = try? await achievementService.checkBadgeProgress()
+                    guard await ownerProof() == owner else { return }
                     try? await activationService.recordQuestCompletion()
                 }
 
                 await MainActor.run {
+                    guard appState.currentUser?.id == owner.userId, appState.accountEpoch == owner.epoch else { return }
                     appState.currentStreak = profile.stats?.currentStreakDays ?? 0
                     appState.currentUser = profile
                     showReflection = false
@@ -155,8 +167,8 @@ struct QuestDetailView: View {
                     appState.todayQuest = completedQuest
 
                     // Show level-up celebration if leveled up (legacy celebration for immediate feedback)
-                    if xpResult.leveledUp {
-                        appState.showLevelUpCelebration(level: xpResult.newLevel, title: xpResult.newTitle)
+                    if reward.levelUp, let level = reward.newLevel, let title = reward.newTitle {
+                        appState.showLevelUpCelebration(level: level, title: title)
                     }
 
                     // Queue milestone celebrations (shown after level-up if both occur)
@@ -180,8 +192,11 @@ struct QuestDetailView: View {
                     NotificationCenter.default.post(name: .todayQuestDidComplete, object: nil)
                 }
             } catch {
-                Log.quests.error("QuestDetailView completeQuest error", error: error)
-                appState.showError(.apiError(error.localizedDescription))
+                guard appState.currentUser?.id == capturedOwner, appState.accountEpoch == capturedEpoch else {
+                    isCompleting = false; return
+                }
+                Log.quests.warning("Quest completion could not be confirmed")
+                appState.showError(.apiError("Unable to save this quest. Your reflection is still here; please try again."))
             }
             isCompleting = false
         }

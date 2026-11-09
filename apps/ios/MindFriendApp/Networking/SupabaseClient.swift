@@ -336,7 +336,11 @@ extension DBProfileRow {
             entitlements: UserEntitlements(
                 subscriptionTier: hasSponsoredAccess ? "premium" : subscriptionTier,
                 premiumExpiresAt: nil,
-                features: [:]
+                features: [:],
+                dailyAiQuota: hasSponsoredAccess ? -1 : dailyAiQuota,
+                dailyAiUsed: dailyAiUsed,
+                quotaPeriodStartedAt: quotaResetAt,
+                verifiedAt: Date()
             ),
             badges: []
         )

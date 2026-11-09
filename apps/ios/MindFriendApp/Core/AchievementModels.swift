@@ -559,6 +559,7 @@ struct AchievementBadge: Identifiable, Hashable {
 
 struct UserBadgeProgress: Identifiable {
     let id: UUID
+    let userId: UUID
     let badge: AchievementBadge
     let progressCurrent: Int
     let progressTarget: Int?
@@ -573,6 +574,7 @@ struct UserBadgeProgress: Identifiable {
 
     init(userBadge: DBUserBadge, badge: AchievementBadge) {
         self.id = userBadge.id
+        self.userId = userBadge.userId
         self.badge = badge
         self.progressCurrent = userBadge.progressCurrent
         self.progressTarget = userBadge.progressTarget

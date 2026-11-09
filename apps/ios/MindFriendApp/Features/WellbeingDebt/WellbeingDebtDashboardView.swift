@@ -37,8 +37,11 @@ struct WellbeingDebtDashboardView: View {
     @AppStorage("wellbeing_debt_tutorial_completed") private var tutorialCompleted = false
     @State private var showingTutorial = false
 
+    /// Set by the stable shell so pushed work adds no second NavigationStack; standalone callers keep their own.
+    @Environment(\.supportRootEmbedded) private var supportEmbedded
+
     var body: some View {
-        NavigationStack {
+        SupportRootNavigation(embedded: supportEmbedded) {
             ScrollView {
                 if isLoading {
                     ProgressView("Loading debt status...")
