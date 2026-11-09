@@ -7,6 +7,7 @@ import UIKit
 /// Uses Canvas + TimelineView for 60fps smooth animations
 /// Audio-reactive: orb scale, deformation, and glow all respond to audio amplitude
 struct OrbView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     // MARK: - Configuration
 
@@ -57,7 +58,7 @@ struct OrbView: View {
     // MARK: - Body
 
     var body: some View {
-        if config.reducedMotion {
+        if config.reducedMotion || reduceMotion {
             reducedMotionOrb
         } else {
             animatedOrb
@@ -101,17 +102,14 @@ struct OrbView: View {
 
     private var reducedMotionOrb: some View {
         ZStack {
-            // Audio-reactive scale even in reduced motion
-            let audioScale = 1.0 + CGFloat(effectiveLevel) * audioScaleIntensity * 0.5
-
             Circle()
-                .fill(stateGradient)
-                .frame(width: size * audioScale, height: size * audioScale)
+                .fill(stateColor)
+                .frame(width: size, height: size)
                 .opacity(orbOpacity)
 
             Image(systemName: config.state.orbIcon)
                 .font(.system(size: size * 0.24, weight: .medium))
-                .foregroundStyle(.white)
+                .foregroundStyle(SupportTheme.onAccent)
         }
         .contentShape(Circle())
         .onTapGesture {
@@ -120,8 +118,6 @@ struct OrbView: View {
         .accessibilityLabel(accessibilityLabel)
         .accessibilityHint(accessibilityHint)
         .accessibilityAddTraits(.isButton)
-        .animation(.easeOut(duration: 0.1), value: config.micLevel)
-        .animation(.easeOut(duration: 0.1), value: config.playbackLevel)
         .animation(.easeInOut(duration: 0.3), value: config.state)
     }
 
@@ -269,21 +265,7 @@ struct OrbView: View {
         }
         path.closeSubpath()
 
-        // Audio-reactive gradient: brighter at higher levels
-        let brightnessBoost = 1.0 + Double(level) * 0.15
-        let baseColor = stateColor
-        let brightColor = baseColor.opacity(min(1.0, 0.85 * brightnessBoost))
-        let dimColor = baseColor.opacity(min(1.0, 0.55 * brightnessBoost))
-
-        let gradient = Gradient(colors: [brightColor, dimColor])
-        context.fill(
-            path,
-            with: .linearGradient(
-                gradient,
-                startPoint: CGPoint(x: center.x - baseRadius, y: center.y - baseRadius),
-                endPoint: CGPoint(x: center.x + baseRadius, y: center.y + baseRadius)
-            )
-        )
+        context.fill(path, with: .color(stateColor))
 
         // Audio-reactive edge glow: thicker and brighter with audio
         let glowWidth = 8.0 + Double(level) * 16.0
@@ -300,37 +282,28 @@ struct OrbView: View {
     private var stateColor: Color {
         switch config.state.orbColor {
         case .inactive:
-            return Color(UIColor.systemGray3)
+            return SupportTheme.accent
         case .connecting:
-            return Color.orange
+            return SupportTheme.accent
         case .ready:
-            return Color.blue.opacity(0.85)
+            return SupportTheme.accent
         case .userSpeaking:
-            return Color.green
+            return SupportTheme.accent
         case .thinking:
-            return Color.purple
+            return SupportTheme.accent
         case .aiSpeaking:
-            return Color.blue
+            return SupportTheme.accent
         case .interrupted:
-            return Color.yellow
+            return SupportTheme.Celebration.gold
         case .muted:
-            return Color(UIColor.systemGray4)
+            return SupportTheme.accent
         case .reconnecting:
-            return Color.orange
+            return SupportTheme.accent
         case .paused:
-            return Color.blue.opacity(0.5)  // Dim blue for idle disconnected
+            return SupportTheme.accent  // Dim blue for idle disconnected
         case .error:
-            return Color.red
+            return SupportTheme.accent
         }
-    }
-
-    private var stateGradient: LinearGradient {
-        let base = stateColor
-        return LinearGradient(
-            colors: [base, base.opacity(0.65)],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
     }
 
     /// Ambient breathing speed (slow, background animation)
@@ -388,16 +361,7 @@ struct OrbView: View {
         }
     }
 
-    private var orbOpacity: Double {
-        switch config.state {
-        case .muted:
-            return 0.5
-        case .error:
-            return 0.8
-        default:
-            return 1.0
-        }
-    }
+    private var orbOpacity: Double { 1 }
 
     private var accessibilityLabel: String {
         "Voice orb, \(config.state.statusText)"
@@ -437,7 +401,7 @@ struct OrbContainerView: View {
             // Overlay icon (since Canvas can't directly draw SF Symbols)
             Image(systemName: config.state.orbIcon)
                 .font(.system(size: size * 0.24, weight: .medium))
-                .foregroundStyle(.white)
+                .foregroundStyle(SupportTheme.onAccent)
                 .allowsHitTesting(false)
         }
     }
@@ -446,8 +410,8 @@ struct OrbContainerView: View {
 // MARK: - Preview
 
 #Preview("Orb States") {
-    VStack(spacing: 40) {
-        HStack(spacing: 30) {
+    VStack(spacing: SupportTheme.Spacing.xl) {
+        HStack(spacing: SupportTheme.Spacing.xl) {
             VStack {
                 OrbContainerView(
                     config: OrbView.Configuration(
@@ -477,7 +441,7 @@ struct OrbContainerView: View {
             }
         }
 
-        HStack(spacing: 30) {
+        HStack(spacing: SupportTheme.Spacing.xl) {
             VStack {
                 OrbContainerView(
                     config: OrbView.Configuration(

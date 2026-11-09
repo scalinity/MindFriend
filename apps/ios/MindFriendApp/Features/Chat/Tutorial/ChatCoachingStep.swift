@@ -9,6 +9,7 @@ import SwiftUI
 
 /// Step 3: Explain cognitive coaching and distortion detection
 struct ChatCoachingStep: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let onNext: () -> Void
     let onSkip: () -> Void
 
@@ -18,84 +19,84 @@ struct ChatCoachingStep: View {
     var body: some View {
         TutorialStepView(
             icon: "brain.head.profile",
-            iconColor: .teal,
+            iconColor: SupportTheme.accent,
             headline: "Cognitive Coaching",
             subheadline: "Your companion can help identify unhelpful thought patterns and suggest healthier perspectives.",
             primaryAction: onNext,
             skipAction: onSkip
         ) {
-            VStack(spacing: 8) {
+            VStack(spacing: SupportTheme.Spacing.xs) {
                 // Example thought
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                     Text("You said:")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
 
                     Text("\"I always mess everything up.\"")
                         .font(.subheadline)
                         .italic()
                         .fixedSize(horizontal: false, vertical: true)
-                        .padding(12)
-                        .background(Color(.secondarySystemBackground))
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .padding(SupportTheme.Spacing.s)
+                        .background(SupportTheme.surface)
+                        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 20)
+                .padding(.horizontal, SupportTheme.Spacing.l)
 
                 // Distortion detection
                 if showDistortion {
-                    HStack(spacing: 12) {
+                    HStack(spacing: SupportTheme.Spacing.s) {
                         Image(systemName: "lightbulb.fill")
                             .font(.title3)
-                            .foregroundStyle(.yellow)
+                            .foregroundStyle(SupportTheme.Celebration.gold)
 
-                        VStack(alignment: .leading, spacing: 4) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                             Text("Pattern Detected")
                                 .font(.subheadline.weight(.medium))
                             Text("All-or-nothing thinking")
                                 .font(.caption)
-                                .foregroundStyle(.orange)
+                                .foregroundStyle(SupportTheme.accent)
                         }
 
                         Spacer()
                     }
-                    .padding(12)
-                    .background(Color.yellow.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .padding(.horizontal, 20)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .padding(SupportTheme.Spacing.s)
+                    .background(SupportTheme.surface)
+                    .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
+                    .padding(.horizontal, SupportTheme.Spacing.l)
+                    .transition(reduceMotion ? .opacity.animation(.easeInOut(duration: 0.2)) : .move(edge: .bottom).combined(with: .opacity))
                 }
 
                 // Reframe suggestion
                 if showReframe {
-                    HStack(spacing: 12) {
+                    HStack(spacing: SupportTheme.Spacing.s) {
                         Image(systemName: "arrow.triangle.2.circlepath")
                             .font(.title3)
-                            .foregroundStyle(.green)
+                            .foregroundStyle(SupportTheme.accent)
 
-                        VStack(alignment: .leading, spacing: 4) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                             Text("Try reframing:")
                                 .font(.subheadline.weight(.medium))
                             Text("\"I made a mistake this time, but I can learn from it.\"")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
 
                         Spacer()
                     }
-                    .padding(12)
-                    .background(Color.green.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .padding(.horizontal, 20)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .padding(SupportTheme.Spacing.s)
+                    .background(SupportTheme.surface)
+                    .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
+                    .padding(.horizontal, SupportTheme.Spacing.l)
+                    .transition(reduceMotion ? .opacity.animation(.easeInOut(duration: 0.2)) : .move(edge: .bottom).combined(with: .opacity))
                 }
             }
             .onAppear {
-                withAnimation(.easeOut(duration: 0.4).delay(0.5)) {
+                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.4).delay(0.5)) {
                     showDistortion = true
                 }
-                withAnimation(.easeOut(duration: 0.4).delay(1.2)) {
+                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.4).delay(1.2)) {
                     showReframe = true
                 }
             }

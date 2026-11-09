@@ -20,6 +20,7 @@ struct VoiceChatView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.openURL) private var openURL
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @EnvironmentObject private var appState: AppState
 
     @State private var stateMachine = VoiceStateMachine()
@@ -79,12 +80,12 @@ struct VoiceChatView: View {
                     case .unavailable:
                         ScrollView {
                             VoiceUnavailablePanel(onUseText: { leave(reason: .switchedToText) })
-                                .padding(.top, 48)
-                                .padding(.bottom, 40)
+                                .padding(.top, SupportTheme.Spacing.xl)
+                                .padding(.bottom, SupportTheme.Spacing.xl)
                         }
                     case .ready:
                         ScrollView {
-                            VStack(spacing: 20) {
+                            VStack(spacing: SupportTheme.Spacing.l) {
                                 saveBanner
                                 VoiceStartPanel(
                                     preview: supportAccess?.preview() ?? VoiceSupportPreview(scope: .conversationOnly),
@@ -94,8 +95,8 @@ struct VoiceChatView: View {
                                     onUseText: { leave(reason: .switchedToText) }
                                 )
                             }
-                            .padding(.top, 32)
-                            .padding(.bottom, 40)
+                            .padding(.top, SupportTheme.Spacing.xl)
+                            .padding(.bottom, SupportTheme.Spacing.xl)
                         }
                     case .starting:
                         startingContent
@@ -106,7 +107,7 @@ struct VoiceChatView: View {
             }
         }
         .ignoresSafeArea()
-        .preferredColorScheme(.dark)
+        .supportScreen()
         .sheet(isPresented: $showSettings) {
             VoiceSettingsView(voiceService: voiceService)
         }
@@ -190,32 +191,24 @@ struct VoiceChatView: View {
     // MARK: - Background
 
     private var backgroundGradient: some View {
-        LinearGradient(
-            colors: [
-                Color(red: 0.05, green: 0.05, blue: 0.12),
-                Color(red: 0.08, green: 0.08, blue: 0.18),
-                Color(red: 0.05, green: 0.05, blue: 0.12),
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-        .ignoresSafeArea()
+        SupportTheme.canvas.ignoresSafeArea()
     }
 
     // MARK: - Top Bar
 
     private var topBar: some View {
-        HStack {
+        (dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: SupportTheme.Spacing.xs))
+            : AnyLayout(HStackLayout(spacing: SupportTheme.Spacing.xs))) {
             Button {
                 leave(reason: .userEnded)
             } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 18, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.85))
                     .frame(width: 44, height: 44)
-                    .background(Color.white.opacity(0.1))
                     .clipShape(Circle())
             }
+            .buttonStyle(.supportSecondary)
             .accessibilityLabel("Close voice")
 
             Spacer()
@@ -226,58 +219,56 @@ struct VoiceChatView: View {
                 } label: {
                     Image(systemName: stateMachine.captionsEnabled ? "captions.bubble.fill" : "captions.bubble")
                         .font(.system(size: 18, weight: .medium))
-                        .foregroundStyle(stateMachine.captionsEnabled ? .white : .white.opacity(0.7))
+                        .foregroundStyle(stateMachine.captionsEnabled ? SupportTheme.textPrimary : SupportTheme.textPrimary.opacity(0.7))
                         .frame(width: 44, height: 44)
-                        .background(Color.white.opacity(stateMachine.captionsEnabled ? 0.2 : 0.1))
                         .clipShape(Circle())
                 }
+                .buttonStyle(.supportSecondary)
                 .accessibilityLabel(stateMachine.captionsEnabled ? "Hide captions" : "Show captions")
 
                 Button {
                     showSettings = true
                 } label: {
-                    HStack(spacing: 6) {
+                    HStack(spacing: SupportTheme.Spacing.xs) {
                         Circle()
                             .fill(voiceColor(voiceService.currentVoice))
                             .frame(width: 10, height: 10)
                         Text(voiceService.currentVoice.displayName)
                             .font(.subheadline.weight(.medium))
-                            .foregroundStyle(.white.opacity(0.9))
                     }
-                    .padding(.horizontal, 14)
-                    .frame(minHeight: 44)
-                    .background(Color.white.opacity(0.1))
+                    .frame(minHeight: SupportTheme.minimumTarget)
                     .clipShape(Capsule())
                 }
+                .buttonStyle(.supportSecondary)
                 .accessibilityLabel("Voice: \(voiceService.currentVoice.displayName). Tap to change.")
             }
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 24)
+        .padding(.horizontal, SupportTheme.Spacing.l)
+        .padding(.top, SupportTheme.Spacing.l)
     }
 
     // MARK: - Modes
 
     private var startingContent: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: SupportTheme.Spacing.l) {
             Spacer()
             ProgressView()
                 .controlSize(.large)
-                .tint(.white)
+                .tint(SupportTheme.textPrimary)
             Text("Starting voice…")
                 .font(.title3.weight(.medium))
-                .foregroundStyle(.white)
+                .foregroundStyle(SupportTheme.textPrimary)
             Text("The microphone turns on once the connection is ready.")
                 .font(.footnote)
-                .foregroundStyle(.white.opacity(0.75))
+                .foregroundStyle(SupportTheme.textPrimary)
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
+                .padding(.horizontal, SupportTheme.Spacing.xl)
             Button("Cancel") {
                 startTask?.cancel()
                 leave(reason: .userEnded, dismissWhenDone: false)
             }
-            .buttonStyle(.bordered)
-            .tint(.white)
+            .buttonStyle(.supportSecondary)
+            .tint(SupportTheme.textPrimary)
             .controlSize(.large)
             Spacer()
         }
@@ -286,10 +277,10 @@ struct VoiceChatView: View {
 
     private func activeContent(size: CGSize, safeBottom: CGFloat) -> some View {
         VoiceActiveLayout(safeBottom: safeBottom) {
-            VStack(spacing: 20) {
-                if stateMachine.captionsEnabled { captionsView.padding(.horizontal, 24) }
+            VStack(spacing: SupportTheme.Spacing.l) {
+                if stateMachine.captionsEnabled { captionsView.padding(.horizontal, SupportTheme.Spacing.l) }
                 orbSection(size: min(size.width * 0.56, 300))
-                statusView.padding(.horizontal, 24)
+                statusView.padding(.horizontal, SupportTheme.Spacing.l)
             }
         } controls: {
             bottomControls
@@ -327,34 +318,34 @@ struct VoiceChatView: View {
             handleOrbTap()
         }
         .shadow(color: orbShadowColor.opacity(0.4), radius: 40, x: 0, y: 20)
-        .animation(reduceMotion ? nil : .spring(response: 0.4), value: stateMachine.state)
+        .animation(reduceMotion ? .easeInOut(duration: 0.2) : .spring(response: 0.4), value: stateMachine.state)
     }
 
     private var orbShadowColor: Color {
         switch stateMachine.state.orbColor {
         case .userSpeaking:
-            return .green
+            return SupportTheme.accent
         case .aiSpeaking:
-            return .blue
+            return SupportTheme.accent
         case .thinking:
-            return .purple
+            return SupportTheme.accent
         case .ready:
-            return .blue.opacity(0.6)
+            return SupportTheme.accent.opacity(0.6)
         case .error:
             return .red
         default:
-            return .gray
+            return SupportTheme.textSecondary
         }
     }
 
     // MARK: - Status
 
     private var statusView: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: SupportTheme.Spacing.xs) {
             // Explicit capture indicator: text and icon, never only motion or color.
             VoiceCaptureIndicator(isListening: voiceService.isListening, isMuted: voiceService.isMuted)
 
-            HStack(spacing: 6) {
+            HStack(spacing: SupportTheme.Spacing.xs) {
                 Circle()
                     .fill(connectionStatusColor)
                     .frame(width: 8, height: 8)
@@ -362,32 +353,32 @@ struct VoiceChatView: View {
 
                 Text(connectionStatusText)
                     .font(.subheadline)
-                    .foregroundStyle(.white.opacity(0.75))
+                    .foregroundStyle(SupportTheme.textPrimary)
             }
 
             Text(stateMachine.state.statusText)
                 .font(.title3.weight(.medium))
-                .foregroundStyle(.white.opacity(0.95))
+                .foregroundStyle(SupportTheme.textPrimary)
 
             Text("Up to two minutes per session")
                 .font(.caption)
-                .foregroundStyle(.white.opacity(0.75))
+                .foregroundStyle(SupportTheme.textPrimary)
             Text(voiceService.isPremium ? "Unlimited monthly voice minutes" :
                 String(format: "%.1f of 3 free monthly voice minutes remaining", voiceService.minutesRemaining))
                 .font(.caption)
-                .foregroundStyle(.white.opacity(0.75))
+                .foregroundStyle(SupportTheme.textPrimary)
         }
-        .padding(.horizontal, 24)
+        .padding(.horizontal, SupportTheme.Spacing.l)
     }
 
     private var connectionStatusColor: Color {
         switch voiceService.connectionState {
         case .connected:
-            return .green
+            return SupportTheme.accent
         case .connecting, .reconnecting:
-            return .orange
+            return SupportTheme.accent
         case .disconnected:
-            return .gray
+            return SupportTheme.textSecondary
         case .error:
             return .red
         }
@@ -529,11 +520,11 @@ struct VoiceChatView: View {
 
     private func voiceColor(_ voice: GrokVoice) -> Color {
         switch voice {
-        case .ara: return .pink
-        case .rex: return .blue
-        case .sal: return .purple
-        case .eve: return .orange
-        case .leo: return .green
+        case .ara: return SupportTheme.accent
+        case .rex: return SupportTheme.accent
+        case .sal: return SupportTheme.accent
+        case .eve: return SupportTheme.accent
+        case .leo: return SupportTheme.accent
         }
     }
 }
@@ -554,10 +545,10 @@ struct VoiceActiveLayout<Content: View, Controls: View>: View {
 
     var body: some View {
         ScrollView {
-            content.frame(maxWidth: .infinity).padding(.vertical, 20)
+            content.frame(maxWidth: .infinity).padding(.vertical, SupportTheme.Spacing.l)
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            controls.padding(.horizontal, 24).padding(.top, 12)
+            controls.padding(.horizontal, SupportTheme.Spacing.l).padding(.top, SupportTheme.Spacing.s)
                 .padding(.bottom, safeBottom > 0 ? max(16, safeBottom) : 20)
         }
     }
@@ -570,24 +561,24 @@ struct VoiceCallControls: View {
     let onText: () -> Void
 
     var body: some View {
-        HStack(spacing: 28) {
+        HStack(spacing: SupportTheme.Spacing.l) {
             Button(action: onMute) {
                 Image(systemName: isMuted ? "mic.slash.fill" : "mic.fill")
                     .font(.system(size: 24, weight: .medium))
-                    .foregroundStyle(isMuted ? .red : .white)
+                    .foregroundStyle(isMuted ? .red : SupportTheme.textPrimary)
                     .frame(width: 60, height: 60)
-                    .background(Circle().fill(isMuted ? Color.red.opacity(0.2) : Color.white.opacity(0.15)))
+                    .background(Circle().fill(isMuted ? Color.red.opacity(0.2) : SupportTheme.textPrimary.opacity(0.15)))
             }.accessibilityLabel(isMuted ? "Unmute microphone" : "Mute microphone")
             Button(action: onEnd) {
                 Image(systemName: "phone.down.fill").font(.system(size: 28, weight: .medium))
-                    .foregroundStyle(.white).frame(width: 72, height: 72)
+                    .foregroundStyle(SupportTheme.textPrimary).frame(width: 72, height: 72)
                     .background(Circle().fill(Color.red))
                     .shadow(color: .red.opacity(0.4), radius: 15, x: 0, y: 8)
             }.accessibilityLabel("End voice session")
             Button(action: onText) {
                 Image(systemName: "keyboard").font(.system(size: 24, weight: .medium))
-                    .foregroundStyle(.white).frame(width: 60, height: 60)
-                    .background(Circle().fill(Color.white.opacity(0.15)))
+                    .foregroundStyle(SupportTheme.textPrimary).frame(width: 60, height: 60)
+                    .background(Circle().fill(SupportTheme.field))
             }
             .accessibilityLabel("Switch to text")
             .accessibilityHint("Stops the microphone and returns to this conversation.")
@@ -728,11 +719,11 @@ struct VoiceStartPanel: View {
     let onUseText: () -> Void
 
     var body: some View {
-        VStack(spacing: 16) {
-            VStack(spacing: 6) {
+        VStack(spacing: SupportTheme.Spacing.m) {
+            VStack(spacing: SupportTheme.Spacing.xs) {
                 Image(systemName: "waveform.circle")
                     .font(.system(size: 44))
-                    .foregroundStyle(.white.opacity(0.85))
+                    .foregroundStyle(SupportTheme.textPrimary)
                     .accessibilityHidden(true)
                 Text("Talk by voice")
                     .font(.title2.weight(.semibold))
@@ -748,42 +739,42 @@ struct VoiceStartPanel: View {
                         .multilineTextAlignment(.center)
                 }
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(SupportTheme.textPrimary)
             .accessibilityElement(children: .combine)
 
             if let notice {
                 Text(notice)
                     .font(.subheadline)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(SupportTheme.textPrimary)
                     .multilineTextAlignment(.center)
-                    .padding(12)
+                    .padding(SupportTheme.Spacing.s)
                     .frame(maxWidth: .infinity)
-                    .background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.12)))
+                    .background(RoundedRectangle(cornerRadius: SupportTheme.controlRadius).fill(SupportTheme.surface))
             }
 
             Text("The microphone stays off until you tap Start voice.")
                 .font(.footnote)
-                .foregroundStyle(.white.opacity(0.75))
+                .foregroundStyle(SupportTheme.textPrimary)
                 .multilineTextAlignment(.center)
 
             Button(action: onStart) {
                 Text("Start voice")
-                    .frame(maxWidth: .infinity, minHeight: 48)
+                    .frame(maxWidth: .infinity, minHeight: SupportTheme.primaryButtonHeight)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.supportPrimary)
             .controlSize(.large)
             .disabled(isStarting)
 
             Button(action: onUseText) {
                 Text("Continue by text")
-                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .frame(maxWidth: .infinity, minHeight: SupportTheme.minimumTarget)
             }
-            .buttonStyle(.bordered)
-            .tint(.white)
+            .buttonStyle(.supportSecondary)
+            .tint(SupportTheme.textPrimary)
             .controlSize(.large)
         }
-        .padding(.horizontal, 24)
-        .frame(maxWidth: 560)
+        .padding(.horizontal, SupportTheme.Spacing.l)
+        .frame(maxWidth: SupportTheme.readableWidth)
     }
 }
 
@@ -792,29 +783,29 @@ struct VoiceUnavailablePanel: View {
     let onUseText: () -> Void
 
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             Image(systemName: "mic.slash")
                 .font(.system(size: 44))
-                .foregroundStyle(.white.opacity(0.85))
+                .foregroundStyle(SupportTheme.textPrimary)
                 .accessibilityHidden(true)
             Text("Voice isn't available right now")
                 .font(.title3.weight(.semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(SupportTheme.textPrimary)
                 .multilineTextAlignment(.center)
                 .accessibilityAddTraits(.isHeader)
             Text("This conversation can't be used for voice at the moment. The microphone is off. You can keep going by text.")
                 .font(.subheadline)
-                .foregroundStyle(.white.opacity(0.85))
+                .foregroundStyle(SupportTheme.textPrimary)
                 .multilineTextAlignment(.center)
             Button(action: onUseText) {
                 Text("Continue by text")
-                    .frame(maxWidth: .infinity, minHeight: 48)
+                    .frame(maxWidth: .infinity, minHeight: SupportTheme.primaryButtonHeight)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.supportPrimary)
             .controlSize(.large)
         }
-        .padding(.horizontal, 24)
-        .frame(maxWidth: 560)
+        .padding(.horizontal, SupportTheme.Spacing.l)
+        .frame(maxWidth: SupportTheme.readableWidth)
     }
 }
 
@@ -835,10 +826,10 @@ struct VoiceCaptureIndicator: View {
             Image(systemName: isListening ? "mic.fill" : "mic.slash.fill")
         }
         .font(.subheadline.weight(.semibold))
-        .foregroundStyle(isListening ? Color.green : Color.white.opacity(0.9))
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(Capsule().fill(Color.white.opacity(0.12)))
+        .foregroundStyle(isListening ? SupportTheme.accent : SupportTheme.textPrimary.opacity(0.9))
+        .padding(.horizontal, SupportTheme.Spacing.s)
+        .padding(.vertical, SupportTheme.Spacing.xs)
+        .background(Capsule().fill(SupportTheme.surface))
         .accessibilityElement(children: .combine)
     }
 }
@@ -858,35 +849,35 @@ struct VoiceCaptionView: View {
     }
 
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: SupportTheme.Spacing.s) {
             if let caption, !caption.text.isEmpty {
-                VStack(spacing: 8) {
+                VStack(spacing: SupportTheme.Spacing.xs) {
                     Label {
                         Text("\(caption.speakerLabel) · \(caption.phaseLabel)")
                     } icon: {
                         Image(systemName: symbol(caption.phase))
                     }
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(.white.opacity(0.85))
+                    .foregroundStyle(SupportTheme.textPrimary)
 
                     Text(caption.text)
                         .font(.body)
-                        .foregroundStyle(.white.opacity(caption.phase == .live ? 0.95 : 1))
+                        .foregroundStyle(SupportTheme.textPrimary)
                         .multilineTextAlignment(.center)
                 }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 16)
+                .padding(.horizontal, SupportTheme.Spacing.l)
+                .padding(.vertical, SupportTheme.Spacing.m)
                 .background(
-                    RoundedRectangle(cornerRadius: 16)
-                        .fill(Color.white.opacity(0.1))
+                    RoundedRectangle(cornerRadius: SupportTheme.cardRadius)
+                        .fill(SupportTheme.surface)
                 )
-                .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                .transition(reduceMotion ? .opacity.animation(.easeInOut(duration: 0.2)) : .opacity.combined(with: .scale(scale: 0.95)))
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(caption.accessibilityLabel)
                 .accessibilityValue(caption.text)
             }
         }
-        .animation(reduceMotion ? nil : .spring(response: 0.3), value: caption)
+        .animation(reduceMotion ? .easeInOut(duration: 0.2) : .spring(response: 0.3), value: caption)
         .frame(minHeight: 60)
     }
 }
@@ -903,7 +894,7 @@ struct VoiceTranscriptSaveBanner: View {
 
     var body: some View {
         if unsaved > 0 || rejected > 0 {
-            VStack(spacing: 10) {
+            VStack(spacing: SupportTheme.Spacing.s) {
                 if unsaved > 0 {
                     Text(unsaved == 1
                          ? "1 message from this voice conversation isn't saved yet."
@@ -914,23 +905,23 @@ struct VoiceTranscriptSaveBanner: View {
                          ? "1 message couldn't be saved."
                          : "\(rejected) messages couldn't be saved.")
                 }
-                HStack(spacing: 12) {
+                HStack(spacing: SupportTheme.Spacing.s) {
                     Button("Retry saving", action: onRetry)
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.supportPrimary)
                     if canLeave {
                         Button("Leave without saving", role: .destructive, action: onLeaveWithoutSaving)
-                            .buttonStyle(.bordered)
+                            .buttonStyle(.supportSecondary)
                     }
                 }
                 .controlSize(.regular)
             }
             .font(.subheadline)
-            .foregroundStyle(.white)
+            .foregroundStyle(SupportTheme.textPrimary)
             .multilineTextAlignment(.center)
-            .padding(14)
+            .padding(SupportTheme.Spacing.m)
             .frame(maxWidth: .infinity)
-            .background(RoundedRectangle(cornerRadius: 12).fill(Color.orange.opacity(0.28)))
-            .padding(.horizontal, 24)
+            .background(RoundedRectangle(cornerRadius: SupportTheme.controlRadius).fill(SupportTheme.accent.opacity(0.28)))
+            .padding(.horizontal, SupportTheme.Spacing.l)
             .accessibilityElement(children: .contain)
         }
     }

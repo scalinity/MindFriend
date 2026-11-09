@@ -25,22 +25,22 @@ struct SupportChatEntryView: View {
                 ChatView(conversation: conversation, initialDraft: text, supportSessionID: sessionID,
                     sendOnOpen: sendOnOpen, capabilitiesVerified: capabilitiesVerified)
             } else if let sessionID {
-                VStack(spacing: 16) {
+                VStack(spacing: SupportTheme.Spacing.m) {
                     ScrollView {
-                        VStack(alignment: .leading, spacing: 16) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
                             if dynamicTypeSize.isAccessibilitySize {
                                 Text(coordinator.journal.sessions[sessionID]?.title ?? "Conversation")
                                     .font(.headline).accessibilityAddTraits(.isHeader)
                             }
-                            Text("What would be useful right now?").font(.title2.weight(.semibold))
-                            Text("You can just talk. A practice or a goal is optional.").foregroundStyle(.secondary)
+                            Text("What would be useful right now?").font(.title2.weight(.semibold)).accessibilityAddTraits(.isHeader)
+                            Text("You can just talk. A practice or a goal is optional.").foregroundStyle(SupportTheme.textSecondary)
                             ForEach(SupportActivityTemplateKey.allCases, id: \.self) { template in
                                 Button(template.title) { start(template, sessionID: sessionID) }
-                                    .buttonStyle(.bordered).frame(minHeight: 44)
+                                    .buttonStyle(.supportSecondary).frame(minHeight: SupportTheme.minimumTarget)
                             }
                             if let error { Label(error, systemImage: "exclamationmark.circle").font(.subheadline) }
-                            Text("Draft saved on this device. Reconnecting does not send it.").font(.caption).foregroundStyle(.secondary)
-                        }.padding(20).frame(maxWidth: SupportTheme.readableWidth, alignment: .leading)
+                            Text("Draft saved on this device. Reconnecting does not send it.").font(.caption).foregroundStyle(SupportTheme.textSecondary)
+                        }.padding(SupportTheme.Spacing.l).frame(maxWidth: SupportTheme.readableWidth, alignment: .leading)
                     }
                     if appState.isOutOfFreeMessages {
                         QuotaWarningBanner(remaining: 0, resetsAt: EntitlementSnapshot.nextServerReset(after: Date())) {
@@ -50,6 +50,8 @@ struct SupportChatEntryView: View {
                     ChatInputBar(text: $text, isSending: sending, isOutOfMessages: appState.isOutOfFreeMessages,
                                  onSend: { send(sessionID: sessionID) })
                 }
+                .foregroundStyle(SupportTheme.textPrimary)
+                .supportScreen()
                 .navigationTitle(dynamicTypeSize.isAccessibilitySize ? "Chat" : coordinator.journal.sessions[sessionID]?.title ?? "Conversation")
                 .toolbar {
                     ToolbarItemGroup(placement: .topBarTrailing) {
@@ -59,7 +61,7 @@ struct SupportChatEntryView: View {
                             voiceAccess = SessionVoiceAccess(container: container, appState: appState, sessionID: sessionID)
                             showVoice = true
                         } label: {
-                            Image(systemName: "mic.fill").frame(minWidth: 44, minHeight: 44)
+                            Image(systemName: "mic.fill").frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                         }.accessibilityLabel("Voice mode")
                     }
                 }
@@ -67,7 +69,8 @@ struct SupportChatEntryView: View {
                 .sheet(isPresented: $showContext) { SupportContextView(sessionID: sessionID, receipt: nil) }
             } else { ProgressView("Opening your draft") }
         }
-        .supportCanvas()
+        .foregroundStyle(SupportTheme.textPrimary)
+        .supportScreen()
         .onReceive(coordinator.$chatDraftHandoff.receive(on: DispatchQueue.main)) { handoff in
             guard let handoff, handoff.sessionID == sessionID, !sending,
                   let accepted = coordinator.consumeChatDraftHandoff(handoff.id, sessionID: handoff.sessionID) else { return }

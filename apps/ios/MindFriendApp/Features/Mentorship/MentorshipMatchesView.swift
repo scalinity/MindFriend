@@ -19,6 +19,8 @@ struct MentorshipMatchesView: View {
                     matchesList
                 }
             }
+            .foregroundStyle(SupportTheme.textPrimary)
+            .supportScreen()
             .navigationTitle("My Matches")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -61,6 +63,7 @@ struct MentorshipMatchesView: View {
                         )
                     }
                 }
+                .listRowBackground(SupportTheme.surface)
             }
 
             // Active mentorships
@@ -80,6 +83,7 @@ struct MentorshipMatchesView: View {
                         }
                     }
                 }
+                .listRowBackground(SupportTheme.surface)
             }
 
             // Completed/ended
@@ -96,6 +100,7 @@ struct MentorshipMatchesView: View {
                         )
                     }
                 }
+                .listRowBackground(SupportTheme.surface)
             }
         }
     }
@@ -124,38 +129,38 @@ private struct MatchRow: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             HStack {
                 // Avatar placeholder
                 Circle()
-                    .fill(Color.accentColor.opacity(0.2))
+                    .fill(SupportTheme.accent.opacity(0.2))
                     .frame(width: 44, height: 44)
                     .overlay {
                         Image(systemName: isMentor ? "person.fill" : "person.fill.checkmark")
-                            .foregroundStyle(Color.accentColor)
+                            .foregroundStyle(SupportTheme.accent)
                     }
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     Text(displayName)
                         .font(.headline)
                     Text(roleLabel)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
 
                 Spacer()
 
-                VStack(alignment: .trailing, spacing: 4) {
+                VStack(alignment: .trailing, spacing: SupportTheme.Spacing.xxs) {
                     statusBadge
 
                     if let score = match.compatibilityScore {
-                        HStack(spacing: 2) {
+                        HStack(spacing: SupportTheme.Spacing.xxs) {
                             Image(systemName: "star.fill")
                                 .font(.caption2)
-                                .foregroundStyle(.yellow)
+                                .foregroundStyle(SupportTheme.Celebration.gold)
                             Text("\(Int(score))%")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                         }
                     }
                 }
@@ -163,7 +168,7 @@ private struct MatchRow: View {
                 if showNavArrow && match.status == .active {
                     Image(systemName: "chevron.right")
                         .font(.caption)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
             }
 
@@ -171,7 +176,7 @@ private struct MatchRow: View {
             if let reason = match.matchReason {
                 Text(reason)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .lineLimit(2)
             }
 
@@ -184,12 +189,12 @@ private struct MatchRow: View {
             if match.status == .pending, let intro = match.introductionMessage {
                 Text(intro)
                     .font(.caption)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .lineLimit(2)
-                    .padding(.top, 4)
+                    .padding(.top, SupportTheme.Spacing.xxs)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, SupportTheme.Spacing.xxs)
         .sheet(isPresented: $showAcceptSheet) {
             RespondToMatchSheet(
                 match: match,
@@ -210,8 +215,8 @@ private struct MatchRow: View {
         Text(match.status.rawValue.capitalized)
             .font(.caption2)
             .fontWeight(.medium)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
+            .padding(.horizontal, SupportTheme.Spacing.xs)
+            .padding(.vertical, SupportTheme.Spacing.xxs)
             .background(statusColor.opacity(0.15))
             .foregroundStyle(statusColor)
             .clipShape(Capsule())
@@ -219,17 +224,17 @@ private struct MatchRow: View {
 
     private var statusColor: Color {
         switch match.status {
-        case .pending: return .orange
-        case .active, .accepted: return .green
-        case .completed: return .purple
-        case .cancelled, .declined: return .gray
-        case .ended: return .gray
+        case .pending: return SupportTheme.accent
+        case .active, .accepted: return SupportTheme.accent
+        case .completed: return SupportTheme.accent
+        case .cancelled, .declined: return SupportTheme.textSecondary
+        case .ended: return SupportTheme.textSecondary
         case .expired, .suspended: return .red
         }
     }
 
     private var pendingActions: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: SupportTheme.Spacing.s) {
             Button {
                 showDeclineSheet = true
             } label: {
@@ -237,7 +242,7 @@ private struct MatchRow: View {
                     .font(.subheadline)
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.supportSecondary)
             .disabled(isProcessing)
 
             Button {
@@ -247,10 +252,10 @@ private struct MatchRow: View {
                     .font(.subheadline)
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.supportPrimary)
             .disabled(isProcessing)
         }
-        .padding(.top, 8)
+        .padding(.top, SupportTheme.Spacing.xs)
     }
 }
 
@@ -275,11 +280,11 @@ private struct RespondToMatchSheet: View {
                 Section {
                     HStack {
                         Circle()
-                            .fill(Color.accentColor.opacity(0.2))
+                            .fill(SupportTheme.accent.opacity(0.2))
                             .frame(width: 40, height: 40)
                             .overlay {
                                 Image(systemName: "person.fill")
-                                    .foregroundStyle(Color.accentColor)
+                                    .foregroundStyle(SupportTheme.accent)
                             }
 
                         VStack(alignment: .leading) {
@@ -288,19 +293,21 @@ private struct RespondToMatchSheet: View {
                             if let reason = match.matchReason {
                                 Text(reason)
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(SupportTheme.textSecondary)
                             }
                         }
                     }
                 } header: {
                     Text("Mentee Request")
                 }
+                .listRowBackground(SupportTheme.surface)
 
                 if let intro = match.introductionMessage {
                     Section("Their Message") {
                         Text(intro)
                             .font(.subheadline)
                     }
+                    .listRowBackground(SupportTheme.surface)
                 }
 
                 Section {
@@ -318,10 +325,13 @@ private struct RespondToMatchSheet: View {
                         }
                     }
                     .disabled(isSubmitting)
-                    .foregroundStyle(isAccepting ? .white : .red)
-                    .listRowBackground(isAccepting ? Color.accentColor : Color.red.opacity(0.15))
+                    .foregroundStyle(isAccepting ? SupportTheme.textPrimary : .red)
+                    .listRowBackground(isAccepting ? SupportTheme.accent : Color.red.opacity(0.15))
                 }
+                .listRowBackground(SupportTheme.surface)
             }
+            .foregroundStyle(SupportTheme.textPrimary)
+            .supportScreen()
             .navigationTitle(isAccepting ? "Accept Mentorship" : "Decline Request")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -329,11 +339,15 @@ private struct RespondToMatchSheet: View {
                     Button("Cancel") { dismiss() }
                 }
             }
-            .alert("Error", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
-                Button("OK") { errorMessage = nil }
-            } message: {
-                if let error = errorMessage {
-                    Text(error)
+            .safeAreaInset(edge: .bottom) {
+                if let errorMessage {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
+                        Label(errorMessage, systemImage: "exclamationmark.triangle")
+                        Button("OK") { self.errorMessage = nil }
+                            .buttonStyle(.supportSecondary)
+                    }
+                    .supportCard()
+                    .padding(SupportTheme.Spacing.m)
                 }
             }
         }

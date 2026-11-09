@@ -11,9 +11,9 @@ struct SupportVoiceRecoveryLink: View {
             NavigationLink {
                 SupportVoiceRecoveryView(coordinator: coordinator, accountEpoch: appState.accountEpoch)
             } label: {
-                Text("Voice turns on this device (\(count))").frame(maxWidth: .infinity, minHeight: 44)
+                Text("Voice turns on this device (\(count))").frame(maxWidth: .infinity, minHeight: SupportTheme.minimumTarget)
             }
-            .padding(.horizontal).background(.regularMaterial)
+            .padding(.horizontal).background(SupportTheme.surface)
         }
     }
 }
@@ -39,10 +39,11 @@ struct SupportVoiceRecoveryView: View {
                     Section {
                         Text("These voice turns have a copy on this device and have not been confirmed as saved to your account. A conversation removed elsewhere may no longer be available.")
                     }
+                    .listRowBackground(SupportTheme.surface)
                     if let error { Text(error).foregroundStyle(.red) }
                     ForEach(coordinator.journal.transcriptEvents.filter { $0.syncState != .saved }
                         .sorted { ($0.occurredAt, $0.sequence) < ($1.occurredAt, $1.sequence) }) { event in
-                        VStack(alignment: .leading, spacing: 10) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                             Text(event.role == .user ? "You" : "MindFriend").font(.headline)
                             Text(event.text).textSelection(.enabled)
                             Text(event.syncState == .rejected ? "Not saved to account" : "Account sync pending").font(.caption)
@@ -60,6 +61,8 @@ struct SupportVoiceRecoveryView: View {
                 }
             } else { ContentUnavailableView("Account changed", systemImage: "person.crop.circle") }
         }
+        .foregroundStyle(SupportTheme.textPrimary)
+        .supportScreen()
         .navigationTitle("Voice turns on this device")
         .navigationBarTitleDisplayMode(.inline)
         .alert("Remove this local voice turn?", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } })) {

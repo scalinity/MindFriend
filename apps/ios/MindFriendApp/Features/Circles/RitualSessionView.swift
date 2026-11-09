@@ -22,22 +22,18 @@ struct RitualSessionView: View {
     var body: some View {
         ZStack {
             // Background gradient
-            LinearGradient(
-                colors: [ritual.ritualType.swiftUIColor.opacity(0.3), Color(.systemBackground)],
-                startPoint: .top,
-                endPoint: .bottom
-            )
+            SupportTheme.accent
             .ignoresSafeArea()
 
-            VStack(spacing: 24) {
+            VStack(spacing: SupportTheme.Spacing.l) {
                 // Header
                 HStack {
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                         Text(ritual.title)
                             .font(.headline)
                         Text(ritual.ritualType.displayName)
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
 
                     Spacer()
@@ -47,7 +43,7 @@ struct RitualSessionView: View {
                     } label: {
                         Image(systemName: "xmark.circle.fill")
                             .font(.title2)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                     .accessibilityLabel("Leave ritual")
                 }
@@ -69,14 +65,14 @@ struct RitualSessionView: View {
                     .font(.title2)
                     .fontWeight(.medium)
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
+                    .padding(.horizontal, SupportTheme.Spacing.xl)
                     .accessibilityLabel("Current prompt: \(viewModel.currentPrompt)")
 
                 // Step indicator
-                HStack(spacing: 8) {
+                HStack(spacing: SupportTheme.Spacing.xs) {
                     ForEach(0..<viewModel.totalSteps, id: \.self) { index in
                         Circle()
-                            .fill(index <= viewModel.currentStepIndex ? gradientColor : Color.gray.opacity(0.3))
+                            .fill(index <= viewModel.currentStepIndex ? gradientColor : SupportTheme.textSecondary.opacity(0.3))
                             .frame(width: 8, height: 8)
                     }
                 }
@@ -86,13 +82,13 @@ struct RitualSessionView: View {
 
                 // Attendees
                 if !viewModel.attendees.isEmpty {
-                    VStack(spacing: 8) {
+                    VStack(spacing: SupportTheme.Spacing.xs) {
                         Text("\(viewModel.attendees.count) participants")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
 
                         ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
+                            HStack(spacing: SupportTheme.Spacing.xs) {
                                 ForEach(viewModel.attendees) { attendee in
                                     AttendeeAvatarView(displayName: attendee.displayName)
                                 }
@@ -103,7 +99,7 @@ struct RitualSessionView: View {
                 }
 
                 // Action buttons
-                HStack(spacing: 16) {
+                HStack(spacing: SupportTheme.Spacing.m) {
                     if isCreator {
                         Button {
                             endRitualForEveryone()
@@ -113,7 +109,7 @@ struct RitualSessionView: View {
                                 .padding()
                                 .frame(maxWidth: .infinity)
                         }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.supportSecondary)
                     }
 
                     Button {
@@ -124,10 +120,10 @@ struct RitualSessionView: View {
                             .padding()
                             .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.supportSecondary)
                 }
                 .padding(.horizontal)
-                .padding(.bottom, 24)
+                .padding(.bottom, SupportTheme.Spacing.l)
             }
         }
         .navigationBarHidden(true)
@@ -164,10 +160,10 @@ struct RitualSessionView: View {
 
     private var gradientColor: Color {
         switch ritual.ritualType {
-        case .gratitude: return .pink
-        case .grounding: return .green
-        case .wins: return .yellow
-        case .breathing: return .blue
+        case .gratitude: return SupportTheme.accent
+        case .grounding: return SupportTheme.accent
+        case .wins: return SupportTheme.Celebration.gold
+        case .breathing: return SupportTheme.accent
         }
     }
 
@@ -341,6 +337,7 @@ final class RitualSessionViewModel: ObservableObject {
 
 /// Circular timer ring
 struct TimerRingView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let progress: Double
     let timeRemaining: String
     let color: Color
@@ -353,20 +350,21 @@ struct TimerRingView: View {
 
             // Progress ring
             Circle()
-                .trim(from: 0, to: 1 - progress)
+                .trim(from: 0, to: reduceMotion ? 1 : 1 - progress)
                 .stroke(color, style: StrokeStyle(lineWidth: 12, lineCap: .round))
                 .rotationEffect(.degrees(-90))
-                .animation(.linear(duration: 1), value: progress)
+                .opacity(reduceMotion ? max(0.25, 1 - progress) : 1)
+                .animation(reduceMotion ? .easeInOut(duration: 0.2) : .linear(duration: 1), value: progress)
 
             // Time display
-            VStack(spacing: 4) {
+            VStack(spacing: SupportTheme.Spacing.xxs) {
                 Text(timeRemaining)
                     .font(.system(size: 48, weight: .light, design: .rounded))
                     .monospacedDigit()
 
                 Text("remaining")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
         }
     }
@@ -378,12 +376,12 @@ struct AttendeeAvatarView: View {
 
     var body: some View {
         Circle()
-            .fill(Color.accentColor.opacity(0.15))
+            .fill(SupportTheme.accent.opacity(0.15))
             .frame(width: 36, height: 36)
             .overlay {
                 Text(String(displayName.prefix(1)).uppercased())
                     .font(.caption.bold())
-                    .foregroundColor(.accentColor)
+                    .foregroundColor(SupportTheme.accent)
             }
             .accessibilityLabel(displayName)
     }

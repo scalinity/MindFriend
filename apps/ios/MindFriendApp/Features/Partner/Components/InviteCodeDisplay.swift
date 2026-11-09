@@ -2,38 +2,42 @@ import SwiftUI
 
 /// Display for an invite code with copy and share actions
 struct InviteCodeDisplay: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let code: String
     let expiresAt: Date
 
     @State private var showCopied = false
 
     var body: some View {
-        VStack(spacing: 20) {
-            VStack(spacing: 8) {
+        VStack(spacing: SupportTheme.Spacing.l) {
+            VStack(spacing: SupportTheme.Spacing.xs) {
                 Text("Your invite code")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
 
                 // Code display
-                HStack(spacing: 6) {
-                    ForEach(Array(code.enumerated()), id: \.offset) { _, char in
-                        Text(String(char))
-                            .font(.title3.monospaced())
-                            .fontWeight(.bold)
-                            .foregroundStyle(.primary)
-                            .frame(maxWidth: .infinity, minHeight: 48)
-                            .background(Color(.tertiarySystemBackground))
-                            .cornerRadius(8)
+                ScrollView(.horizontal) {
+                    HStack(spacing: SupportTheme.Spacing.xs) {
+                        ForEach(Array(code.enumerated()), id: \.offset) { _, char in
+                            Text(String(char))
+                                .font(.title3.monospaced())
+                                .fontWeight(.bold)
+                                .foregroundStyle(SupportTheme.textPrimary)
+                                .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.primaryButtonHeight)
+                                .background(SupportTheme.surface)
+                                .cornerRadius(SupportTheme.controlRadius)
+                        }
                     }
+
                 }
 
                 Text("Expires in \(daysRemaining) days")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
 
             // Action buttons
-            HStack(spacing: 12) {
+            HStack(spacing: SupportTheme.Spacing.s) {
                 Button(action: copyCode) {
                     HStack {
                         Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
@@ -42,11 +46,9 @@ struct InviteCodeDisplay: View {
                     .font(.subheadline)
                     .fontWeight(.medium)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(Color(.secondarySystemBackground))
-                    .foregroundStyle(showCopied ? .green : .primary)
-                    .cornerRadius(10)
+                    .foregroundStyle(showCopied ? SupportTheme.accent : SupportTheme.textPrimary)
                 }
+                .buttonStyle(.supportSecondary)
                 .accessibilityLabel("Copy invite code")
 
                 ShareLink(item: shareMessage) {
@@ -57,17 +59,13 @@ struct InviteCodeDisplay: View {
                     .font(.subheadline)
                     .fontWeight(.medium)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(Color.accentColor)
-                    .foregroundStyle(.white)
-                    .cornerRadius(10)
+
                 }
+                .buttonStyle(.supportSecondary)
                 .accessibilityLabel("Share invite code")
             }
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .cornerRadius(16)
+        .supportCard()
     }
 
     private var daysRemaining: Int {
@@ -93,7 +91,7 @@ struct InviteCodeDisplay: View {
         generator.impactOccurred()
 
         // Show confirmation
-        withAnimation {
+        withAnimation(reduceMotion ? nil : .default) {
             showCopied = true
         }
 
@@ -101,7 +99,7 @@ struct InviteCodeDisplay: View {
         Task {
             try? await Task.sleep(nanoseconds: 2_000_000_000)
             await MainActor.run {
-                withAnimation {
+                withAnimation(reduceMotion ? nil : .default) {
                     showCopied = false
                 }
             }

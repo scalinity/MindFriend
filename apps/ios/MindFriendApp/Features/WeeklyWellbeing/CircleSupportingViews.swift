@@ -17,15 +17,18 @@ struct CircleTemplateEditorView: View {
                     TextField("Template Name", text: $editorVM.name)
 
                     TextField("Description (optional)", text: $editorVM.description, axis: .vertical)
+
+                        .supportField()
                         .lineLimit(2...4)
                 }
+                .listRowBackground(SupportTheme.surface)
 
                 // Questions
                 Section {
                     ForEach(Array(editorVM.questions.enumerated()), id: \.offset) { index, question in
                         HStack {
                             Image(systemName: question.promptType.icon)
-                                .foregroundStyle(.blue)
+                                .foregroundStyle(SupportTheme.accent)
 
                             Text(question.questionText)
                                 .font(.subheadline)
@@ -57,6 +60,7 @@ struct CircleTemplateEditorView: View {
                 } footer: {
                     Text("Add questions to gather insights from your circle")
                 }
+                .listRowBackground(SupportTheme.surface)
 
                 // Reminder schedule
                 Section("Reminder Schedule") {
@@ -70,6 +74,7 @@ struct CircleTemplateEditorView: View {
 
                     dayPicker
                 }
+                .listRowBackground(SupportTheme.surface)
 
                 // Preview
                 if !editorVM.questions.isEmpty {
@@ -77,15 +82,18 @@ struct CircleTemplateEditorView: View {
                         ForEach(editorVM.questions) { question in
                             HStack {
                                 Image(systemName: question.promptType.icon)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(SupportTheme.textSecondary)
                                 Text(question.questionText)
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(SupportTheme.textSecondary)
                             }
                         }
                     }
+                    .listRowBackground(SupportTheme.surface)
                 }
             }
+            .foregroundStyle(SupportTheme.textPrimary)
+            .supportScreen()
             .navigationTitle("New Template")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -113,7 +121,7 @@ struct CircleTemplateEditorView: View {
     }
 
     private var dayPicker: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             Text("Reminder Days")
                 .font(.subheadline)
 
@@ -129,10 +137,10 @@ struct CircleTemplateEditorView: View {
                         Text(dayAbbreviation(day))
                             .font(.caption)
                             .fontWeight(.medium)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 8)
-                            .background(editorVM.reminderDays.contains(day) ? Color.blue : Color.gray.opacity(0.2))
-                            .foregroundStyle(editorVM.reminderDays.contains(day) ? .white : .primary)
+                            .padding(.horizontal, SupportTheme.Spacing.s)
+                            .padding(.vertical, SupportTheme.Spacing.xs)
+                            .background(editorVM.reminderDays.contains(day) ? SupportTheme.accent : SupportTheme.textSecondary.opacity(0.2))
+                            .foregroundStyle(editorVM.reminderDays.contains(day) ? SupportTheme.textPrimary : SupportTheme.textPrimary)
                             .clipShape(Circle())
                     }
                     .buttonStyle(.plain)
@@ -197,22 +205,24 @@ struct QuestionTypePicker: View {
                     } label: {
                         HStack {
                             Image(systemName: type.icon)
-                                .foregroundStyle(.blue)
+                                .foregroundStyle(SupportTheme.accent)
                                 .frame(width: 30)
 
                             VStack(alignment: .leading) {
                                 Text(type.displayName)
                                     .font(.headline)
-                                    .foregroundStyle(.primary)
+                                    .foregroundStyle(SupportTheme.textPrimary)
 
                                 Text("Add a \(type.displayName.lowercased()) question")
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(SupportTheme.textSecondary)
                             }
                         }
                     }
                 }
             }
+            .foregroundStyle(SupportTheme.textPrimary)
+            .supportScreen()
             .navigationTitle("Question Type")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -237,7 +247,7 @@ struct CircleRecapView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: SupportTheme.Spacing.l) {
                     // Circle selector
                     circleSelector
 
@@ -250,7 +260,8 @@ struct CircleRecapView: View {
                 }
                 .padding()
             }
-            .background(Color(.systemGroupedBackground))
+            .foregroundStyle(SupportTheme.textPrimary)
+            .supportScreen()
             .navigationTitle("Weekly Recap")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -279,7 +290,7 @@ struct CircleRecapView: View {
     }
 
     private func recapContent(_ recap: CircleRecap) -> some View {
-        VStack(spacing: 20) {
+        VStack(spacing: SupportTheme.Spacing.l) {
             // Stats card
             statsCard(recap)
 
@@ -291,13 +302,11 @@ struct CircleRecapView: View {
                 highlightsSection(recap)
             }
 
-            // Streak status
-            streakStatusCard(recap.streakStatus)
         }
     }
 
     private func statsCard(_ recap: CircleRecap) -> some View {
-        HStack(spacing: 20) {
+        HStack(spacing: SupportTheme.Spacing.l) {
             statItem(value: "\(recap.totalCheckins)", label: "Check-ins")
 
             Divider()
@@ -314,31 +323,31 @@ struct CircleRecapView: View {
             )
         }
         .padding()
-        .background(Color(.secondarySystemGroupedBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .background(SupportTheme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
     }
 
     private func statItem(value: String, label: String) -> some View {
-        VStack(spacing: 4) {
+        VStack(spacing: SupportTheme.Spacing.xxs) {
             Text(value)
                 .font(.title2)
                 .fontWeight(.bold)
 
             Text(label)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
     }
 
     private func memberParticipationSection(_ recap: CircleRecap) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("Member Activity")
                 .font(.headline)
 
             ForEach(recap.memberParticipations) { member in
                 HStack {
                     Circle()
-                        .fill(Color.gray.opacity(0.3))
+                        .fill(SupportTheme.textSecondary.opacity(0.3))
                         .frame(width: 36, height: 36)
                         .overlay(
                             Text(String(member.memberName.prefix(1)))
@@ -351,84 +360,65 @@ struct CircleRecapView: View {
 
                         Text("\(member.checkinsCompleted) check-ins")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
 
                     Spacer()
 
                     if member.wasActive {
                         Image(systemName: "checkmark.circle.fill")
-                            .foregroundStyle(.green)
+                            .foregroundStyle(SupportTheme.accent)
                     }
                 }
             }
         }
         .padding()
-        .background(Color(.secondarySystemGroupedBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .background(SupportTheme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
     }
 
     private func highlightsSection(_ recap: CircleRecap) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("Circle Highlights")
                 .font(.headline)
 
             ForEach(recap.sharedHighlights) { highlight in
-                HStack(alignment: .top, spacing: 12) {
+                HStack(alignment: .top, spacing: SupportTheme.Spacing.s) {
                     Image(systemName: highlightIcon(highlight.type))
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(SupportTheme.accent)
 
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                         Text(highlight.memberName)
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
 
                         Text(highlight.content)
                             .font(.subheadline)
                     }
                 }
                 .padding()
-                .background(Color.blue.opacity(0.1))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .background(SupportTheme.surface)
+                .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
             }
         }
     }
 
-    private func streakStatusCard(_ status: StreakStatus) -> some View {
-        VStack(spacing: 12) {
-            HStack {
-                Image(systemName: "flame.fill")
-                    .foregroundStyle(.orange)
 
-                Text("Your Streak")
-                    .font(.headline)
-
-                Spacer()
-
-                Text("\(status.currentStreak) days")
-                    .font(.title3)
-                    .fontWeight(.bold)
-            }
-        }
-        .padding()
-        .background(Color.orange.opacity(0.1))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-    }
 
     private var emptyRecapState: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             Spacer()
 
             Image(systemName: "doc.text.magnifyingglass")
                 .font(.system(size: 48))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
 
             Text("No Recap Available")
                 .font(.headline)
 
             Text("Complete check-ins with your circle to generate weekly recaps")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .multilineTextAlignment(.center)
 
             Spacer()

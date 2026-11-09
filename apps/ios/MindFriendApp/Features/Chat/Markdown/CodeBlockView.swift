@@ -3,6 +3,7 @@ import UIKit
 
 /// Renders a fenced code block with syntax highlighting, copy button, and optional HTML preview
 struct CodeBlockView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let code: String
     let language: String?
     let onPreviewHTML: ((String) -> Void)?
@@ -43,7 +44,7 @@ struct CodeBlockView: View {
                 if !displayLanguage.isEmpty {
                     Text(displayLanguage)
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(SupportTheme.textSecondary)
                 }
 
                 Spacer()
@@ -52,13 +53,14 @@ struct CodeBlockView: View {
                     Button {
                         onPreview(code)
                     } label: {
-                        HStack(spacing: 4) {
+                        HStack(spacing: SupportTheme.Spacing.xxs) {
                             Image(systemName: "play.fill")
                                 .font(.caption2)
                             Text("Preview")
                                 .font(.caption)
                         }
-                        .foregroundColor(.accentColor)
+                        .foregroundColor(SupportTheme.accent)
+                        .frame(minHeight: SupportTheme.minimumTarget)
                     }
                     .buttonStyle(.plain)
                 }
@@ -66,44 +68,45 @@ struct CodeBlockView: View {
                 Button {
                     copyToClipboard()
                 } label: {
-                    HStack(spacing: 4) {
+                    HStack(spacing: SupportTheme.Spacing.xxs) {
                         Image(systemName: copied ? "checkmark" : "doc.on.doc")
                             .font(.caption2)
                         Text(copied ? "Copied" : "Copy")
                             .font(.caption)
                     }
-                    .foregroundColor(copied ? .green : .secondary)
+                    .foregroundColor(copied ? SupportTheme.accent : SupportTheme.textSecondary)
+                    .frame(minHeight: SupportTheme.minimumTarget)
                 }
                 .buttonStyle(.plain)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(Color(.systemGray5))
+            .padding(.horizontal, SupportTheme.Spacing.s)
+            .padding(.vertical, SupportTheme.Spacing.xs)
+            .background(SupportTheme.surface)
 
             // Code content with syntax highlighting
             ScrollView(.horizontal, showsIndicators: false) {
                 Text(SyntaxHighlighter.highlight(code, language: language))
                     .font(.system(.callout, design: .monospaced))
                     .textSelection(.enabled)
-                    .padding(12)
+                    .padding(SupportTheme.Spacing.s)
             }
-            .background(Color(.systemGray6))
+            .background(SupportTheme.surface)
         }
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
         .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(Color(.systemGray4), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                .stroke(SupportTheme.border, lineWidth: 1)
         )
     }
 
     private func copyToClipboard() {
         UIPasteboard.general.string = code
-        withAnimation(.easeInOut(duration: 0.2)) {
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
             copied = true
         }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            withAnimation(.easeInOut(duration: 0.2)) {
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
                 copied = false
             }
         }
@@ -111,7 +114,7 @@ struct CodeBlockView: View {
 }
 
 #Preview {
-    VStack(spacing: 16) {
+    VStack(spacing: SupportTheme.Spacing.m) {
         CodeBlockView(
             code: """
             func greet(name: String) -> String {

@@ -18,16 +18,16 @@ struct SyntaxHighlighter {
 
         static var `default`: Theme {
             Theme(
-                keyword: Color(red: 0.78, green: 0.42, blue: 0.84),   // Purple
-                string: Color(red: 0.87, green: 0.44, blue: 0.36),   // Salmon
-                comment: Color(red: 0.45, green: 0.50, blue: 0.55),  // Gray
-                number: Color(red: 0.82, green: 0.68, blue: 0.40),   // Gold
-                type: Color(red: 0.35, green: 0.75, blue: 0.85),     // Cyan
-                function: Color(red: 0.40, green: 0.72, blue: 0.42), // Green
-                property: Color(red: 0.70, green: 0.80, blue: 0.90), // Light blue
-                tag: Color(red: 0.90, green: 0.45, blue: 0.45),      // Red
-                attribute: Color(red: 0.80, green: 0.70, blue: 0.45), // Yellow-orange
-                plain: Color.primary
+                keyword: SupportTheme.accent,
+                string: SupportTheme.accent,
+                comment: SupportTheme.textSecondary,
+                number: SupportTheme.Celebration.gold,
+                type: SupportTheme.accent,
+                function: SupportTheme.accent,
+                property: SupportTheme.textPrimary,
+                tag: SupportTheme.accent,
+                attribute: SupportTheme.accent,
+                plain: SupportTheme.textPrimary
             )
         }
     }

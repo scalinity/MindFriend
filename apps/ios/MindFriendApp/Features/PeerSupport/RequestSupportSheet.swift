@@ -27,16 +27,17 @@ struct RequestSupportSheet: View {
 
                     HStack {
                         Image(systemName: selectedType.icon)
-                            .foregroundStyle(.blue)
+                            .foregroundStyle(SupportTheme.accent)
                         Text("Estimated duration: \(selectedType.estimatedMinutes) minutes")
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
-                    .padding(.top, 4)
+                    .padding(.top, SupportTheme.Spacing.xxs)
                 }
+                .listRowBackground(SupportTheme.surface)
 
                 Section("What would you like to talk about?") {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 100))], spacing: 8) {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 100))], spacing: SupportTheme.Spacing.xs) {
                         ForEach(SupportTopic.allCases) { topic in
                             TopicChip(
                                 topic: topic,
@@ -54,12 +55,13 @@ struct RequestSupportSheet: View {
                     if selectedTopics.count == 3 {
                         Text("Maximum 3 topics selected")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                 }
+                .listRowBackground(SupportTheme.surface)
 
                 Section {
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                         HStack {
                             Text("How are you feeling?")
                             Spacer()
@@ -79,26 +81,30 @@ struct RequestSupportSheet: View {
                 } header: {
                     Text("Current Mood")
                 }
+                .listRowBackground(SupportTheme.surface)
 
                 Section {
                     TextField("What's on your mind? (optional)", text: $notes, axis: .vertical)
+                        .supportField()
                         .lineLimit(3...6)
                 } header: {
                     Text("Additional Notes")
                 } footer: {
                     Text("This helps the listener understand your situation better.")
                 }
+                .listRowBackground(SupportTheme.surface)
 
                 Section {
                     Toggle(isOn: $isAnonymous) {
-                        VStack(alignment: .leading, spacing: 4) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                             Text("Keep me anonymous")
                             Text("Your profile will be hidden from the listener")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                         }
                     }
                 }
+                .listRowBackground(SupportTheme.surface)
 
                 if let error = errorMessage {
                     Section {
@@ -110,8 +116,11 @@ struct RequestSupportSheet: View {
                                 .foregroundStyle(.red)
                         }
                     }
+                    .listRowBackground(SupportTheme.surface)
                 }
             }
+            .foregroundStyle(SupportTheme.textPrimary)
+            .supportSheet()
             .navigationTitle("Request Support")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -139,10 +148,10 @@ struct RequestSupportSheet: View {
     private var moodColor: Color {
         switch Int(mood) {
         case 1...3: return .red
-        case 4...6: return .orange
-        case 7...8: return .yellow
-        case 9...10: return .green
-        default: return .gray
+        case 4...6: return SupportTheme.accent
+        case 7...8: return SupportTheme.Celebration.gold
+        case 9...10: return SupportTheme.accent
+        default: return SupportTheme.textSecondary
         }
     }
 
@@ -182,16 +191,16 @@ struct TopicChip: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 4) {
+            HStack(spacing: SupportTheme.Spacing.xxs) {
                 Image(systemName: topic.icon)
                     .font(.caption2)
                 Text(topic.displayName)
                     .font(.caption)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(isSelected ? Color.accentColor : Color.gray.opacity(0.2))
-            .foregroundStyle(isSelected ? .white : .primary)
+            .padding(.horizontal, SupportTheme.Spacing.s)
+            .padding(.vertical, SupportTheme.Spacing.xs)
+            .background(isSelected ? SupportTheme.accent : SupportTheme.textSecondary.opacity(0.2))
+            .foregroundStyle(isSelected ? SupportTheme.textPrimary : SupportTheme.textPrimary)
             .clipShape(Capsule())
         }
         .buttonStyle(.plain)
@@ -208,7 +217,7 @@ struct MatchResultView: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: SupportTheme.Spacing.l) {
             Spacer()
 
             if result.status == "matched" {
@@ -223,7 +232,7 @@ struct MatchResultView: View {
                 dismiss()
                 onDismiss()
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.supportPrimary)
             .controlSize(.large)
         }
         .padding()
@@ -231,24 +240,24 @@ struct MatchResultView: View {
     }
 
     private var matchedContent: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 60))
-                .foregroundStyle(.green)
+                .foregroundStyle(SupportTheme.accent)
                 .accessibilityHidden(true)
 
             Text("Matched!")
                 .font(.title.bold())
 
             if let listener = result.listener {
-                VStack(spacing: 8) {
+                VStack(spacing: SupportTheme.Spacing.xs) {
                     Text(listener.displayName ?? "A Listener")
                         .font(.headline)
 
                     if let rating = listener.rating, rating > 0 {
-                        HStack(spacing: 4) {
+                        HStack(spacing: SupportTheme.Spacing.xxs) {
                             Image(systemName: "star.fill")
-                                .foregroundStyle(.yellow)
+                                .foregroundStyle(SupportTheme.Celebration.gold)
                             Text(String(format: "%.1f", rating))
                         }
                         .font(.subheadline)
@@ -257,26 +266,26 @@ struct MatchResultView: View {
                     if let sessions = listener.sessionCount, sessions > 0 {
                         Text("\(sessions) sessions completed")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                 }
                 .padding()
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                .background(SupportTheme.surface, in: RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
             }
 
             Text("Your supporter is ready to talk")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Matched with a listener. \(result.listener?.displayName ?? "A listener") is ready to talk")
     }
 
     private var queuedContent: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             Image(systemName: "clock.fill")
                 .font(.system(size: 60))
-                .foregroundStyle(.orange)
+                .foregroundStyle(SupportTheme.accent)
                 .accessibilityHidden(true)
 
             Text("In Queue")
@@ -284,25 +293,25 @@ struct MatchResultView: View {
 
             Text("We're finding the right listener for you.")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .multilineTextAlignment(.center)
 
             if let wait = result.estimatedWait {
-                VStack(spacing: 4) {
+                VStack(spacing: SupportTheme.Spacing.xxs) {
                     Text("Estimated wait")
                         .font(.caption)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                     Text("~\(wait) minutes")
                         .font(.title3.bold())
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(SupportTheme.accent)
                 }
                 .padding()
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                .background(SupportTheme.surface, in: RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
             }
 
             Text("We'll notify you when matched.")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("In queue. Estimated wait is about \(result.estimatedWait ?? 0) minutes. We'll notify you when matched.")

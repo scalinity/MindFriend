@@ -10,6 +10,7 @@ import SwiftUI
 
 /// Main container for the Circles tutorial walkthrough
 struct CirclesTutorialFlow: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject var container: DependencyContainer
 
     let onComplete: () -> Void
@@ -26,9 +27,9 @@ struct CirclesTutorialFlow: View {
         VStack(spacing: 0) {
             ProgressView(value: currentStep.progress)
                 .progressViewStyle(.linear)
-                .tint(.pink)
+                .tint(SupportTheme.accent)
                 .padding(.horizontal)
-                .padding(.top, 60)
+                .padding(.top, SupportTheme.Spacing.xl)
 
             Group {
                 switch currentStep {
@@ -40,18 +41,18 @@ struct CirclesTutorialFlow: View {
                     CirclesRitualsStep(onComplete: completeTutorial)
                 }
             }
-            .transition(.asymmetric(
+            .transition(reduceMotion ? .opacity.animation(.easeInOut(duration: 0.2)) : .asymmetric(
                 insertion: .move(edge: .trailing).combined(with: .opacity),
                 removal: .move(edge: .leading).combined(with: .opacity)
             ))
         }
-        .background(Color(.systemBackground))
-        .animation(.easeInOut(duration: 0.3), value: currentStep)
+        .background(SupportTheme.surface)
+        .animation(reduceMotion ? .easeInOut(duration: 0.2) : .easeInOut(duration: 0.3), value: currentStep)
     }
 
     private func advanceStep() {
         if let nextStep = TutorialStep(rawValue: currentStep.rawValue + 1) {
-            withAnimation { currentStep = nextStep }
+            withAnimation(reduceMotion ? nil : .default) { currentStep = nextStep }
         }
     }
 

@@ -17,7 +17,7 @@ struct MentorshipListView: View {
 
     var body: some View {
         ZStack {
-            Color(.systemBackground).ignoresSafeArea()
+            SupportTheme.canvas.ignoresSafeArea()
 
             VStack(spacing: 0) {
                 // Tab selector
@@ -28,35 +28,35 @@ struct MentorshipListView: View {
                 }
                 .pickerStyle(.segmented)
                 .padding()
-                .background(Color(.secondarySystemBackground))
+                .background(SupportTheme.surface)
 
                 // Content
                 if matchingService.isLoading {
-                    VStack(spacing: 16) {
+                    VStack(spacing: SupportTheme.Spacing.m) {
                         ProgressView()
                         Text("Loading mentorships...")
-                            .foregroundColor(.secondary)
+                            .foregroundColor(SupportTheme.textSecondary)
                     }
                     .frame(maxHeight: .infinity)
                 } else if filteredMatches.isEmpty {
-                    VStack(spacing: 16) {
+                    VStack(spacing: SupportTheme.Spacing.m) {
                         Image(systemName: tabEmptyImage)
                             .font(.system(size: 48))
-                            .foregroundColor(.secondary)
+                            .foregroundColor(SupportTheme.textSecondary)
 
                         Text(tabEmptyTitle)
                             .font(.headline)
 
                         Text(tabEmptyMessage)
                             .font(.subheadline)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(SupportTheme.textSecondary)
                             .multilineTextAlignment(.center)
                     }
                     .frame(maxHeight: .infinity)
                     .padding()
                 } else {
                     ScrollView {
-                        LazyVStack(spacing: 12) {
+                        LazyVStack(spacing: SupportTheme.Spacing.s) {
                             ForEach(filteredMatches) { match in
                                 MatchCard(
                                     match: match,
@@ -72,8 +72,17 @@ struct MentorshipListView: View {
                 }
             }
         }
+        .foregroundStyle(SupportTheme.textPrimary)
+        .supportScreen()
         .navigationTitle("My Mentorships")
         .navigationBarTitleDisplayMode(.inline)
+        .safeAreaInset(edge: .bottom) {
+            if let error = matchingService.error {
+                Label(error.localizedDescription, systemImage: "exclamationmark.triangle")
+                    .supportCard()
+                    .padding(SupportTheme.Spacing.m)
+            }
+        }
         .sheet(isPresented: $showingDetails) {
             if let match = selectedMatch {
                 MatchDetailsSheet(
@@ -144,15 +153,15 @@ struct MatchCard: View {
     var statusColor: Color {
         switch match.status {
         case .pending:
-            return .orange
+            return SupportTheme.accent
         case .active, .accepted:
-            return .green
+            return SupportTheme.accent
         case .completed:
-            return .blue
+            return SupportTheme.accent
         case .cancelled, .declined:
-            return .gray
+            return SupportTheme.textSecondary
         case .ended:
-            return .gray
+            return SupportTheme.textSecondary
         case .expired, .suspended:
             return .red
         }
@@ -163,12 +172,12 @@ struct MatchCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             HStack {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     Text("Mentorship Match")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(SupportTheme.textSecondary)
 
                     Text(match.id.uuidString.prefix(8).uppercased())
                         .font(.headline)
@@ -178,21 +187,21 @@ struct MatchCard: View {
 
                 Label(statusLabel, systemImage: statusIcon)
                     .font(.caption)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
+                    .padding(.horizontal, SupportTheme.Spacing.xs)
+                    .padding(.vertical, SupportTheme.Spacing.xxs)
                     .background(statusColor.opacity(0.2))
                     .foregroundColor(statusColor)
-                    .cornerRadius(6)
+                    .cornerRadius(SupportTheme.controlRadius)
             }
 
             if let compatibilityScore = match.compatibilityScore {
-                HStack(spacing: 8) {
+                HStack(spacing: SupportTheme.Spacing.xs) {
                     Text("Compatibility")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(SupportTheme.textSecondary)
 
                     ProgressView(value: compatibilityScore)
-                        .tint(.blue)
+                        .tint(SupportTheme.accent)
 
                     Text("\(Int(compatibilityScore * 100))%")
                         .font(.caption2)
@@ -203,7 +212,7 @@ struct MatchCard: View {
             if let reason = match.matchReason {
                 Text(reason)
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(SupportTheme.textSecondary)
                     .lineLimit(2)
             }
 
@@ -211,15 +220,13 @@ struct MatchCard: View {
                 Text("View Details")
                     .font(.subheadline)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
-                    .background(Color(.quaternarySystemFill))
-                    .foregroundColor(.primary)
-                    .cornerRadius(6)
+                    .padding(.vertical, SupportTheme.Spacing.xs)
+                    .background(SupportTheme.field)
+                    .foregroundColor(SupportTheme.textPrimary)
+                    .cornerRadius(SupportTheme.controlRadius)
             }
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .cornerRadius(12)
+        .supportCard()
     }
 
     private var statusIcon: String {
@@ -250,13 +257,13 @@ struct MatchDetailsSheet: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 16) {
-                VStack(alignment: .leading, spacing: 12) {
+            VStack(spacing: SupportTheme.Spacing.m) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                     HStack {
-                        VStack(alignment: .leading, spacing: 4) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                             Text("Status")
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(SupportTheme.textSecondary)
 
                             Text(match.status.rawValue.capitalized)
                                 .font(.headline)
@@ -265,34 +272,34 @@ struct MatchDetailsSheet: View {
                         Spacer()
 
                         if let score = match.compatibilityScore {
-                            VStack(alignment: .trailing, spacing: 4) {
+                            VStack(alignment: .trailing, spacing: SupportTheme.Spacing.xxs) {
                                 Text("Compatibility")
                                     .font(.caption)
-                                    .foregroundColor(.secondary)
+                                    .foregroundColor(SupportTheme.textSecondary)
 
                                 Text("\(Int(score * 100))%")
                                     .font(.headline)
-                                    .foregroundColor(.blue)
+                                    .foregroundColor(SupportTheme.accent)
                             }
                         }
                     }
 
                     Divider()
 
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                         Text("Match Created")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(SupportTheme.textSecondary)
 
                         Text(match.createdAt.formatted(date: .abbreviated, time: .shortened))
                             .font(.subheadline)
                     }
 
                     if let expiresAt = match.expiresAt {
-                        VStack(alignment: .leading, spacing: 8) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                             Text("Expires")
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(SupportTheme.textSecondary)
 
                             Text(expiresAt.formatted(date: .abbreviated, time: .shortened))
                                 .font(.subheadline)
@@ -300,19 +307,17 @@ struct MatchDetailsSheet: View {
                     }
 
                     if let reason = match.matchReason {
-                        VStack(alignment: .leading, spacing: 8) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                             Text("Why You Matched")
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(SupportTheme.textSecondary)
 
                             Text(reason)
                                 .font(.subheadline)
                         }
                     }
                 }
-                .padding()
-                .background(Color(.secondarySystemBackground))
-                .cornerRadius(12)
+                .supportCard()
 
                 if match.status == .active {
                     Button(action: {
@@ -321,25 +326,24 @@ struct MatchDetailsSheet: View {
                     }) {
                         Label("Send Message", systemImage: "bubble.left.and.bubble.right.fill")
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(Color.blue.opacity(0.1))
-                            .foregroundColor(.blue)
-                            .cornerRadius(8)
                     }
+                    .buttonStyle(.supportSecondary)
 
                     Button(role: .destructive, action: { showingEndConfirmation = true }) {
                         Label("End Mentorship", systemImage: "xmark.circle")
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
+                            .padding(.vertical, SupportTheme.Spacing.s)
                             .background(Color.red.opacity(0.1))
                             .foregroundColor(.red)
-                            .cornerRadius(8)
+                            .cornerRadius(SupportTheme.controlRadius)
                     }
                 }
 
                 Spacer()
             }
             .padding()
+            .foregroundStyle(SupportTheme.textPrimary)
+            .supportScreen()
             .navigationTitle("Mentorship Details")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

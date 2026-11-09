@@ -25,23 +25,24 @@ struct SupportContextView: View {
                         // The server accepts only a rename on a closed session, so the scope choice is not offered there.
                         .disabled(session.status != .open)
                         Text("Conversation-only includes this conversation and results you deliberately shared in this session. Saved personal memories and other conversations are excluded.")
-                            .font(.subheadline).foregroundStyle(.secondary)
+                            .font(.subheadline).foregroundStyle(SupportTheme.textSecondary)
                         if session.status != .open {
                             Text("This session is closed, so its context choice can’t be changed.")
-                                .font(.subheadline).foregroundStyle(.secondary)
+                                .font(.subheadline).foregroundStyle(SupportTheme.textSecondary)
                         }
                     } else { Text("This session is no longer available.") }
                     if coordinator.journal.personalizedCloudPaused {
                         Text("A context correction is saved here. Account confirmation is pending; cloud replies are paused.")
                     }
                 }
+                .listRowBackground(SupportTheme.surface)
                 Section(receipt == nil ? "Saved context proposed for the next reply" : "Shared with this reply") {
                     if let receipt {
                         Text(receipt.scope == .conversationOnly ? "Conversation-only" : "Approved saved context included")
                         Text("This is the recorded context sent with the reply. It does not reveal which source the model relied on.")
-                            .font(.subheadline).foregroundStyle(.secondary)
+                            .font(.subheadline).foregroundStyle(SupportTheme.textSecondary)
                         ForEach(receipt.sources) { source in
-                            VStack(alignment: .leading, spacing: 8) {
+                            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                                 if source.kind == "companion_memory", let item = coordinator.journal.memoryRecords[source.id] {
                                     Text(item.content)
                                     Text("Saved context · revision \(source.revision)").font(.caption)
@@ -49,7 +50,7 @@ struct SupportContextView: View {
                                 } else {
                                     Text(source.kind.replacingOccurrences(of: "_", with: " ").capitalized)
                                     Text(source.date.flatMap(SupportChatTimestamp.date)?.formatted(date: .abbreviated, time: .shortened) ?? "Date not supplied")
-                                        .font(.caption).foregroundStyle(.secondary)
+                                        .font(.caption).foregroundStyle(SupportTheme.textSecondary)
                                     if coordinator.journal.suppressions.contains(where: { $0.targetID == source.id.uuidString.lowercased() }) {
                                         Text("Removed from future context").font(.caption)
                                     }
@@ -62,23 +63,30 @@ struct SupportContextView: View {
                             : "Saved personal memories will not be included.")
                     }
                 }
+                .listRowBackground(SupportTheme.surface)
                 Section("Not included") {
                     let exclusions = receipt?.exclusions ?? ["other_conversations", "health_data", "inferred_affect", "private_vault", "unapproved_suggestions"]
                     ForEach(exclusions, id: \.self) { Text($0.replacingOccurrences(of: "_", with: " ").capitalized) }
                 }
+                .listRowBackground(SupportTheme.surface)
                 Section("Memory suggestions") {
                     if session?.conversationID != nil {
                         NavigationLink("Suggest memories from this session") { SupportMemorySuggestionView(sessionID: sessionID) }
                         Text("You choose which of your messages are previewed. Nothing is sent to an AI service until you choose Generate.")
-                            .font(.subheadline).foregroundStyle(.secondary)
+                            .font(.subheadline).foregroundStyle(SupportTheme.textSecondary)
                     } else {
                         Text("Suggesting memories needs a conversation attached to this session.")
-                            .font(.subheadline).foregroundStyle(.secondary)
+                            .font(.subheadline).foregroundStyle(SupportTheme.textSecondary)
                     }
                 }
+                .listRowBackground(SupportTheme.surface)
                 Section { NavigationLink("Manage memory") { SupportMemoryView() } }
-                if let error { Section { Text(error) } }
+                .listRowBackground(SupportTheme.surface)
+                if let error { Section { Text(error) }
+                               .listRowBackground(SupportTheme.surface) }
             }
+            .foregroundStyle(SupportTheme.textPrimary)
+            .supportSheet()
             .navigationTitle("Context")
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
         }

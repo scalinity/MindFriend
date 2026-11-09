@@ -43,31 +43,37 @@ struct InviteMemberSheet: View {
 
                     if contactType == .email {
                         TextField("friend@example.com", text: $email)
+                            .supportField()
                             .textContentType(.emailAddress)
                             .keyboardType(.emailAddress)
                             .autocapitalization(.none)
                             .autocorrectionDisabled()
                     } else {
                         TextField("Phone number", text: $phone)
+                            .supportField()
                             .textContentType(.telephoneNumber)
                             .keyboardType(.phonePad)
                     }
                 } header: {
                     Text("Who do you want to invite?")
                 }
+                .listRowBackground(SupportTheme.surface)
 
                 Section {
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                         Text("They'll receive an invitation to join \"\(circleName)\"")
                             .font(.subheadline)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(SupportTheme.textSecondary)
 
                         Text("If they don't have the app yet, they'll get instructions to download it.")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(SupportTheme.textSecondary)
                     }
                 }
+                .listRowBackground(SupportTheme.surface)
             }
+            .foregroundStyle(SupportTheme.textPrimary)
+            .supportSheet()
             .navigationTitle("Invite Member")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -131,26 +137,26 @@ struct PendingInviteRow: View {
     }
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: SupportTheme.Spacing.s) {
             // Icon
             ZStack {
                 Circle()
-                    .fill(Color.orange.opacity(0.15))
+                    .fill(SupportTheme.accent.opacity(0.15))
                     .frame(width: 40, height: 40)
 
                 Image(systemName: "clock.arrow.circlepath")
-                    .foregroundColor(.orange)
+                    .foregroundColor(SupportTheme.accent)
             }
 
             // Contact info
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text(invite.displayContact)
                     .font(.subheadline)
                     .fontWeight(.medium)
 
                 Text("Invited \(timeAgo)")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(SupportTheme.textSecondary)
             }
 
             Spacer()
@@ -158,13 +164,13 @@ struct PendingInviteRow: View {
             // Pending badge
             Text("Pending")
                 .font(.caption)
-                .foregroundColor(.orange)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(Color.orange.opacity(0.15))
+                .foregroundColor(SupportTheme.accent)
+                .padding(.horizontal, SupportTheme.Spacing.xs)
+                .padding(.vertical, SupportTheme.Spacing.xxs)
+                .background(SupportTheme.surface)
                 .clipShape(Capsule())
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, SupportTheme.Spacing.xxs)
     }
 }
 
@@ -174,7 +180,7 @@ struct PendingInvitesSection: View {
 
     var body: some View {
         if !invites.isEmpty {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                 Text("Pending Invites")
                     .font(.headline)
                     .padding(.horizontal)
@@ -186,12 +192,12 @@ struct PendingInvitesSection: View {
 
                         if invite.id != invites.last?.id {
                             Divider()
-                                .padding(.leading, 64)
+                                .padding(.leading, SupportTheme.Spacing.xl)
                         }
                     }
                 }
-                .background(Color(.systemBackground))
-                .cornerRadius(12)
+                .background(SupportTheme.surface)
+                .cornerRadius(SupportTheme.controlRadius)
                 .padding(.horizontal)
             }
         }

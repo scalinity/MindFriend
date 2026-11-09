@@ -3,6 +3,7 @@ import Combine
 import OSLog
 
 struct ChatView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var container: DependencyContainer
     @Environment(\.dismiss) private var dismiss
@@ -55,7 +56,7 @@ struct ChatView: View {
     @StateObject private var coachViewModel: CoachViewModel
 
     private let quotaWarningThreshold = 3
-    
+
     init(conversation: Conversation, initialDraft: String = "", supportSessionID: UUID? = nil,
          sendOnOpen: Bool = false, capabilitiesVerified: Bool = false,
          send: SendOperation? = nil, load: (@MainActor () async throws -> [Message])? = nil, recordMessage: (@MainActor () async -> Void)? = nil) {
@@ -76,12 +77,12 @@ struct ChatView: View {
             // Messages
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(spacing: 12) {
+                    LazyVStack(spacing: SupportTheme.Spacing.s) {
                         if dynamicTypeSize.isAccessibilitySize {
                             Text(displayTitle).font(.headline).accessibilityAddTraits(.isHeader)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        if let olderLoadError { Text(olderLoadError).font(.caption).foregroundStyle(.secondary) }
+                        if let olderLoadError { Text(olderLoadError).font(.caption).foregroundStyle(SupportTheme.textSecondary) }
                         if olderCursor != nil {
                             Button(isLoadingOlder ? "Loading…" : "Load earlier messages") {
                                 olderLoadTask = Task { await loadOlderMessages() }
@@ -92,20 +93,20 @@ struct ChatView: View {
                         ForEach(SupportChatRow.merge(messages: messages, localEvents: localVoiceEvents, activityEvents: activityEvents)) { row in
                             switch row {
                             case .message(let message):
-                            VStack(spacing: 4) {
+                            VStack(spacing: SupportTheme.Spacing.xxs) {
                                 MessageBubble(message: message)
                                     .accessibilityIdentifier("chat-message-\(message.id.lowercased())")
                                 if pendingSend?.messageId == message.id.lowercased(), let failure = sendFailure {
                                     Text(failure.messageSaved == true ? "Reply unavailable" : "Send not confirmed")
                                         .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                        .foregroundStyle(SupportTheme.textSecondary)
                                 }
                             }
                             .id(message.id)
                             case .localVoice(let event):
-                            VStack(alignment: .leading, spacing: 8) {
+                            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                                 Text(event.syncState == .rejected ? "Voice turn · not saved to account" : "Voice turn · saved on this device, account sync pending")
-                                    .font(.caption).foregroundStyle(.secondary)
+                                    .font(.caption).foregroundStyle(SupportTheme.textSecondary)
                                 Text(event.role == .user ? "You" : "MindFriend").font(.subheadline.bold())
                                 Text(event.text).textSelection(.enabled)
                                 if event.syncState == .rejected {
@@ -119,19 +120,19 @@ struct ChatView: View {
                                 Button("Remove local copy", role: .destructive) { removingVoiceEvent = event }
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding().background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+                            .padding().background(SupportTheme.surface, in: RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
                             case .activity(let event):
-                                VStack(alignment: .leading, spacing: 8) {
+                                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                                     Label(event.template.title, systemImage: "checklist").font(.headline)
                                     Text(event.stepState.map(SupportHistoryText.stepState) ?? SupportHistoryText.activityStatus(event.status))
                                     if let reflection = event.reflection { Text("Your reflection: " + reflection.displayTitle) }
                                     Text(event.answersShared ? "Written answers may be used as session context by your choice." : "Activity answers excluded from automatic session context. Answers you send in Chat are part of that message.")
-                                        .font(.caption).foregroundStyle(.secondary)
+                                        .font(.caption).foregroundStyle(SupportTheme.textSecondary)
                                     NavigationLink("View session") { SupportHistoryDetailView(sessionID: event.sessionID) }
-                                        .frame(minHeight: 44)
+                                        .frame(minHeight: SupportTheme.minimumTarget)
                                 }
                                 .frame(maxWidth: .infinity, alignment: .leading).padding()
-                                .background(SupportTheme.surface, in: RoundedRectangle(cornerRadius: 12))
+                                .background(SupportTheme.surface, in: RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
                                 .accessibilityIdentifier("chat-activity-" + event.activityID.uuidString.lowercased())
                             }
                         }
@@ -144,7 +145,7 @@ struct ChatView: View {
                                 coachData: coachData,
                                 isAcknowledged: coachViewModel.isAcknowledged,
                                 onAction: { action in
-                                    withAnimation {
+                                    withAnimation(reduceMotion ? nil : .default) {
                                         coachViewModel.handleAction(
                                             action,
                                             encounterId: coachData.encounterId,
@@ -160,7 +161,7 @@ struct ChatView: View {
                         if let error = coachViewModel.interactionError {
                             HStack {
                                 Image(systemName: "exclamationmark.circle.fill")
-                                    .foregroundStyle(.orange)
+                                    .foregroundStyle(SupportTheme.accent)
                                 Text(error)
                                     .font(.caption)
                                 Spacer()
@@ -172,17 +173,15 @@ struct ChatView: View {
                                 }
                                 .accessibilityLabel("Dismiss error")
                             }
-                            .padding()
-                            .background(Color.orange.opacity(0.1))
-                            .cornerRadius(8)
+                            .supportCard()
                             .padding()
                             .accessibilityElement(children: .combine)
                             .accessibilityLabel("Coach error: \(error)")
                         }
 
                         if isSending && !streamingText.isEmpty {
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text("Reply in progress · not yet saved").font(.caption).foregroundStyle(.secondary)
+                            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
+                                Text("Reply in progress · not yet saved").font(.caption).foregroundStyle(SupportTheme.textSecondary)
                                 MessageBubble(message: Message(id: "streaming", role: .assistant, content: streamingText, createdAt: Date(), blocked: false))
                             }.id("streaming")
                         }
@@ -202,7 +201,7 @@ struct ChatView: View {
                         proxy.scrollTo(anchor, anchor: .top)
                         prependAnchor = nil
                     } else {
-                        withAnimation { proxy.scrollTo(messages.last?.id, anchor: .bottom) }
+                        withAnimation(reduceMotion ? nil : .default) { proxy.scrollTo(messages.last?.id, anchor: .bottom) }
                     }
                 }
                 .onChange(of: sendFailure?.kind) { _, value in
@@ -210,7 +209,7 @@ struct ChatView: View {
                 }
                 .onChange(of: isSending) { _, newValue in
                     if newValue {
-                        withAnimation {
+                        withAnimation(reduceMotion ? nil : .default) {
                             proxy.scrollTo("typing-indicator", anchor: .bottom)
                         }
                     }
@@ -247,6 +246,7 @@ struct ChatView: View {
             .focused($isInputFocused)
         }
         .sentryMaskChat()
+        .foregroundStyle(SupportTheme.textPrimary)
         .supportScreen()
         .navigationTitle(dynamicTypeSize.isAccessibilitySize ? "Chat" : displayTitle)
         .navigationBarTitleDisplayMode(.inline)
@@ -484,7 +484,7 @@ struct ChatView: View {
     }
 
     private func failureBanner(_ failure: ChatRequestFailure) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text(failure.title).font(.headline)
             Text(failure.localizedDescription).font(.subheadline)
             if let used = failure.quotaUsed, let limit = failure.quotaLimit, used >= 0, limit > 0 {
@@ -499,14 +499,14 @@ struct ChatView: View {
                 Button(failure.kind == .pending ? "Check response" : failure.kind == .signIn ? "Retry after sign-in" : "Retry message") {
                     retryMessage()
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.supportPrimary)
                 .disabled(isSending)
             }
             Button("Reload history") { reconcileMessages(generation: viewGeneration) }
-                .buttonStyle(.bordered)
+                .buttonStyle(.supportSecondary)
             if failure.kind == .quota, appState.entitlements.tier != .premium {
                 Button("View plans") { appState.showPaywall = true }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.supportSecondary)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -601,10 +601,10 @@ struct ChatView: View {
                 if let newTitle = response.conversationTitle {
                     displayTitle = newTitle
                 }
-                
+
                 // Handle coach data if present
                 if let coachData = response.coachData {
-                    withAnimation {
+                    withAnimation(reduceMotion ? nil : .default) {
                         latestCoachData = coachData
                         coachViewModel.isAcknowledged = false // Reset for new coach card
                     }
@@ -717,13 +717,13 @@ struct ChatView: View {
     }
 
     private func supportProposal(_ proposal: SupportChatProposal, sessionID: UUID) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("A small next step").font(.headline)
             Text(proposal.template.title).font(.title3.weight(.semibold))
             Text(proposal.reason).font(.subheadline)
             if proposal.reasonCode == "approved_preference" { Button("Why this?") { showSupportContext = true } }
             HStack {
-                Button("Start") { acceptProposal(proposal, sessionID: sessionID) }.buttonStyle(.borderedProminent)
+                Button("Start") { acceptProposal(proposal, sessionID: sessionID) }.buttonStyle(.supportPrimary)
                 Button("Another option") { showManualChoices = true }
                 Button("Not now") {
                     Task {
@@ -774,14 +774,14 @@ struct MessageBubble: View {
         HStack {
             if isUser { Spacer(minLength: 60) }
 
-            VStack(alignment: isUser ? .trailing : .leading, spacing: 4) {
+            VStack(alignment: isUser ? .trailing : .leading, spacing: SupportTheme.Spacing.xxs) {
                 if message.contentOrigin == .interfaceFallback { Text("App guidance").font(.caption.weight(.semibold)) }
                 // MarkdownContentView handles all styling internally
                 MarkdownContentView(content: message.content, isUserMessage: isUser)
 
                 Text(message.createdAt, style: .time)
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
             .accessibilityElement(children: .combine)
             .accessibilityLabel(accessibilityLabel)
@@ -792,27 +792,28 @@ struct MessageBubble: View {
 }
 
 struct TypingIndicator: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var animating = false
 
     var body: some View {
         HStack {
-            HStack(spacing: 4) {
+            HStack(spacing: SupportTheme.Spacing.xxs) {
                 ForEach(0..<3, id: \.self) { index in
                     Circle()
                         .fill(SupportTheme.textSecondary)
                         .frame(width: 8, height: 8)
-                        .scaleEffect(animating ? 1.2 : 0.8)
-                        .animation(
-                            .easeInOut(duration: 0.6)
+                        .scaleEffect(reduceMotion ? 1 : (animating ? 1.2 : 0.8))
+                        .opacity(reduceMotion && !animating ? 0.5 : 1)
+                        .animation(reduceMotion ? .easeInOut(duration: 0.2) : .easeInOut(duration: 0.6)
                             .repeatForever()
                             .delay(Double(index) * 0.2),
                             value: animating
                         )
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .background(SupportTheme.surface, in: RoundedRectangle(cornerRadius: 20))
+            .padding(.horizontal, SupportTheme.Spacing.m)
+            .padding(.vertical, SupportTheme.Spacing.s)
+            .background(SupportTheme.surface, in: RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("MindFriend is typing")
 
@@ -833,15 +834,10 @@ struct ChatInputBar: View {
     }
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: SupportTheme.Spacing.s) {
             TextField("Message...", text: $text, axis: .vertical)
-                .textFieldStyle(.plain)
                 .lineLimit(1...5)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .foregroundStyle(SupportTheme.textPrimary)
-                .background(SupportTheme.field, in: RoundedRectangle(cornerRadius: 20))
-                .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(SupportTheme.border, lineWidth: 1))
+                .supportField()
                 .submitLabel(.send)
                 .onSubmit {
                     if canSend {
@@ -855,13 +851,14 @@ struct ChatInputBar: View {
                 Image(systemName: "arrow.up.circle.fill")
                     .font(.title)
                     .foregroundStyle(canSend ? SupportTheme.accent : SupportTheme.textSecondary)
+                    .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
             }
             .disabled(!canSend)
             .accessibilityLabel("Send message")
             .accessibilityHint(isOutOfMessages ? "You're out of messages for today" : canSend ? "Sends your message" : "Type a message first")
         }
         .padding(.horizontal)
-        .padding(.vertical, 8)
+        .padding(.vertical, SupportTheme.Spacing.xs)
         .background(SupportTheme.canvas)
     }
 }
@@ -875,36 +872,30 @@ struct QuotaWarningBanner: View {
         Button(action: onTap) {
             HStack {
                 Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(SupportTheme.accent)
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     if remaining == 0 {
                         Text("You're out of messages for today")
                         Text("More messages at \(resetsAt, style: .time)")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     } else {
                         Text("\(remaining) messages left today")
                     }
                 }
                 .font(.caption)
-                .foregroundStyle(.primary)
 
                 Spacer()
 
                 Text("Upgrade")
                     .font(.caption)
                     .fontWeight(.semibold)
-                    .foregroundStyle(Color.accentColor)
 
                 Image(systemName: "chevron.right")
                     .font(.caption)
-                    .foregroundStyle(Color.accentColor)
             }
-            .padding(.horizontal)
-            .padding(.vertical, 8)
-            .background(Color.orange.opacity(0.1))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.supportSecondary)
         .accessibilityElement(children: .combine)
         .accessibilityHint("Opens subscription options")
     }

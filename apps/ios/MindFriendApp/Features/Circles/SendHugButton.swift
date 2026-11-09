@@ -2,6 +2,7 @@ import SwiftUI
 
 /// A button that sends a "hug" to a circle member with animation feedback
 struct SendHugButton: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let memberId: String
     let circleId: String
 
@@ -17,9 +18,10 @@ struct SendHugButton: View {
         } label: {
             Image(systemName: showSentAnimation ? "heart.fill" : "heart")
                 .font(.title2)
-                .foregroundColor(showSentAnimation ? .red : .accentColor)
-                .scaleEffect(showSentAnimation ? 1.3 : 1.0)
-                .animation(.spring(response: 0.3, dampingFraction: 0.6), value: showSentAnimation)
+                .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                .foregroundColor(showSentAnimation ? .red : SupportTheme.accent)
+                .scaleEffect(reduceMotion ? 1 : (showSentAnimation ? 1.3 : 1.0))
+                .animation(reduceMotion ? .easeInOut(duration: 0.2) : .spring(response: 0.3, dampingFraction: 0.6), value: showSentAnimation)
         }
         .disabled(isSending)
         .opacity(isSending ? 0.5 : 1.0)
@@ -43,7 +45,7 @@ struct SendHugButton: View {
 
                 await MainActor.run {
                     // Show success animation
-                    withAnimation {
+                    withAnimation(reduceMotion ? nil : .default) {
                         showSentAnimation = true
                     }
 
@@ -51,7 +53,7 @@ struct SendHugButton: View {
                     Task {
                         try? await Task.sleep(for: .seconds(1.5))
                         await MainActor.run {
-                            withAnimation {
+                            withAnimation(reduceMotion ? nil : .default) {
                                 showSentAnimation = false
                             }
                             isSending = false
@@ -71,6 +73,7 @@ struct SendHugButton: View {
 
 /// A compact hug button for use in member lists
 struct CompactHugButton: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let memberId: String
     let circleId: String
 
@@ -82,17 +85,19 @@ struct CompactHugButton: View {
         Button {
             sendHug()
         } label: {
-            HStack(spacing: 4) {
+            HStack(spacing: SupportTheme.Spacing.xxs) {
                 Image(systemName: showSent ? "heart.fill" : "heart")
-                    .foregroundColor(showSent ? .red : .secondary)
+                    .foregroundColor(showSent ? .red : SupportTheme.textSecondary)
                 if showSent {
                     Text("Sent!")
                         .font(.caption)
                         .foregroundColor(.red)
                 }
             }
-            .animation(.easeInOut(duration: 0.2), value: showSent)
+            .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: showSent)
         }
+        .accessibilityLabel(showSent ? "Hug sent" : "Send a hug")
         .disabled(isSending || showSent)
         .buttonStyle(.plain)
     }
@@ -120,7 +125,7 @@ struct CompactHugButton: View {
 }
 
 #Preview {
-    VStack(spacing: 40) {
+    VStack(spacing: SupportTheme.Spacing.xl) {
         SendHugButton(memberId: "test-id", circleId: "circle-id")
 
         CompactHugButton(memberId: "test-id", circleId: "circle-id")

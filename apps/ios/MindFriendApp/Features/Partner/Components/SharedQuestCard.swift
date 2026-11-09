@@ -5,7 +5,7 @@ struct SharedQuestCard: View {
     let quest: Quest?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             HStack {
                 Image(systemName: "star")
                     .foregroundStyle(.tint)
@@ -17,44 +17,42 @@ struct SharedQuestCard: View {
 
             if let quest = quest {
                 HStack {
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                         Text(quest.template.title)
                             .font(.subheadline)
                             .lineLimit(2)
 
                         Text(quest.template.type.rawValue.capitalized)
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
 
                     Spacer()
 
                     // Status badge
-                    HStack(spacing: 4) {
+                    HStack(spacing: SupportTheme.Spacing.xxs) {
                         Image(systemName: quest.status == .completed ? "checkmark.circle.fill" : "circle")
-                            .foregroundStyle(quest.status == .completed ? .green : .secondary)
+                            .foregroundStyle(quest.status == .completed ? SupportTheme.accent : SupportTheme.textSecondary)
 
                         Text(quest.status == .completed ? "Done" : "In Progress")
                             .font(.caption)
-                            .foregroundStyle(quest.status == .completed ? .green : .secondary)
+                            .foregroundStyle(quest.status == .completed ? SupportTheme.accent : SupportTheme.textSecondary)
                     }
                 }
             } else {
                 Text("No quest assigned yet")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.vertical, 8)
+                    .padding(.vertical, SupportTheme.Spacing.xs)
             }
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .cornerRadius(12)
+        .supportCard()
     }
 }
 
 #Preview {
-    VStack(spacing: 16) {
+    VStack(spacing: SupportTheme.Spacing.m) {
         SharedQuestCard(quest: Quest(
             id: "1",
             localDate: "2026-01-20",

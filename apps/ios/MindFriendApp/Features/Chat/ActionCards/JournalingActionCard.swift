@@ -1,33 +1,36 @@
 import SwiftUI
 
 struct JournalingActionCard: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let card: ActionCard
 
     var body: some View {
-        HStack(spacing: 12) {
+        (dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: SupportTheme.Spacing.s))
+            : AnyLayout(HStackLayout(spacing: SupportTheme.Spacing.s))) {
             ZStack {
                 Circle()
-                    .fill(Color.green.opacity(0.1))
+                    .fill(SupportTheme.accent.opacity(0.1))
                     .frame(width: 48, height: 48)
                 Image(systemName: card.cardData.icon)
                     .font(.system(size: 20))
-                    .foregroundColor(.green)
+                    .foregroundColor(SupportTheme.accent)
             }
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text(card.cardData.title)
                     .font(.headline)
-                    .foregroundColor(.primary)
+                    .foregroundColor(SupportTheme.textPrimary)
 
                 Text(card.cardData.description)
                     .font(.subheadline)
-                    .foregroundColor(.secondary)
-                    .lineLimit(2)
+                    .foregroundColor(SupportTheme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
 
-                HStack(spacing: 8) {
+                HStack(spacing: SupportTheme.Spacing.xs) {
                     Label("\(card.cardData.estimatedMinutes) min", systemImage: "clock")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(SupportTheme.textSecondary)
                 }
             }
 
@@ -35,12 +38,10 @@ struct JournalingActionCard: View {
 
             Image(systemName: "chevron.right")
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(.secondary)
+                .foregroundColor(SupportTheme.textSecondary)
         }
-        .padding(16)
-        .background(Color(.systemBackground))
-        .cornerRadius(16)
-        .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 2)
+        .supportCard()
+        .shadow(color: SupportTheme.canvas.opacity(0.08), radius: 8, x: 0, y: 2)
     }
 }
 

@@ -33,56 +33,61 @@ struct SupportMemoryView: View {
         Form {
             Section {
                 Text("You can inspect and change the saved context MindFriend may share with AI. Suggestions are excluded until you save them.")
-                if let sync = container.supportSync { Text(sync.status).font(.subheadline).foregroundStyle(.secondary) }
+                if let sync = container.supportSync { Text(sync.status).font(.subheadline).foregroundStyle(SupportTheme.textSecondary) }
                 if coordinator.journal.memoryUpdatedAt == nil {
                     Text("Saved context has not been loaded on this device.")
                 }
                 Button("Refresh account context") { refresh() }
-                if let error { Text(error).foregroundStyle(.primary) }
+                if let error { Text(error).foregroundStyle(SupportTheme.textPrimary) }
             }
+            .listRowBackground(SupportTheme.surface)
             Section("Saved by you") {
                 Button("Add saved context") { showAdd = true }
-                if saved.isEmpty { Text("No saved items in the available account snapshot.").foregroundStyle(.secondary) }
+                if saved.isEmpty { Text("No saved items in the available account snapshot.").foregroundStyle(SupportTheme.textSecondary) }
                 ForEach(saved) { item in memoryRow(item) }
             }
+            .listRowBackground(SupportTheme.surface)
             Section("Suggestions to review") {
-                if suggestions.isEmpty { Text("No suggestions in the available account snapshot.").foregroundStyle(.secondary) }
+                if suggestions.isEmpty { Text("No suggestions in the available account snapshot.").foregroundStyle(SupportTheme.textSecondary) }
                 ForEach(suggestions) { item in memoryRow(item) }
             }
+            .listRowBackground(SupportTheme.surface)
             Section("Suggest memories from a session") {
                 Text("Pick a session to look through for things you clearly said about yourself. You see exactly what would be sent, and choose which messages, before anything is. Suggestions stay here for review and aren’t used until you save them.")
-                    .font(.subheadline).foregroundStyle(.secondary)
+                    .font(.subheadline).foregroundStyle(SupportTheme.textSecondary)
                 if suggestionSources.isEmpty {
-                    Text("Unavailable: no session on this device has a conversation attached.").foregroundStyle(.secondary)
+                    Text("Unavailable: no session on this device has a conversation attached.").foregroundStyle(SupportTheme.textSecondary)
                 }
                 ForEach(suggestionSources) { session in
                     NavigationLink {
                         SupportMemorySuggestionView(sessionID: session.id, cameFromMemoryList: true)
                     } label: {
-                        VStack(alignment: .leading, spacing: 4) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                             Text(session.title.isEmpty ? "Untitled session" : session.title)
-                            Text(sourceCaption(session)).font(.caption).foregroundStyle(.secondary)
+                            Text(sourceCaption(session)).font(.caption).foregroundStyle(SupportTheme.textSecondary)
                         }
                     }
                 }
             }
+            .listRowBackground(SupportTheme.surface)
             Section("For today") {
                 if let today = container.supportSync?.memory?.dailyIntent, today.expiresAt > Date() {
                     Text(today.intent)
                     Text("Expires \(today.expiresAt.formatted(date: .abbreviated, time: .shortened))")
-                        .font(.subheadline).foregroundStyle(.secondary)
+                        .font(.subheadline).foregroundStyle(SupportTheme.textSecondary)
                 } else {
-                    Text("No current focus is available in this snapshot.").foregroundStyle(.secondary)
+                    Text("No current focus is available in this snapshot.").foregroundStyle(SupportTheme.textSecondary)
                 }
                 Button("Change today’s focus") { showTodayFocus = true }
             }
+            .listRowBackground(SupportTheme.surface)
             if !coordinator.journal.memoryChanges.isEmpty {
                 Section("Changes awaiting confirmation") {
                     ForEach(coordinator.journal.memoryChanges) { change in
-                        VStack(alignment: .leading, spacing: 8) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                             Text(change.failureCode == nil ? "Saved here. Syncing the change…" : "This change needs attention.")
                             Text("Personalized AI is paused until these changes are settled.")
-                                .font(.subheadline).foregroundStyle(.secondary)
+                                .font(.subheadline).foregroundStyle(SupportTheme.textSecondary)
                             if let other = change.conflictingContent {
                                 Text("The account now contains:").font(.headline)
                                 Text(other)
@@ -97,17 +102,20 @@ struct SupportMemoryView: View {
                     }
                     Button("Retry account sync") { retry() }
                 }
+                .listRowBackground(SupportTheme.surface)
             }
             Section("Personalization controls") {
                 NavigationLink("Choose what AI may use") { MemorySettingsView() }
                 Text("Conversation-only uses the current conversation and its explicitly shared activity results. It excludes saved personal memories, earlier conversations, Health data, and inferred emotions.")
                 NavigationLink("Private journal · on this device") { VaultListView().environmentObject(container.vaultViewModel) }
                 Text("The private journal stays on this device and is never included through these memory controls.")
-                    .font(.subheadline).foregroundStyle(.secondary)
+                    .font(.subheadline).foregroundStyle(SupportTheme.textSecondary)
             }
+            .listRowBackground(SupportTheme.surface)
         }
+        .foregroundStyle(SupportTheme.textPrimary)
+        .supportSheet()
         .navigationTitle("What MindFriend remembers")
-        .supportCanvas()
         .task { refresh() }
         .sheet(isPresented: $showAdd, onDismiss: { refresh() }) {
             EditMemorySheet(mode: .create).environmentObject(container.companionMemoryService).id(coordinator.identity.epochID)
@@ -149,11 +157,11 @@ struct SupportMemoryView: View {
     }
 
     @ViewBuilder private func memoryRow(_ item: SupportMemoryRecord) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             Text(item.content)
             Text(item.category.replacingOccurrences(of: "_", with: " ").capitalized).font(.subheadline)
-            Text(origin(item)).font(.subheadline).foregroundStyle(.secondary)
-            Text(item.state.replacingOccurrences(of: "_", with: " ").capitalized).font(.caption).foregroundStyle(.secondary)
+            Text(origin(item)).font(.subheadline).foregroundStyle(SupportTheme.textSecondary)
+            Text(item.state.replacingOccurrences(of: "_", with: " ").capitalized).font(.caption).foregroundStyle(SupportTheme.textSecondary)
             if let date = item.confirmedAt { Text("Confirmed \(date.formatted(date: .abbreviated, time: .omitted))").font(.caption) }
             if let date = item.reviewDueAt { Text("Review \(date.formatted(date: .abbreviated, time: .omitted))").font(.caption) }
             if let date = item.expiresAt { Text("Expires \(date.formatted(date: .abbreviated, time: .omitted))").font(.caption) }
@@ -171,7 +179,7 @@ struct SupportMemoryView: View {
             }
             Button("Forget", role: .destructive) { forgetting = item }
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, SupportTheme.Spacing.xs)
     }
 
     private func sourceCaption(_ session: SupportSession) -> String {
@@ -242,10 +250,18 @@ private struct SupportMemoryEditor: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Saved context") { TextEditor(text: $text).frame(minHeight: 120) }
+                Section("Saved context") {
+                    TextEditor(text: $text)
+                        .scrollContentBackground(.hidden)
+                        .supportField()
+                        .frame(minHeight: 120)
+                }
+                .listRowBackground(SupportTheme.surface)
                 Text("\(text.unicodeScalars.count) / 500 characters").font(.caption)
                 Text("The old item stops being used here when you save. Account sync must confirm the correction before personalized AI resumes.")
             }
+            .foregroundStyle(SupportTheme.textPrimary)
+            .supportSheet()
             .navigationTitle(item.isSuggestion ? "Review suggestion" : "Correct saved context")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }

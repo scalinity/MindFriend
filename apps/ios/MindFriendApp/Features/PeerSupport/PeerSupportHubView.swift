@@ -16,10 +16,14 @@ struct PeerSupportHubView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 24) {
+            VStack(spacing: SupportTheme.Spacing.l) {
                 if service.isLoading {
                     loadingView
                 } else {
+                    if let error = service.error {
+                        Label(error, systemImage: "exclamationmark.triangle")
+                            .supportCard()
+                    }
                     // Request Support Card
                     requestSupportCard
 
@@ -49,6 +53,8 @@ struct PeerSupportHubView: View {
             }
             .padding()
         }
+        .foregroundStyle(SupportTheme.textPrimary)
+        .supportScreen()
         .navigationTitle("Peer Support")
         .refreshable {
             await service.loadData()
@@ -70,11 +76,11 @@ struct PeerSupportHubView: View {
     // MARK: - Loading View
 
     private var loadingView: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             ProgressView()
             Text("Loading peer support...")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
         .frame(maxWidth: .infinity, minHeight: 200)
     }
@@ -82,17 +88,17 @@ struct PeerSupportHubView: View {
     // MARK: - Request Support Card
 
     private var requestSupportCard: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             Image(systemName: "bubble.left.and.bubble.right.fill")
                 .font(.system(size: 40))
-                .foregroundStyle(.blue.gradient)
+                .foregroundStyle(SupportTheme.accent)
 
             Text("Need Someone to Talk To?")
                 .font(.title3.bold())
 
             Text("Connect with a trained peer supporter for a confidential conversation.")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .multilineTextAlignment(.center)
 
             Button {
@@ -101,11 +107,11 @@ struct PeerSupportHubView: View {
                 Label("Request Support", systemImage: "hand.raised.fill")
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.supportPrimary)
             .controlSize(.large)
         }
         .padding()
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .background(SupportTheme.surface, in: RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Request peer support")
         .accessibilityHint("Opens a form to request a support session")
@@ -114,7 +120,7 @@ struct PeerSupportHubView: View {
     // MARK: - Active Sessions Section
 
     private var activeSessionsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("Active Sessions")
                 .font(.headline)
 
@@ -133,7 +139,7 @@ struct PeerSupportHubView: View {
     // TODO: Re-enable after fixing Mentorship module
 
     private var mentorshipSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("Mentorship")
                 .font(.headline)
 
@@ -156,15 +162,15 @@ struct PeerSupportHubView: View {
     // MARK: - Give Back Section
 
     private var giveBackSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("Give Back")
                 .font(.headline)
 
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: SupportTheme.Spacing.s) {
                 GiveBackOption(
                     icon: "hands.sparkles.fill",
                     title: "Send Hugs",
-                    color: .pink
+                    color: SupportTheme.accent
                 ) {
                     // Navigate to send hugs - could show a sheet
                 }
@@ -172,7 +178,7 @@ struct PeerSupportHubView: View {
                 GiveBackOption(
                     icon: "lightbulb.fill",
                     title: "Share Wisdom",
-                    color: .yellow
+                    color: SupportTheme.Celebration.gold
                 ) {
                     showShareWisdom = true
                 }
@@ -183,7 +189,7 @@ struct PeerSupportHubView: View {
                     GiveBackOptionContent(
                         icon: "star.fill",
                         title: "Gratitude Wall",
-                        color: .orange
+                        color: SupportTheme.accent
                     )
                 }
                 .buttonStyle(.plain)
@@ -194,7 +200,7 @@ struct PeerSupportHubView: View {
                     GiveBackOptionContent(
                         icon: "book.fill",
                         title: "Browse Wisdom",
-                        color: .purple
+                        color: SupportTheme.accent
                     )
                 }
                 .buttonStyle(.plain)
@@ -205,17 +211,17 @@ struct PeerSupportHubView: View {
     // MARK: - Become Listener Card
 
     private var becomeListenerCard: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             Image(systemName: "person.badge.plus")
                 .font(.system(size: 40))
-                .foregroundStyle(.green.gradient)
+                .foregroundStyle(SupportTheme.accent)
 
             Text("Become a Listener")
                 .font(.title3.bold())
 
             Text("Help others by becoming a trained peer supporter. Give back to the community and grow through service.")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .multilineTextAlignment(.center)
 
             Button {
@@ -224,10 +230,10 @@ struct PeerSupportHubView: View {
                 Label("Learn More", systemImage: "arrow.right")
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.supportSecondary)
         }
         .padding()
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .background(SupportTheme.surface, in: RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Become a peer listener")
         .accessibilityHint("Opens information about becoming a trained peer supporter")
@@ -236,7 +242,7 @@ struct PeerSupportHubView: View {
     // MARK: - Listener Dashboard Card
 
     private var listenerDashboardCard: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             HStack {
                 Image(systemName: listenerStatusIcon)
                     .foregroundStyle(listenerStatusColor)
@@ -260,7 +266,7 @@ struct PeerSupportHubView: View {
             }
 
             if let listener = service.listenerProfile, listener.status == .active {
-                HStack(spacing: 20) {
+                HStack(spacing: SupportTheme.Spacing.l) {
                     ListenerStat(
                         value: "\(listener.totalSessions)",
                         label: "Sessions"
@@ -284,11 +290,11 @@ struct PeerSupportHubView: View {
                 Text("View Dashboard")
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.supportSecondary)
             .disabled(service.listenerProfile == nil)
         }
         .padding()
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .background(SupportTheme.surface, in: RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
     }
 
     private var listenerStatusIcon: String {
@@ -309,13 +315,13 @@ struct PeerSupportHubView: View {
     private var listenerStatusColor: Color {
         switch service.listenerProfile?.status {
         case .active:
-            return .green
+            return SupportTheme.accent
         case .training:
-            return .blue
+            return SupportTheme.accent
         case .applicant:
-            return .orange
+            return SupportTheme.accent
         case .inactive:
-            return .gray
+            return SupportTheme.textSecondary
         case .suspended, .none:
             return .red
         }
@@ -341,7 +347,7 @@ struct PeerSupportHubView: View {
     // MARK: - Community Wisdom Section
 
     private var communityWisdomSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             HStack {
                 Text("Community Wisdom")
                     .font(.headline)
@@ -366,12 +372,12 @@ struct ActiveSessionCard: View {
 
     var body: some View {
         HStack {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text(session.sessionType.displayName)
                     .font(.subheadline.bold())
                 Text(session.status.displayName)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
 
             Spacer()
@@ -379,26 +385,26 @@ struct ActiveSessionCard: View {
             if session.status == .active {
                 Text("In Progress")
                     .font(.caption)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(.green.opacity(0.2))
-                    .foregroundStyle(.green)
+                    .padding(.horizontal, SupportTheme.Spacing.xs)
+                    .padding(.vertical, SupportTheme.Spacing.xxs)
+                    .background(SupportTheme.surface)
+                    .foregroundStyle(SupportTheme.accent)
                     .clipShape(Capsule())
             } else if session.status == .pending {
                 Text("Waiting")
                     .font(.caption)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(.orange.opacity(0.2))
-                    .foregroundStyle(.orange)
+                    .padding(.horizontal, SupportTheme.Spacing.xs)
+                    .padding(.vertical, SupportTheme.Spacing.xxs)
+                    .background(SupportTheme.surface)
+                    .foregroundStyle(SupportTheme.accent)
                     .clipShape(Capsule())
             }
 
             Image(systemName: "chevron.right")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
         .padding()
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .background(SupportTheme.surface, in: RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(session.sessionType.displayName) session, \(session.status.displayName)")
     }
@@ -424,17 +430,17 @@ struct GiveBackOptionContent: View {
     let color: Color
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: SupportTheme.Spacing.xs) {
             Image(systemName: icon)
                 .font(.title2)
                 .foregroundStyle(color)
             Text(title)
                 .font(.caption)
-                .foregroundStyle(.primary)
+                .foregroundStyle(SupportTheme.textPrimary)
         }
         .frame(maxWidth: .infinity)
         .padding()
-        .background(color.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
+        .background(color.opacity(0.1), in: RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
         .accessibilityElement(children: .combine)
         .accessibilityLabel(title)
     }
@@ -445,12 +451,12 @@ struct ListenerStat: View {
     let label: String
 
     var body: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: SupportTheme.Spacing.xxs) {
             Text(value)
                 .font(.title2.bold())
             Text(label)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(value) \(label)")
@@ -459,21 +465,21 @@ struct ListenerStat: View {
 
 struct MentorshipEmptyCard: View {
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: SupportTheme.Spacing.s) {
             Image(systemName: "person.2.circle")
                 .font(.largeTitle)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
             Text("No active mentorships")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
             Text("Find a mentor who has navigated similar challenges")
                 .font(.caption)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
         .padding()
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .background(SupportTheme.surface, in: RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
     }
 }
 
@@ -482,37 +488,37 @@ struct MentorshipCard: View {
 
     var body: some View {
         HStack {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text("Mentorship")
                     .font(.subheadline.bold())
                 Text(mentorship.status.displayName)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                 if let challenges = mentorship.matchedOnChallenges, !challenges.isEmpty {
                     Text(challenges.joined(separator: ", "))
                         .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
             }
 
             Spacer()
 
             if let nextCheckin = mentorship.nextCheckinDue {
-                VStack(alignment: .trailing, spacing: 2) {
+                VStack(alignment: .trailing, spacing: SupportTheme.Spacing.xxs) {
                     Text("Next check-in")
                         .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                     Text(nextCheckin, style: .relative)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
             }
 
             Image(systemName: "chevron.right")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
         .padding()
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .background(SupportTheme.surface, in: RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
     }
 }
 
@@ -520,36 +526,37 @@ struct WisdomCard: View {
     let wisdom: DBCommunityWisdom
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             HStack {
                 Image(systemName: wisdom.category.icon)
-                    .foregroundStyle(.yellow)
+                    .foregroundStyle(SupportTheme.Celebration.gold)
                 Text(wisdom.title)
                     .font(.subheadline.bold())
-                    .lineLimit(1)
+                    .fixedSize(horizontal: false, vertical: true)
                 Spacer()
-                HStack(spacing: 2) {
+                HStack(spacing: SupportTheme.Spacing.xxs) {
                     Image(systemName: "hand.thumbsup")
                         .font(.caption)
                     Text("\(wisdom.helpfulCount)")
                         .font(.caption)
                 }
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
             }
 
             Text(wisdom.content)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .lineLimit(2)
         }
         .padding()
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .background(SupportTheme.surface, in: RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
     }
 }
 
 // MARK: - Placeholder Views
 
 struct SupportSessionView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject var service: PeerSupportService
     @State private var session: DBSupportSession
     @State private var messages: [DBSupportMessage] = []
@@ -573,22 +580,22 @@ struct SupportSessionView: View {
                 if isBusy { ProgressView() }
             }
             .font(.subheadline).padding()
-            .background(Color(.secondarySystemBackground))
+            .background(SupportTheme.surface)
 
             if let errorMessage {
                 HStack(alignment: .top) {
                     Text(errorMessage).font(.caption).foregroundStyle(.red)
                     Spacer()
                     Button("Retry") { Task { await refresh() } }.font(.caption)
-                }.padding(.horizontal).padding(.vertical, 8)
+                }.padding(.horizontal).padding(.vertical, SupportTheme.Spacing.xs)
             }
 
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(spacing: 12) {
+                    LazyVStack(spacing: SupportTheme.Spacing.s) {
                         if messages.isEmpty {
                             Text(session.status == .active ? "Your conversation can begin here." : "Messages will appear when the conversation begins.")
-                                .font(.subheadline).foregroundStyle(.secondary).padding(.vertical, 32)
+                                .font(.subheadline).foregroundStyle(SupportTheme.textSecondary).padding(.vertical, SupportTheme.Spacing.xl)
                         }
                         ForEach(messages) { message in
                             messageRow(message).id(message.id)
@@ -596,14 +603,14 @@ struct SupportSessionView: View {
                     }.padding()
                 }
                 .onChange(of: messages.last?.id) { _, id in
-                    if let id { withAnimation { proxy.scrollTo(id, anchor: .bottom) } }
+                    if let id { withAnimation(reduceMotion ? nil : .default) { proxy.scrollTo(id, anchor: .bottom) } }
                 }
             }
 
             if session.status == .active {
-                HStack(alignment: .bottom, spacing: 12) {
+                HStack(alignment: .bottom, spacing: SupportTheme.Spacing.s) {
                     TextField("Message", text: $draft, axis: .vertical)
-                        .lineLimit(1...5).textFieldStyle(.roundedBorder)
+                        .lineLimit(1...5).supportField()
                         .accessibilityLabel("Message to your support partner")
                     Button { Task { await send() } } label: {
                         Image(systemName: "arrow.up.circle.fill").font(.title)
@@ -612,19 +619,21 @@ struct SupportSessionView: View {
                     .disabled(isBusy || myRole == nil || draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }.padding()
             } else if session.status == .matched || session.status == .pending {
-                VStack(spacing: 12) {
+                VStack(spacing: SupportTheme.Spacing.s) {
                     if session.status == .matched && myRole == .listener {
-                        Button("Begin Conversation") { Task { await begin() } }.buttonStyle(.borderedProminent)
+                        Button("Begin Conversation") { Task { await begin() } }.buttonStyle(.supportPrimary)
                     } else {
                         Text(session.status == .pending ? "Waiting for an available peer listener." : "Your listener will begin the conversation shortly.")
-                            .font(.subheadline).foregroundStyle(.secondary)
+                            .font(.subheadline).foregroundStyle(SupportTheme.textSecondary)
                     }
                     Button("Cancel Request", role: .destructive) { Task { await cancel() } }
                 }.padding().disabled(isBusy || myRole == nil)
             } else {
-                Text("This conversation has ended.").font(.subheadline).foregroundStyle(.secondary).padding()
+                Text("This conversation has ended.").font(.subheadline).foregroundStyle(SupportTheme.textSecondary).padding()
             }
         }
+        .foregroundStyle(SupportTheme.textPrimary)
+        .supportScreen()
         .navigationTitle("Peer Support")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -659,18 +668,19 @@ struct SupportSessionView: View {
     @ViewBuilder
     private func messageRow(_ message: DBSupportMessage) -> some View {
         if message.senderType == .system {
-            Text(message.content).font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity)
+            Text(message.content).font(.caption).foregroundStyle(SupportTheme.textSecondary).frame(maxWidth: .infinity)
         } else {
             let isMine = message.senderType == myRole
             HStack {
                 if isMine { Spacer(minLength: 40) }
-                VStack(alignment: isMine ? .trailing : .leading, spacing: 4) {
+                VStack(alignment: isMine ? .trailing : .leading, spacing: SupportTheme.Spacing.xxs) {
                     Text(isMine ? "You" : message.senderType == .listener ? "Listener" : "Support partner")
-                        .font(.caption2).foregroundStyle(.secondary)
+                        .font(.caption2).foregroundStyle(SupportTheme.textSecondary)
                     Text(message.content).textSelection(.enabled)
-                        .padding(12)
-                        .background(isMine ? Color.accentColor.opacity(0.16) : Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 14))
-                    Text(message.sentAt, style: .time).font(.caption2).foregroundStyle(.secondary)
+                        .padding(SupportTheme.Spacing.s)
+                        .foregroundStyle(isMine ? SupportTheme.onAccent : SupportTheme.textPrimary)
+                        .background(isMine ? SupportTheme.accent : SupportTheme.surface, in: RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
+                    Text(message.sentAt, style: .time).font(.caption2).foregroundStyle(SupportTheme.textSecondary)
                 }
                 if !isMine { Spacer(minLength: 40) }
             }
@@ -741,6 +751,8 @@ struct PeerFindMentorView: View {
 
     var body: some View {
         Text("Find a mentor who understands your journey")
+            .foregroundStyle(SupportTheme.textPrimary)
+            .supportScreen()
             .navigationTitle("Find Mentor")
     }
 }
@@ -751,6 +763,8 @@ struct MentorshipDetailView: View {
 
     var body: some View {
         Text("Mentorship details")
+            .foregroundStyle(SupportTheme.textPrimary)
+            .supportScreen()
             .navigationTitle("Mentorship")
     }
 }
@@ -761,6 +775,8 @@ struct ListenerDashboardView: View {
 
     var body: some View {
         Text("Listener dashboard")
+            .foregroundStyle(SupportTheme.textPrimary)
+            .supportScreen()
             .navigationTitle("Listener Dashboard")
     }
 }
@@ -772,12 +788,12 @@ struct BecomeListenerView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: SupportTheme.Spacing.l) {
                     Text("Becoming a peer listener is a meaningful way to give back while reinforcing your own wellness journey.")
                         .multilineTextAlignment(.center)
 
                     // Requirements section
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                         Text("Requirements")
                             .font(.headline)
 
@@ -788,10 +804,12 @@ struct BecomeListenerView: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding()
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                    .background(SupportTheme.surface, in: RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
                 }
                 .padding()
             }
+            .foregroundStyle(SupportTheme.textPrimary)
+            .supportScreen()
             .navigationTitle("Become a Listener")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -808,9 +826,9 @@ struct RequirementRow: View {
     let text: String
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: SupportTheme.Spacing.s) {
             Image(systemName: icon)
-                .foregroundStyle(.blue)
+                .foregroundStyle(SupportTheme.accent)
                 .frame(width: 24)
             Text(text)
                 .font(.subheadline)
@@ -838,19 +856,27 @@ struct ShareWisdomSheet: View {
                         }
                     }
                 }
+                .listRowBackground(SupportTheme.surface)
 
                 Section("Your Wisdom") {
                     TextField("Title", text: $title)
+                        .supportField()
                     TextEditor(text: $content)
+                        .scrollContentBackground(.hidden)
+                        .supportField()
                         .frame(minHeight: 100)
                 }
+                .listRowBackground(SupportTheme.surface)
 
                 Section {
                     Text("Your submission will be reviewed before being published to the community.")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
+                .listRowBackground(SupportTheme.surface)
             }
+            .foregroundStyle(SupportTheme.textPrimary)
+            .supportScreen()
             .navigationTitle("Share Wisdom")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -903,7 +929,7 @@ struct GratitudeWallView: View {
                 )
             } else {
                 ScrollView {
-                    LazyVStack(spacing: 12) {
+                    LazyVStack(spacing: SupportTheme.Spacing.s) {
                         ForEach(gratitudeItems) { item in
                             GratitudeItemCard(item: item)
                         }
@@ -912,6 +938,8 @@ struct GratitudeWallView: View {
                 }
             }
         }
+        .foregroundStyle(SupportTheme.textPrimary)
+        .supportScreen()
         .navigationTitle("Gratitude Wall")
         .task {
             do {
@@ -928,37 +956,37 @@ struct GratitudeItemCard: View {
     let item: DBGratitudeAction
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: SupportTheme.Spacing.s) {
             Image(systemName: item.actionType.icon)
                 .font(.title2)
                 .foregroundStyle(colorForType(item.actionType))
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text(item.actionType.displayName)
                     .font(.subheadline.bold())
                 if let message = item.message {
                     Text(message)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
                 Text(item.createdAt, style: .relative)
                     .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
 
             Spacer()
         }
         .padding()
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .background(SupportTheme.surface, in: RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
     }
 
     private func colorForType(_ type: DBGratitudeAction.ActionType) -> Color {
         switch type {
         case .thankListener: return .red
-        case .communityHug: return .pink
-        case .wisdomShare: return .yellow
-        case .storySpotlight: return .orange
-        case .donation: return .green
+        case .communityHug: return SupportTheme.accent
+        case .wisdomShare: return SupportTheme.Celebration.gold
+        case .storySpotlight: return SupportTheme.accent
+        case .donation: return SupportTheme.accent
         }
     }
 }
@@ -973,7 +1001,7 @@ struct CommunityWisdomView: View {
         VStack(spacing: 0) {
             // Category filter
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
+                HStack(spacing: SupportTheme.Spacing.xs) {
                     PeerSupportCategoryChip(
                         title: "All",
                         isSelected: selectedCategory == nil
@@ -993,9 +1021,9 @@ struct CommunityWisdomView: View {
                     }
                 }
                 .padding(.horizontal)
-                .padding(.vertical, 8)
+                .padding(.vertical, SupportTheme.Spacing.xs)
             }
-            .background(.ultraThinMaterial)
+            .background(SupportTheme.surface)
 
             if isLoading {
                 Spacer()
@@ -1009,7 +1037,7 @@ struct CommunityWisdomView: View {
                 )
             } else {
                 ScrollView {
-                    LazyVStack(spacing: 12) {
+                    LazyVStack(spacing: SupportTheme.Spacing.s) {
                         ForEach(wisdom) { item in
                             WisdomDetailCard(wisdom: item, service: service)
                         }
@@ -1018,6 +1046,8 @@ struct CommunityWisdomView: View {
                 }
             }
         }
+        .foregroundStyle(SupportTheme.textPrimary)
+        .supportScreen()
         .navigationTitle("Community Wisdom")
         .task {
             await loadWisdom()
@@ -1044,10 +1074,10 @@ private struct PeerSupportCategoryChip: View {
         Button(action: action) {
             Text(title)
                 .font(.caption)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(isSelected ? Color.accentColor : Color.gray.opacity(0.2))
-                .foregroundStyle(isSelected ? .white : .primary)
+                .padding(.horizontal, SupportTheme.Spacing.s)
+                .padding(.vertical, SupportTheme.Spacing.xs)
+                .background(isSelected ? SupportTheme.accent : SupportTheme.textSecondary.opacity(0.2))
+                .foregroundStyle(isSelected ? SupportTheme.textPrimary : SupportTheme.textPrimary)
                 .clipShape(Capsule())
         }
         .buttonStyle(.plain)
@@ -1059,15 +1089,15 @@ struct WisdomDetailCard: View {
     let service: PeerSupportService
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             HStack {
                 Image(systemName: wisdom.category.icon)
-                    .foregroundStyle(.yellow)
+                    .foregroundStyle(SupportTheme.Celebration.gold)
                 Text(wisdom.category.displayName)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                 Spacer()
-                HStack(spacing: 4) {
+                HStack(spacing: SupportTheme.Spacing.xxs) {
                     Button {
                         Task {
                             try? await service.markWisdomAsHelpful(wisdomId: wisdom.id)
@@ -1076,7 +1106,7 @@ struct WisdomDetailCard: View {
                         Label("\(wisdom.helpfulCount)", systemImage: "hand.thumbsup")
                             .font(.caption)
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.supportSecondary)
                     .controlSize(.small)
                 }
             }
@@ -1086,20 +1116,20 @@ struct WisdomDetailCard: View {
 
             Text(wisdom.content)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
 
             if let tags = wisdom.tags, !tags.isEmpty {
                 HStack {
                     ForEach(tags, id: \.self) { tag in
                         Text("#\(tag)")
                             .font(.caption2)
-                            .foregroundStyle(.blue)
+                            .foregroundStyle(SupportTheme.accent)
                     }
                 }
             }
         }
         .padding()
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .background(SupportTheme.surface, in: RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
     }
 }
 

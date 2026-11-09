@@ -10,7 +10,7 @@ struct PartnerOnboardingView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 24) {
+            VStack(spacing: SupportTheme.Spacing.l) {
                 // Header
                 headerSection
 
@@ -20,7 +20,7 @@ struct PartnerOnboardingView: View {
                     Text("Enter Code").tag(1)
                 }
                 .pickerStyle(.segmented)
-                .padding(.horizontal, 24)
+                .padding(.horizontal, SupportTheme.Spacing.l)
 
                 // Tab content
                 if selectedTab == 0 {
@@ -32,37 +32,38 @@ struct PartnerOnboardingView: View {
                 // Benefits section
                 benefitsSection
             }
-            .padding(.vertical, 24)
+            .padding(.vertical, SupportTheme.Spacing.l)
         }
     }
 
     // MARK: - Header
 
     private var headerSection: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             Image(systemName: "person.2.fill")
                 .font(.system(size: 60))
                 .foregroundStyle(.tint)
                 .accessibilityHidden(true)
 
-            VStack(spacing: 8) {
+            VStack(spacing: SupportTheme.Spacing.xs) {
                 Text("Partner Up")
                     .font(.title)
+                    .accessibilityAddTraits(.isHeader)
                     .fontWeight(.bold)
 
                 Text("Connect with a partner for accountability and support on your wellness journey")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .multilineTextAlignment(.center)
             }
         }
-        .padding(.horizontal, 24)
+        .padding(.horizontal, SupportTheme.Spacing.l)
     }
 
     // MARK: - Send Invite Tab
 
     private var sendInviteTab: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: SupportTheme.Spacing.l) {
             if let code = pendingCode ?? viewModel.inviteCode {
                 // Show existing code
                 InviteCodeDisplay(
@@ -79,33 +80,29 @@ struct PartnerOnboardingView: View {
                     HStack {
                         if viewModel.isLoading {
                             ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                .padding(.trailing, 4)
+                                .progressViewStyle(CircularProgressViewStyle(tint: SupportTheme.onAccent))
                         }
                         Text(viewModel.isLoading ? "Generating..." : "Create Invite Code")
                             .font(.headline)
                     }
                     .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.accentColor)
-                    .foregroundStyle(.white)
-                    .cornerRadius(12)
                 }
+                .buttonStyle(.supportPrimary)
                 .disabled(viewModel.isLoading)
                 .accessibilityLabel("Create invite code")
             }
         }
-        .padding(.horizontal, 24)
+        .padding(.horizontal, SupportTheme.Spacing.l)
     }
 
     // MARK: - Enter Code Tab
 
     private var enterCodeTab: some View {
-        VStack(spacing: 20) {
-            VStack(alignment: .leading, spacing: 8) {
+        VStack(spacing: SupportTheme.Spacing.l) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                 Text("Enter your partner's code")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
 
                 CodeEntryField(code: $viewModel.codeInput)
             }
@@ -118,31 +115,30 @@ struct PartnerOnboardingView: View {
                 HStack {
                     if viewModel.isValidatingCode {
                         ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                            .padding(.trailing, 4)
+                            .progressViewStyle(CircularProgressViewStyle(tint: SupportTheme.onAccent))
+                            .padding(.trailing, SupportTheme.Spacing.xxs)
                     }
                     Text(viewModel.isValidatingCode ? "Connecting..." : "Connect")
                         .font(.headline)
                 }
                 .frame(maxWidth: .infinity)
                 .padding()
-                .background(viewModel.isCodeInputValid ? Color.accentColor : Color.secondary.opacity(0.3))
-                .foregroundStyle(.white)
-                .cornerRadius(12)
             }
+            .buttonStyle(.supportPrimary)
             .disabled(!viewModel.isCodeInputValid || viewModel.isValidatingCode)
             .accessibilityLabel("Connect with partner")
             .accessibilityHint(viewModel.isCodeInputValid ? "Enter the 8-character code from your partner" : "Enter a valid 8-character code first")
         }
-        .padding(.horizontal, 24)
+        .padding(.horizontal, SupportTheme.Spacing.l)
     }
 
     // MARK: - Benefits Section
 
     private var benefitsSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
             Text("Why partner up?")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
             PartnerBenefitRow(
                 icon: "chart.line.uptrend.xyaxis",
@@ -157,8 +153,8 @@ struct PartnerOnboardingView: View {
             )
 
             PartnerBenefitRow(
-                icon: "flame.fill",
-                title: "Shared streaks",
+                icon: "hands.sparkles.fill",
+                title: "Shared encouragement",
                 description: "See each other's progress and celebrate together"
             )
 
@@ -168,10 +164,10 @@ struct PartnerOnboardingView: View {
                 description: "Complete mindfulness activities together"
             )
         }
-        .padding(20)
-        .background(Color(.secondarySystemBackground))
-        .cornerRadius(16)
-        .padding(.horizontal, 24)
+        .padding(SupportTheme.Spacing.l)
+        .background(SupportTheme.surface)
+        .cornerRadius(SupportTheme.cardRadius)
+        .padding(.horizontal, SupportTheme.Spacing.l)
     }
 }
 
@@ -183,20 +179,20 @@ private struct PartnerBenefitRow: View {
     let description: String
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: SupportTheme.Spacing.s) {
             Image(systemName: icon)
                 .font(.title3)
                 .foregroundStyle(.tint)
                 .frame(width: 28)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text(title)
                     .font(.subheadline)
                     .fontWeight(.medium)
 
                 Text(description)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
 
             Spacer()

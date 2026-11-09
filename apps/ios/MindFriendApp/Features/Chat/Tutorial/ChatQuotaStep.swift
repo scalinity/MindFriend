@@ -9,6 +9,7 @@ import SwiftUI
 
 /// Step 4: Explain free tier limits and premium benefits
 struct ChatQuotaStep: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let onComplete: () -> Void
 
     @State private var showComparison = false
@@ -16,92 +17,92 @@ struct ChatQuotaStep: View {
     var body: some View {
         TutorialStepView(
             icon: "bubble.left.and.text.bubble.right.fill",
-            iconColor: .green,
+            iconColor: SupportTheme.accent,
             headline: "Usage & Quotas",
             subheadline: "You get daily messages included. Premium unlocks unlimited conversations.",
             primaryLabel: "Start Chatting",
             primaryAction: onComplete
         ) {
-            VStack(spacing: 16) {
+            VStack(spacing: SupportTheme.Spacing.m) {
                 // Free vs Premium comparison
-                HStack(spacing: 12) {
+                HStack(spacing: SupportTheme.Spacing.s) {
                     // Free tier
-                    VStack(spacing: 8) {
+                    VStack(spacing: SupportTheme.Spacing.xs) {
                         Text("Free")
                             .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
 
-                        VStack(spacing: 8) {
+                        VStack(spacing: SupportTheme.Spacing.xs) {
                             Text("30")
                                 .font(.title.bold())
                             Text("messages/day")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                                 .fixedSize()
                         }
 
-                        VStack(spacing: 4) {
+                        VStack(spacing: SupportTheme.Spacing.xxs) {
                             FeatureCheck(text: "Text chat", included: true)
                             FeatureCheck(text: "Voice mode", included: false)
                             FeatureCheck(text: "Coaching", included: true)
                         }
                     }
-                    .padding(12)
+                    .padding(SupportTheme.Spacing.s)
                     .frame(maxWidth: .infinity)
-                    .background(Color(.secondarySystemBackground))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .background(SupportTheme.surface)
+                    .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
                     .opacity(showComparison ? 1 : 0)
-                    .offset(x: showComparison ? 0 : -20)
+                    .offset(x: reduceMotion ? 0 : (showComparison ? 0 : -20))
 
                     // Premium tier
-                    VStack(spacing: 8) {
-                        HStack(spacing: 4) {
+                    VStack(spacing: SupportTheme.Spacing.xs) {
+                        HStack(spacing: SupportTheme.Spacing.xxs) {
                             Image(systemName: "crown.fill")
                                 .font(.caption)
-                                .foregroundStyle(.orange)
+                                .foregroundStyle(SupportTheme.accent)
                             Text("Premium")
                                 .font(.caption.weight(.semibold))
-                                .foregroundStyle(.orange)
+                                .foregroundStyle(SupportTheme.accent)
                         }
 
-                        VStack(spacing: 8) {
+                        VStack(spacing: SupportTheme.Spacing.xs) {
                             Image(systemName: "infinity")
                                 .font(.title.bold())
-                                .foregroundStyle(.orange)
+                                .foregroundStyle(SupportTheme.accent)
                             Text("unlimited")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                         }
 
-                        VStack(spacing: 4) {
+                        VStack(spacing: SupportTheme.Spacing.xxs) {
                             FeatureCheck(text: "Text chat", included: true)
                             FeatureCheck(text: "Voice mode", included: true)
                             FeatureCheck(text: "Coaching", included: true)
                         }
                     }
-                    .padding(12)
+                    .padding(SupportTheme.Spacing.s)
                     .frame(maxWidth: .infinity)
-                    .background(Color.orange.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .background(SupportTheme.surface)
+                    .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .strokeBorder(Color.orange.opacity(0.3), lineWidth: 1)
+                        RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                            .strokeBorder(SupportTheme.accent.opacity(0.3), lineWidth: 1)
                     )
                     .opacity(showComparison ? 1 : 0)
-                    .offset(x: showComparison ? 0 : 20)
+                    .offset(x: reduceMotion ? 0 : (showComparison ? 0 : 20))
                 }
-                .padding(.horizontal, 20)
+                .padding(.horizontal, SupportTheme.Spacing.l)
 
                 // Reassurance
                 Text("Your free messages refresh daily. That's plenty to get started!")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal, 24)
+                    .padding(.horizontal, SupportTheme.Spacing.l)
                     .opacity(showComparison ? 1 : 0)
             }
             .onAppear {
-                withAnimation(.easeOut(duration: 0.5).delay(0.3)) {
+                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.5).delay(0.3)) {
                     showComparison = true
                 }
             }
@@ -116,14 +117,14 @@ private struct FeatureCheck: View {
     let included: Bool
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: SupportTheme.Spacing.xs) {
             Image(systemName: included ? "checkmark" : "xmark")
                 .font(.caption2.weight(.semibold))
-                .foregroundStyle(included ? .green : .secondary)
+                .foregroundStyle(included ? SupportTheme.accent : SupportTheme.textSecondary)
 
             Text(text)
                 .font(.caption)
-                .foregroundStyle(included ? .primary : .secondary)
+                .foregroundStyle(included ? SupportTheme.textPrimary : SupportTheme.textSecondary)
                 .fixedSize()
         }
     }

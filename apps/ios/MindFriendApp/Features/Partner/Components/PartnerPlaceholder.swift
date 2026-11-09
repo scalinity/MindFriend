@@ -7,37 +7,35 @@ struct PartnerPlaceholder: View {
     let message: String
 
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: SupportTheme.Spacing.s) {
             HStack {
                 Image(systemName: icon)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                 Text(title)
                     .font(.subheadline)
                     .fontWeight(.medium)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                 Spacer()
             }
 
             HStack {
                 Image(systemName: "lock.fill")
                     .font(.caption)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(SupportTheme.textSecondary)
 
                 Text(message)
                     .font(.caption)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(SupportTheme.textSecondary)
 
                 Spacer()
             }
         }
-        .padding()
-        .background(Color(.secondarySystemBackground).opacity(0.5))
-        .cornerRadius(12)
+        .supportCard()
     }
 }
 
 #Preview {
-    VStack(spacing: 16) {
+    VStack(spacing: SupportTheme.Spacing.m) {
         PartnerPlaceholder(
             icon: "face.smiling",
             title: "Mood not shared",

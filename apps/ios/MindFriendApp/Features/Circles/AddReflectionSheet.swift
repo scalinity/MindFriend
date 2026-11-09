@@ -16,30 +16,32 @@ struct AddReflectionSheet: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 24) {
+            VStack(spacing: SupportTheme.Spacing.l) {
                 // Header
-                VStack(spacing: 8) {
+                VStack(spacing: SupportTheme.Spacing.xs) {
                     Image(systemName: "quote.bubble.fill")
                         .font(.system(size: 48))
-                        .foregroundColor(.accentColor)
+                        .foregroundColor(SupportTheme.accent)
 
                     Text("Share Your Reflection")
                         .font(.title2.bold())
 
                     Text("What did you notice or feel during this ritual?")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                         .multilineTextAlignment(.center)
                 }
                 .padding(.top)
 
                 // Text input
-                VStack(alignment: .trailing, spacing: 8) {
+                VStack(alignment: .trailing, spacing: SupportTheme.Spacing.xs) {
                     TextEditor(text: $reflection)
+                        .scrollContentBackground(.hidden)
+                        .supportField()
                         .frame(height: 120)
-                        .padding(8)
-                        .background(Color(.secondarySystemBackground))
-                        .cornerRadius(12)
+                        .padding(SupportTheme.Spacing.xs)
+                        .background(SupportTheme.surface)
+                        .cornerRadius(SupportTheme.controlRadius)
                         .accessibilityLabel("Reflection text")
                         .onChange(of: reflection) { _, newValue in
                             if newValue.count > maxCharacters {
@@ -49,7 +51,7 @@ struct AddReflectionSheet: View {
 
                     Text("\(reflection.count)/\(maxCharacters)")
                         .font(.caption)
-                        .foregroundColor(reflection.count > maxCharacters - 20 ? .orange : .secondary)
+                        .foregroundColor(reflection.count > maxCharacters - 20 ? SupportTheme.accent : SupportTheme.textSecondary)
                 }
                 .padding(.horizontal)
 
@@ -63,7 +65,7 @@ struct AddReflectionSheet: View {
                 Spacer()
 
                 // Buttons
-                VStack(spacing: 12) {
+                VStack(spacing: SupportTheme.Spacing.s) {
                     Button {
                         submitReflection()
                     } label: {
@@ -76,7 +78,7 @@ struct AddReflectionSheet: View {
                                 .frame(maxWidth: .infinity)
                         }
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.supportPrimary)
                     .controlSize(.large)
                     .disabled(reflection.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSubmitting)
 
@@ -87,10 +89,10 @@ struct AddReflectionSheet: View {
                         Text("Skip for now")
                             .font(.subheadline)
                     }
-                    .foregroundColor(.secondary)
+                    .foregroundColor(SupportTheme.textSecondary)
                 }
                 .padding(.horizontal)
-                .padding(.bottom, 24)
+                .padding(.bottom, SupportTheme.Spacing.l)
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

@@ -112,7 +112,7 @@ struct MentorshipHomeView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 20) {
+            VStack(spacing: SupportTheme.Spacing.l) {
                 statusCard
                 quickActions
                 recentMatchesSection
@@ -120,22 +120,29 @@ struct MentorshipHomeView: View {
             }
             .padding(.vertical)
         }
+        .foregroundStyle(SupportTheme.textPrimary)
+        .supportScreen()
         .navigationTitle("Mentorship")
         .navigationBarTitleDisplayMode(.inline)
+        .safeAreaInset(edge: .bottom) {
+            if let error = matchingService.error ?? profileService.error {
+                Label(error.localizedDescription, systemImage: "exclamationmark.triangle")
+                    .supportCard()
+                    .padding(SupportTheme.Spacing.m)
+            }
+        }
     }
 
     // MARK: - Extracted Views
 
     private var statusCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             HStack {
                 statusInfo
                 Spacer()
                 activeCount
             }
-            .padding()
-            .background(Color(.systemBackground))
-            .cornerRadius(12)
+            .supportCard()
         }
         .padding(.horizontal)
     }
@@ -144,13 +151,14 @@ struct MentorshipHomeView: View {
         VStack(alignment: .leading) {
             Text("Your Mentorship Status")
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
             if profileService.isMentorAvailable {
                 Label("Available as mentor", systemImage: "checkmark.circle.fill")
-                    .foregroundColor(.green)
+                    .foregroundColor(SupportTheme.accent)
                     .font(.subheadline)
             } else {
                 Label("Seeking a mentor", systemImage: "magnifyingglass.circle")
-                    .foregroundColor(.blue)
+                    .foregroundColor(SupportTheme.accent)
                     .font(.subheadline)
             }
         }
@@ -163,12 +171,12 @@ struct MentorshipHomeView: View {
                 .fontWeight(.bold)
             Text("Active")
                 .font(.caption)
-                .foregroundColor(.secondary)
+                .foregroundColor(SupportTheme.textSecondary)
         }
     }
 
     private var quickActions: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: SupportTheme.Spacing.s) {
             findMentorButton
             viewMatchesButton
             pendingRequestsButton
@@ -185,12 +193,9 @@ struct MentorshipHomeView: View {
                 Spacer()
                 Image(systemName: "chevron.right")
             }
-            .padding()
             .frame(maxWidth: .infinity)
-            .background(Color.accentColor)
-            .foregroundColor(.white)
-            .cornerRadius(10)
         }
+        .buttonStyle(.supportPrimary)
     }
 
     private var viewMatchesButton: some View {
@@ -202,12 +207,9 @@ struct MentorshipHomeView: View {
                 Spacer()
                 Image(systemName: "chevron.right")
             }
-            .padding()
             .frame(maxWidth: .infinity)
-            .background(Color(.systemGray6))
-            .foregroundColor(.primary)
-            .cornerRadius(10)
         }
+        .buttonStyle(.supportSecondary)
     }
 
     @ViewBuilder
@@ -221,21 +223,19 @@ struct MentorshipHomeView: View {
                     Spacer()
                     Image(systemName: "chevron.right")
                 }
-                .padding()
                 .frame(maxWidth: .infinity)
-                .background(Color.orange.opacity(0.2))
-                .foregroundColor(.orange)
-                .cornerRadius(10)
             }
+            .buttonStyle(.supportSecondary)
         }
     }
 
     @ViewBuilder
     private var recentMatchesSection: some View {
         if !matchingService.activeMatches.isEmpty {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                 Text("Recent Conversations")
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
                     .padding(.horizontal)
 
                 ForEach(matchingService.activeMatches.prefix(3)) { match in
@@ -248,34 +248,32 @@ struct MentorshipHomeView: View {
 
     private func recentMatchRow(_ match: MentorshipMatch) -> some View {
         Button(action: { navigationPath.append(.chat(matchId: match.id)) }) {
-            HStack(spacing: 12) {
+            HStack(spacing: SupportTheme.Spacing.s) {
                 Circle()
-                    .fill(Color.accentColor.opacity(0.3))
+                    .fill(SupportTheme.accent.opacity(0.3))
                     .frame(width: 40, height: 40)
                     .overlay(
                         Image(systemName: "person.fill")
-                            .foregroundColor(.accentColor)
+                            .foregroundColor(SupportTheme.accent)
                     )
 
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     Text("Match \(match.id.uuidString.prefix(8).uppercased())")
                         .font(.subheadline)
                         .fontWeight(.semibold)
-                        .foregroundColor(.primary)
+                        .foregroundColor(SupportTheme.textPrimary)
                     if let score = match.compatibilityScore {
                         Text("Compatibility: \(Int(score * 100))%")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(SupportTheme.textSecondary)
                     }
                 }
 
                 Spacer()
                 Image(systemName: "chevron.right")
-                    .foregroundColor(.secondary)
+                    .foregroundColor(SupportTheme.textSecondary)
             }
-            .padding()
-            .background(Color(.systemGray6))
-            .cornerRadius(10)
+            .supportCard()
         }
     }
 }
@@ -295,9 +293,9 @@ struct MentorshipMatchDetailsView: View {
     var body: some View {
         ScrollView {
             if let match = match {
-                VStack(spacing: 20) {
+                VStack(spacing: SupportTheme.Spacing.l) {
                     // Match Header
-                    VStack(spacing: 12) {
+                    VStack(spacing: SupportTheme.Spacing.s) {
                         HStack {
                             VStack(alignment: .leading) {
                                 Text("Match \(match.id.uuidString.prefix(8).uppercased())")
@@ -308,25 +306,23 @@ struct MentorshipMatchDetailsView: View {
                                         .frame(width: 8, height: 8)
                                     Text(match.status.rawValue.capitalized)
                                         .font(.subheadline)
-                                        .foregroundColor(.secondary)
+                                        .foregroundColor(SupportTheme.textSecondary)
                                 }
                             }
                             Spacer()
                         }
-                        .padding()
-                        .background(Color(.systemGray6))
-                        .cornerRadius(12)
+                        .supportCard()
                     }
                     .padding(.horizontal)
 
                     // Compatibility Score
                     if let score = match.compatibilityScore {
-                        VStack(spacing: 8) {
+                        VStack(spacing: SupportTheme.Spacing.xs) {
                             Text("Compatibility Score")
                                 .font(.headline)
-                            HStack(spacing: 12) {
+                            HStack(spacing: SupportTheme.Spacing.s) {
                                 ProgressView(value: score)
-                                    .tint(Color.green)
+                                    .tint(SupportTheme.accent)
                                 Text("\(Int(score * 100))%")
                                     .font(.headline)
                                     .fontWeight(.bold)
@@ -334,18 +330,16 @@ struct MentorshipMatchDetailsView: View {
                             if let reason = match.matchReason, !reason.isEmpty {
                                 Text(reason)
                                     .font(.caption)
-                                    .foregroundColor(.secondary)
+                                    .foregroundColor(SupportTheme.textSecondary)
                                     .lineLimit(3)
                             }
                         }
-                        .padding()
-                        .background(Color(.systemGray6))
-                        .cornerRadius(12)
+                        .supportCard()
                         .padding(.horizontal)
                     }
 
                     // Match Information
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                         InfoRow(label: "Status", value: match.status.rawValue.capitalized)
                         Divider()
                         InfoRow(label: "Created", value: formatDate(match.createdAt))
@@ -354,9 +348,7 @@ struct MentorshipMatchDetailsView: View {
                             InfoRow(label: "Expires", value: formatDate(expiresAt))
                         }
                     }
-                    .padding()
-                    .background(Color(.systemGray6))
-                    .cornerRadius(12)
+                    .supportCard()
                     .padding(.horizontal)
 
                     // Actions
@@ -370,11 +362,8 @@ struct MentorshipMatchDetailsView: View {
                                     .fontWeight(.semibold)
                             }
                             .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.accentColor)
-                            .foregroundColor(.white)
-                            .cornerRadius(10)
                         }
+                        .buttonStyle(.supportPrimary)
                     }
 
                     Spacer()
@@ -385,21 +374,23 @@ struct MentorshipMatchDetailsView: View {
                     ProgressView()
                         .padding()
                     Text("Loading match details...")
-                        .foregroundColor(.secondary)
+                        .foregroundColor(SupportTheme.textSecondary)
                 }
             }
         }
+        .foregroundStyle(SupportTheme.textPrimary)
+        .supportScreen()
         .navigationTitle("Match Details")
         .navigationBarTitleDisplayMode(.inline)
     }
 
     private func statusColor(_ status: MentorshipStatus) -> Color {
         switch status {
-        case .pending: return .orange
-        case .active, .accepted: return .green
-        case .completed: return .blue
-        case .cancelled, .declined: return .gray
-        case .ended: return .gray
+        case .pending: return SupportTheme.accent
+        case .active, .accepted: return SupportTheme.accent
+        case .completed: return SupportTheme.accent
+        case .cancelled, .declined: return SupportTheme.textSecondary
+        case .ended: return SupportTheme.textSecondary
         case .expired, .suspended: return .red
         }
     }
@@ -421,12 +412,12 @@ struct InfoRow: View {
         HStack {
             Text(label)
                 .font(.subheadline)
-                .foregroundColor(.secondary)
+                .foregroundColor(SupportTheme.textSecondary)
             Spacer()
             Text(value)
                 .font(.subheadline)
                 .fontWeight(.semibold)
-                .foregroundColor(.primary)
+                .foregroundColor(SupportTheme.textPrimary)
         }
     }
 }

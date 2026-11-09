@@ -11,6 +11,7 @@ struct MentorshipChatView: View {
 }
 
 private struct MentorshipChatContent: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let matchId: UUID
     @ObservedObject var service: MentorshipService
     @ObservedObject var messagingService: MentorshipMessagingService
@@ -31,13 +32,13 @@ private struct MentorshipChatContent: View {
 
     var body: some View {
         ZStack {
-            Color(.systemBackground).ignoresSafeArea()
+            SupportTheme.canvas.ignoresSafeArea()
 
             VStack(spacing: 0) {
                 // Messages list
                 ScrollViewReader { proxy in
                     ScrollView {
-                        LazyVStack(spacing: 8, pinnedViews: []) {
+                        LazyVStack(spacing: SupportTheme.Spacing.xs, pinnedViews: []) {
                             ForEach(messagingService.messages) { message in
                                 MentorshipMessageBubble(message: message)
                                     .environment(\.currentUser, service.currentUserId)
@@ -49,7 +50,7 @@ private struct MentorshipChatContent: View {
                     .scrollDismissesKeyboard(.interactively)
                     .onChange(of: messagingService.messages.count) {
                         if let lastId = messagingService.messages.last?.id {
-                            withAnimation {
+                            withAnimation(reduceMotion ? nil : .default) {
                                 proxy.scrollTo(lastId, anchor: .bottom)
                             }
                         }
@@ -59,14 +60,14 @@ private struct MentorshipChatContent: View {
                 Divider()
 
                 // Message input
-                VStack(spacing: 8) {
+                VStack(spacing: SupportTheme.Spacing.xs) {
                     if messagingService.error != nil {
                         Text("Unable to complete the message request. Your draft is still here; please try again.")
                             .font(.callout).foregroundStyle(.red)
                     }
-                    HStack(spacing: 8) {
+                    HStack(spacing: SupportTheme.Spacing.xs) {
                         TextField("Type a message...", text: $messageText)
-                            .textFieldStyle(.roundedBorder)
+                            .supportField()
                             .lineLimit(3)
 
                         Button(action: {
@@ -81,13 +82,15 @@ private struct MentorshipChatContent: View {
                             }
                         }) {
                             Image(systemName: "paperplane.fill")
-                                .foregroundColor(.blue)
+                                .foregroundColor(SupportTheme.accent)
+                            .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                         }
+                        .accessibilityLabel("Send message")
                         .disabled(messageText.trimmingCharacters(in: .whitespaces).isEmpty ||
                                   messagingService.isSending)
                     }
 
-                    HStack(spacing: 12) {
+                    HStack(spacing: SupportTheme.Spacing.s) {
                         Menu {
                             Button(role: .destructive, action: { showingReportSheet = true }) {
                                 Label("Report Safety Concern", systemImage: "exclamationmark.shield")
@@ -98,8 +101,10 @@ private struct MentorshipChatContent: View {
                             }
                         } label: {
                             Image(systemName: "ellipsis")
-                                .foregroundColor(.secondary)
+                                .foregroundColor(SupportTheme.textSecondary)
+                                .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                         }
+                        .accessibilityLabel("Mentorship options")
 
                         Spacer()
 
@@ -111,21 +116,19 @@ private struct MentorshipChatContent: View {
                             }) {
                                 Text("Mark as Read")
                                     .font(.caption)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 4)
-                                    .background(Color.blue.opacity(0.2))
-                                    .foregroundColor(.blue)
-                                    .cornerRadius(6)
                             }
+                            .buttonStyle(.supportSecondary)
                         }
                     }
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(SupportTheme.textSecondary)
                 }
                 .padding()
-                .background(Color(.secondarySystemBackground))
+                .background(SupportTheme.surface)
             }
         }
+        .foregroundStyle(SupportTheme.textPrimary)
+        .supportScreen()
         .navigationTitle("Mentorship Chat")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showingReportSheet) {
@@ -175,28 +178,28 @@ struct MentorshipMessageBubble: View {
                 Spacer()
             }
 
-            VStack(alignment: isCurrentUser ? .trailing : .leading, spacing: 4) {
+            VStack(alignment: isCurrentUser ? .trailing : .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text(message.content)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
+                    .padding(.horizontal, SupportTheme.Spacing.s)
+                    .padding(.vertical, SupportTheme.Spacing.xs)
                     .background(
                         isCurrentUser
-                            ? Color.blue.opacity(0.8)
-                            : Color(.secondarySystemBackground)
+                            ? SupportTheme.accent
+                            : SupportTheme.surface
                     )
-                    .foregroundColor(isCurrentUser ? .white : .primary)
-                    .cornerRadius(12)
+                    .foregroundColor(isCurrentUser ? SupportTheme.onAccent : SupportTheme.textPrimary)
+                    .cornerRadius(SupportTheme.controlRadius)
 
-                HStack(spacing: 4) {
+                HStack(spacing: SupportTheme.Spacing.xxs) {
                     if message.isSafetyFlagged {
                         Label("Flagged", systemImage: "exclamationmark.triangle.fill")
                             .font(.caption2)
-                            .foregroundColor(.orange)
+                            .foregroundColor(SupportTheme.accent)
                     }
 
                     Text(message.createdAt.formatted(date: .omitted, time: .shortened))
                         .font(.caption2)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(SupportTheme.textSecondary)
                 }
                 .frame(maxWidth: .infinity, alignment: isCurrentUser ? .trailing : .leading)
             }
@@ -221,9 +224,9 @@ struct ReportSafetySheet: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 16) {
+            VStack(spacing: SupportTheme.Spacing.m) {
                 // Reason selector
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                     Text("What's your concern?")
                         .font(.headline)
 
@@ -236,21 +239,23 @@ struct ReportSafetySheet: View {
                 }
 
                 // Details
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                     Text("Additional details (optional)")
                         .font(.subheadline)
 
                     TextEditor(text: $detailsText)
+                        .scrollContentBackground(.hidden)
+                        .supportField()
                         .frame(height: 100)
-                        .padding(8)
-                        .background(Color(.tertiarySystemBackground))
-                        .cornerRadius(8)
+                        .padding(SupportTheme.Spacing.xs)
+                        .background(SupportTheme.surface)
+                        .cornerRadius(SupportTheme.controlRadius)
                 }
 
                 Spacer()
 
                 // Actions
-                VStack(spacing: 12) {
+                VStack(spacing: SupportTheme.Spacing.s) {
                     Button(action: {
                         isSending = true
                         errorMessage = nil
@@ -271,10 +276,10 @@ struct ReportSafetySheet: View {
                         }
                     }
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
+                    .padding(.vertical, SupportTheme.Spacing.s)
                     .background(Color.red)
-                    .foregroundColor(.white)
-                    .cornerRadius(8)
+                    .foregroundColor(SupportTheme.textPrimary)
+                    .cornerRadius(SupportTheme.controlRadius)
                     .disabled(selectedReason.isEmpty || isSending)
                     if let errorMessage {
                         Text(errorMessage).font(.caption).foregroundColor(.red)
@@ -283,15 +288,17 @@ struct ReportSafetySheet: View {
                     Button(action: { isPresented = false }) {
                         Text("Cancel")
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(Color(.quaternarySystemFill))
-                            .cornerRadius(8)
+                            .padding(.vertical, SupportTheme.Spacing.s)
+                            .background(SupportTheme.field)
+                            .cornerRadius(SupportTheme.controlRadius)
                     }
                 }
             }
             .padding()
             .disabled(isSending)
             .interactiveDismissDisabled(isSending)
+            .foregroundStyle(SupportTheme.textPrimary)
+            .supportScreen()
             .navigationTitle("Report Safety Concern")
             .navigationBarTitleDisplayMode(.inline)
         }
@@ -309,23 +316,25 @@ struct EndMentorshipSheet: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 16) {
-                VStack(alignment: .leading, spacing: 8) {
+            VStack(spacing: SupportTheme.Spacing.m) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                     Text("Why are you ending this mentorship?")
                         .font(.headline)
 
                     TextEditor(text: $reasonText)
+                        .scrollContentBackground(.hidden)
+                        .supportField()
                         .frame(height: 120)
-                        .padding(8)
-                        .background(Color(.tertiarySystemBackground))
-                        .cornerRadius(8)
+                        .padding(SupportTheme.Spacing.xs)
+                        .background(SupportTheme.surface)
+                        .cornerRadius(SupportTheme.controlRadius)
                 }
 
                 Spacer()
                 if let errorMessage {
                     Text(errorMessage).foregroundStyle(.red).font(.callout)
                 }
-                VStack(spacing: 12) {
+                VStack(spacing: SupportTheme.Spacing.s) {
                     Button(action: {
                         isSending = true
                         errorMessage = nil
@@ -346,24 +355,26 @@ struct EndMentorshipSheet: View {
                         }
                     }
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
+                    .padding(.vertical, SupportTheme.Spacing.s)
                     .background(Color.red)
-                    .foregroundColor(.white)
-                    .cornerRadius(8)
+                    .foregroundColor(SupportTheme.textPrimary)
+                    .cornerRadius(SupportTheme.controlRadius)
                     .disabled(isSending)
 
                     Button(action: { isPresented = false }) {
                         Text("Keep Going")
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(Color(.quaternarySystemFill))
-                            .cornerRadius(8)
+                            .padding(.vertical, SupportTheme.Spacing.s)
+                            .background(SupportTheme.field)
+                            .cornerRadius(SupportTheme.controlRadius)
                     }
                     .disabled(isSending)
                 }
             }
             .padding()
             .interactiveDismissDisabled(isSending)
+            .foregroundStyle(SupportTheme.textPrimary)
+            .supportScreen()
             .navigationTitle("End Mentorship")
             .navigationBarTitleDisplayMode(.inline)
         }

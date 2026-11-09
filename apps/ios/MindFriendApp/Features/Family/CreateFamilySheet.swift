@@ -15,8 +15,10 @@ struct CreateFamilySheet: View {
         Form {
             Section("Family Information") {
                 TextField("Family Name", text: $familyName)
+                    .supportField()
                     .textContentType(.givenName)
             }
+            .listRowBackground(SupportTheme.surface)
 
             Section("Settings") {
                 Picker("Default Content Age Filter", selection: $childAgeFilter) {
@@ -32,15 +34,17 @@ struct CreateFamilySheet: View {
                     }
                 }
             }
+            .listRowBackground(SupportTheme.surface)
 
             Section("About Family Groups") {
                 Text("Family groups let you:")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     + Text("\n • View family members' wellness progress\n • Create shared challenges\n • Do together sessions\n • Receive alerts about family members")
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
+            .listRowBackground(SupportTheme.surface)
 
             Section {
                 if let error = error {
@@ -56,13 +60,17 @@ struct CreateFamilySheet: View {
                         Text("Create Family")
                     }
                 }
+                .buttonStyle(.supportPrimary)
                 .disabled(familyName.isEmpty || isLoading)
             }
+            .listRowBackground(SupportTheme.surface)
         }
         .dismissKeyboardOnSwipe()
         .onTapGesture {
             hideKeyboard()
         }
+        .foregroundStyle(SupportTheme.textPrimary)
+        .supportSheet()
         .navigationTitle("Create Family")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

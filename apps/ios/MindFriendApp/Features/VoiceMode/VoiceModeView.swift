@@ -18,6 +18,7 @@ struct VoiceModeView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.openURL) private var openURL
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @EnvironmentObject private var appState: AppState
 
     // MARK: - State
@@ -105,12 +106,12 @@ struct VoiceModeView: View {
                     case .unavailable:
                         ScrollView {
                             VoiceUnavailablePanel(onUseText: { leave(reason: .switchedToText) })
-                                .padding(.top, 48)
-                                .padding(.bottom, 40)
+                                .padding(.top, SupportTheme.Spacing.xl)
+                                .padding(.bottom, SupportTheme.Spacing.xl)
                         }
                     case .ready:
                         ScrollView {
-                            VStack(spacing: 20) {
+                            VStack(spacing: SupportTheme.Spacing.l) {
                                 VoiceTranscriptSaveBanner(
                                     unsaved: voiceService.unsavedTranscriptCount,
                                     rejected: voiceService.rejectedTranscriptCount,
@@ -126,8 +127,8 @@ struct VoiceModeView: View {
                                     onUseText: { leave(reason: .switchedToText) }
                                 )
                             }
-                            .padding(.top, 32)
-                            .padding(.bottom, 40)
+                            .padding(.top, SupportTheme.Spacing.xl)
+                            .padding(.bottom, SupportTheme.Spacing.xl)
                         }
                     case .starting:
                         startingContent
@@ -138,7 +139,7 @@ struct VoiceModeView: View {
             }
         }
         .ignoresSafeArea()
-        .preferredColorScheme(.dark)
+        .supportScreen()
         .sheet(isPresented: $showSettings) {
             VoiceSettingsView(voiceService: voiceService)
         }
@@ -225,33 +226,25 @@ struct VoiceModeView: View {
     // MARK: - Background
 
     private var backgroundGradient: some View {
-        LinearGradient(
-            colors: [
-                Color(red: 0.05, green: 0.05, blue: 0.12),
-                Color(red: 0.08, green: 0.08, blue: 0.18),
-                Color(red: 0.05, green: 0.05, blue: 0.12)
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-        .ignoresSafeArea()
+        SupportTheme.canvas.ignoresSafeArea()
     }
 
     // MARK: - Top Bar
 
     private var topBar: some View {
-        HStack {
+        (dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: SupportTheme.Spacing.xs))
+            : AnyLayout(HStackLayout(spacing: SupportTheme.Spacing.xs))) {
             // Close button
             Button {
                 leave(reason: .userEnded)
             } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 18, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.85))
                     .frame(width: 44, height: 44)
-                    .background(Color.white.opacity(0.1))
                     .clipShape(Circle())
             }
+            .buttonStyle(.supportSecondary)
             .accessibilityLabel("Close voice")
 
             Spacer()
@@ -265,30 +258,28 @@ struct VoiceModeView: View {
                 } label: {
                     Image(systemName: showCaptions ? "captions.bubble.fill" : "captions.bubble")
                         .font(.system(size: 18, weight: .medium))
-                        .foregroundStyle(showCaptions ? .white : .white.opacity(0.7))
+                        .foregroundStyle(showCaptions ? SupportTheme.textPrimary : SupportTheme.textPrimary.opacity(0.7))
                         .frame(width: 44, height: 44)
-                        .background(Color.white.opacity(showCaptions ? 0.2 : 0.1))
                         .clipShape(Circle())
                 }
+                .buttonStyle(.supportSecondary)
                 .accessibilityLabel(showCaptions ? "Hide captions" : "Show captions")
 
                 // Voice selection
                 Button {
                     showSettings = true
                 } label: {
-                    HStack(spacing: 6) {
+                    HStack(spacing: SupportTheme.Spacing.xs) {
                         Circle()
                             .fill(voiceColor(voiceService.currentVoice))
                             .frame(width: 10, height: 10)
                         Text(voiceService.currentVoice.displayName)
                             .font(.subheadline.weight(.medium))
-                            .foregroundStyle(.white.opacity(0.9))
                     }
-                    .padding(.horizontal, 14)
-                    .frame(minHeight: 44)
-                    .background(Color.white.opacity(0.1))
+                    .frame(minHeight: SupportTheme.minimumTarget)
                     .clipShape(Capsule())
                 }
+                .buttonStyle(.supportSecondary)
                 .accessibilityLabel("Voice: \(voiceService.currentVoice.displayName). Tap to change.")
 
                 // Settings
@@ -297,40 +288,39 @@ struct VoiceModeView: View {
                 } label: {
                     Image(systemName: "gearshape")
                         .font(.system(size: 18, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.85))
                         .frame(width: 44, height: 44)
-                        .background(Color.white.opacity(0.1))
                         .clipShape(Circle())
                 }
+                .buttonStyle(.supportSecondary)
                 .accessibilityLabel("Voice settings")
             }
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 12)
+        .padding(.horizontal, SupportTheme.Spacing.l)
+        .padding(.top, SupportTheme.Spacing.s)
     }
 
     // MARK: - Modes
 
     private var startingContent: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: SupportTheme.Spacing.l) {
             Spacer()
             ProgressView()
                 .controlSize(.large)
-                .tint(.white)
+                .tint(SupportTheme.textPrimary)
             Text("Starting voice…")
                 .font(.title3.weight(.medium))
-                .foregroundStyle(.white)
+                .foregroundStyle(SupportTheme.textPrimary)
             Text("The microphone turns on once the connection is ready.")
                 .font(.footnote)
-                .foregroundStyle(.white.opacity(0.75))
+                .foregroundStyle(SupportTheme.textPrimary)
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
+                .padding(.horizontal, SupportTheme.Spacing.xl)
             Button("Cancel") {
                 startTask?.cancel()
                 leave(reason: .userEnded, dismissWhenDone: false)
             }
-            .buttonStyle(.bordered)
-            .tint(.white)
+            .buttonStyle(.supportSecondary)
+            .tint(SupportTheme.textPrimary)
             .controlSize(.large)
             Spacer()
         }
@@ -339,10 +329,10 @@ struct VoiceModeView: View {
 
     private func activeContent(size: CGSize, safeBottom: CGFloat) -> some View {
         VoiceActiveLayout(safeBottom: safeBottom) {
-            VStack(spacing: 20) {
-                if showCaptions { captionsView.padding(.horizontal, 24) }
+            VStack(spacing: SupportTheme.Spacing.l) {
+                if showCaptions { captionsView.padding(.horizontal, SupportTheme.Spacing.l) }
                 orbSection(size: min(size.width * 0.55, 280))
-                statusView.padding(.horizontal, 24)
+                statusView.padding(.horizontal, SupportTheme.Spacing.l)
             }
         } controls: {
             bottomControls
@@ -373,35 +363,35 @@ struct VoiceModeView: View {
             }
         )
         .shadow(color: orbShadowColor.opacity(0.4), radius: 40, x: 0, y: 20)
-        .animation(reduceMotion ? nil : .spring(response: 0.4), value: stateMachine.state)
+        .animation(reduceMotion ? .easeInOut(duration: 0.2) : .spring(response: 0.4), value: stateMachine.state)
     }
 
     private var orbShadowColor: Color {
         switch stateMachine.state.orbColor {
         case .userSpeaking:
-            return .green
+            return SupportTheme.accent
         case .aiSpeaking:
-            return .blue
+            return SupportTheme.accent
         case .thinking:
-            return .purple
+            return SupportTheme.accent
         case .ready:
-            return .blue.opacity(0.6)
+            return SupportTheme.accent.opacity(0.6)
         case .error:
             return .red
         default:
-            return .gray
+            return SupportTheme.textSecondary
         }
     }
 
     // MARK: - Status View
 
     private var statusView: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: SupportTheme.Spacing.xs) {
             // Explicit capture indicator: text and icon, never only motion or color.
             VoiceCaptureIndicator(isListening: voiceService.isListening, isMuted: voiceService.isMuted)
 
             // Connection status indicator
-            HStack(spacing: 6) {
+            HStack(spacing: SupportTheme.Spacing.xs) {
                 Circle()
                     .fill(connectionStatusColor)
                     .frame(width: 8, height: 8)
@@ -409,33 +399,33 @@ struct VoiceModeView: View {
 
                 Text(connectionStatusText)
                     .font(.subheadline)
-                    .foregroundStyle(.white.opacity(0.75))
+                    .foregroundStyle(SupportTheme.textPrimary)
             }
 
             // State status
             Text(stateMachine.state.statusText)
                 .font(.title3.weight(.medium))
-                .foregroundStyle(.white.opacity(0.95))
+                .foregroundStyle(SupportTheme.textPrimary)
 
             Text("Up to two minutes per session")
                 .font(.caption)
-                .foregroundStyle(.white.opacity(0.75))
+                .foregroundStyle(SupportTheme.textPrimary)
             Text(voiceService.isPremium ? "Unlimited monthly voice minutes" :
                 String(format: "%.1f of 3 free monthly voice minutes remaining", voiceService.minutesRemaining))
                 .font(.caption)
-                .foregroundStyle(.white.opacity(0.75))
+                .foregroundStyle(SupportTheme.textPrimary)
         }
-        .padding(.horizontal, 24)
+        .padding(.horizontal, SupportTheme.Spacing.l)
     }
 
     private var connectionStatusColor: Color {
         switch voiceService.connectionState {
         case .connected:
-            return .green
+            return SupportTheme.accent
         case .connecting, .reconnecting:
-            return .orange
+            return SupportTheme.accent
         case .disconnected:
-            return .gray
+            return SupportTheme.textSecondary
         case .error:
             return .red
         }
@@ -578,11 +568,11 @@ struct VoiceModeView: View {
 
     private func voiceColor(_ voice: GrokVoice) -> Color {
         switch voice {
-        case .ara: return .pink
-        case .rex: return .blue
-        case .sal: return .purple
-        case .eve: return .orange
-        case .leo: return .green
+        case .ara: return SupportTheme.accent
+        case .rex: return SupportTheme.accent
+        case .sal: return SupportTheme.accent
+        case .eve: return SupportTheme.accent
+        case .leo: return SupportTheme.accent
         }
     }
 }
@@ -597,101 +587,75 @@ struct VoiceModePaywallView: View {
     var body: some View {
         ZStack {
             // Dark gradient background matching voice mode
-            LinearGradient(
-                colors: [
-                    Color(red: 0.05, green: 0.05, blue: 0.12),
-                    Color(red: 0.08, green: 0.08, blue: 0.18),
-                    Color(red: 0.05, green: 0.05, blue: 0.12)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
+            SupportTheme.canvas.ignoresSafeArea()
 
-            VStack(spacing: 32) {
+            VStack(spacing: SupportTheme.Spacing.xl) {
                 Spacer()
 
                 // Voice icon
                 ZStack {
                     Circle()
                         .fill(
-                            LinearGradient(
-                                colors: [.blue.opacity(0.3), .purple.opacity(0.3)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
+                            SupportTheme.accent
                         )
                         .frame(width: 140, height: 140)
 
                     Image(systemName: "waveform.circle.fill")
                         .font(.system(size: 80))
                         .foregroundStyle(
-                            LinearGradient(
-                                colors: [.blue, .purple],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
+                            SupportTheme.accent
                         )
                 }
-                .shadow(color: .blue.opacity(0.3), radius: 30, x: 0, y: 10)
+                .shadow(color: SupportTheme.accent.opacity(0.3), radius: 30, x: 0, y: 10)
 
                 // Title and description
-                VStack(spacing: 16) {
+                VStack(spacing: SupportTheme.Spacing.m) {
                     Text("Voice Mode is Premium")
                         .font(.title.bold())
-                        .foregroundStyle(.white)
+                        .foregroundStyle(SupportTheme.textPrimary)
 
                     Text("Upgrade to have natural voice conversations with your AI companion. Talk hands-free, get real-time responses, and experience a more personal connection.")
                         .font(.body)
-                        .foregroundStyle(.white.opacity(0.7))
+                        .foregroundStyle(SupportTheme.textPrimary)
                         .multilineTextAlignment(.center)
-                        .padding(.horizontal, 32)
+                        .padding(.horizontal, SupportTheme.Spacing.xl)
                 }
 
                 Spacer()
 
                 // Premium features list
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                     PremiumFeatureRow(icon: "mic.fill", text: "Natural voice conversations")
                     PremiumFeatureRow(icon: "captions.bubble.fill", text: "Live captions & transcripts")
                     PremiumFeatureRow(icon: "infinity", text: "Unlimited monthly minutes · sessions up to two minutes")
                 }
-                .padding(.horizontal, 40)
+                .padding(.horizontal, SupportTheme.Spacing.xl)
 
                 Spacer()
 
                 // Action buttons
-                VStack(spacing: 16) {
+                VStack(spacing: SupportTheme.Spacing.m) {
                     Button(action: onUpgrade) {
                         HStack {
                             Image(systemName: "star.fill")
                             Text("Upgrade to Premium")
                         }
                         .font(.headline)
-                        .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(
-                            LinearGradient(
-                                colors: [.blue, .purple],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
-                        .cornerRadius(16)
                     }
+                    .buttonStyle(.supportPrimary)
 
                     Button(action: onDismiss) {
                         Text("Maybe Later")
                             .font(.subheadline)
-                            .foregroundStyle(.white.opacity(0.6))
+                            .foregroundStyle(SupportTheme.textPrimary)
                     }
                 }
-                .padding(.horizontal, 24)
-                .padding(.bottom, 40)
+                .padding(.horizontal, SupportTheme.Spacing.l)
+                .padding(.bottom, SupportTheme.Spacing.xl)
             }
         }
-        .preferredColorScheme(.dark)
+
     }
 }
 
@@ -701,15 +665,15 @@ private struct PremiumFeatureRow: View {
     let text: String
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: SupportTheme.Spacing.s) {
             Image(systemName: icon)
                 .font(.system(size: 16))
-                .foregroundStyle(.blue)
+                .foregroundStyle(SupportTheme.accent)
                 .frame(width: 24)
 
             Text(text)
                 .font(.subheadline)
-                .foregroundStyle(.white.opacity(0.9))
+                .foregroundStyle(SupportTheme.textPrimary)
         }
     }
 }
