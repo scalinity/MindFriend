@@ -233,6 +233,80 @@ final class DeepLinkNavigationTests: XCTestCase {
         XCTAssertEqual(DeepLinkRouter.destinationError(for: DeepLinkRouter.DestinationError.premium), .premium)
     }
 
+    func testFirstRunCannotBypassOnboardingViaSignInOrCachedProfile() throws {
+        let data = Data("{\"id\":\"B4498A22-4674-4DC1-B874-D00B7F8D14A1\"}".utf8)
+        let firstRun = try JSONDecoder().decode(UserProfile.self, from: data)
+        let state = AppState()
+        state.setAuthenticated(user: firstRun)
+        XCTAssertEqual(state.authState, .onboarding)
+        state.setAuthenticatedFromCache(user: firstRun)
+        XCTAssertEqual(state.authState, .onboarding)
+    }
+
+    func testProfileAndTierRefreshCannotResetConfirmedUsage() {
+        let state = AppState()
+        let user = profile(tier: "free")
+        state.setAuthenticated(user: user)
+        XCTAssertNil(state.entitlementSnapshot?.usage)
+        state.recordChatQuota(ownerID: user.id, used: 4, limit: 5)
+        state.setAuthenticated(user: user)
+        XCTAssertEqual(state.entitlementSnapshot?.usage, 4)
+        state.updateEntitlements(.premium)
+        XCTAssertEqual(state.entitlements.tier, .premium)
+        XCTAssertEqual(state.entitlementSnapshot?.usage, 4)
+        XCTAssertFalse(state.entitlementSnapshot?.isUnlimited ?? true)
+        state.recordChatQuota(ownerID: UUID(), used: 0, limit: 5)
+        XCTAssertEqual(state.entitlementSnapshot?.usage, 4)
+        state.setAuthenticated(user: profile(tier: "free", userID: UUID()))
+        XCTAssertNil(state.entitlementSnapshot?.usage)
+    }
+
+    func testOnlyNewServerQuotaPeriodCanLowerUsage() {
+        let now = Date()
+        var snapshot = EntitlementSnapshot(ownerID: UUID(), tier: .free, source: .chatReceipt,
+            verifiedAt: now, usage: 4, quota: 5, quotaPeriodStartedAt: nil)
+        snapshot.merge(tier: .free, usage: 0, quota: 5, period: now.addingTimeInterval(-3600),
+                       verifiedAt: now, source: .serverProfile)
+        XCTAssertEqual(snapshot.usage, 4)
+        snapshot.merge(tier: .free, usage: 0, quota: 5, period: now.addingTimeInterval(86400),
+                       verifiedAt: now.addingTimeInterval(86400), source: .serverProfile)
+        XCTAssertEqual(snapshot.usage, 0)
+        snapshot.merge(tier: .premium, usage: 1, quota: -1, period: nil,
+                       verifiedAt: now.addingTimeInterval(86401), source: .chatReceipt)
+        XCTAssertTrue(snapshot.isUnlimited)
+        snapshot.merge(tier: .free, usage: nil, quota: nil, period: nil,
+                       verifiedAt: nil, source: .serverBilling)
+        XCTAssertFalse(snapshot.isUnlimited)
+    }
+
+    func testCompletedCachedProfileRetainsOfflineAccess() {
+        let state = AppState()
+        state.setAuthenticatedFromCache(user: profile(tier: "free"))
+        XCTAssertEqual(state.authState, .authenticated)
+    }
+
+    func testConsentUsesServerYearAcrossTimeZones() throws {
+        let formatter = ISO8601DateFormatter()
+        let date = try XCTUnwrap(formatter.date(from: "2027-01-01T00:30:00+14:00"))
+        XCTAssertEqual(OnboardingConsent.referenceYear(at: date), 2026)
+    }
+
+    func testBirthYearAndUnselectedConsentFailClosed() {
+        var consent = OnboardingConsent()
+        XCTAssertFalse(consent.isEligible(currentYear: 2026))
+        consent.birthYear = 2014
+        consent.confirmsThirteen = true
+        consent.acceptsTerms = true
+        XCTAssertFalse(consent.isEligible(currentYear: 2026))
+        consent.birthYear = 2013
+        consent.confirmsThirteen = false
+        XCTAssertFalse(consent.isEligible(currentYear: 2026))
+        consent.confirmsThirteen = true
+        XCTAssertTrue(consent.isEligible(currentYear: 2026))
+        consent.acceptsTerms = false
+        XCTAssertFalse(consent.isEligible(currentYear: 2026))
+    }
+
     private func profile(tier: String, userID: UUID? = nil) -> UserProfile {
         UserProfile(
             id: userID ?? UUID(uuidString: id)!, handle: "synthetic", displayName: "Synthetic",

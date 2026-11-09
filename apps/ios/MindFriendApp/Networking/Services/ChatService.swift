@@ -61,8 +61,8 @@ final class ChatService: ObservableObject {
             quotaLimit: response.quotaLimit,     // Pass through for UI syncing
             crisisDetected: response.isCrisisResponse,
             conversationTitle: response.conversationTitle,
-            memoryUsed: nil,                     // Not yet available from chat response
-            memoryIdsUsed: nil,                  // Not yet available from chat response
+            memoryUsed: response.memoryUsed,
+            memoryIdsUsed: response.memoryIdsUsed,
             coachData: response.coachData
         )
     }

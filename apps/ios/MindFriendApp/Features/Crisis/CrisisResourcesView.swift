@@ -3,7 +3,7 @@ import SwiftUI
 struct CrisisResourcesView: View {
     @EnvironmentObject var container: DependencyContainer
     @Environment(\.dismiss) var dismiss
-    @State private var resources: [CrisisResource] = []
+    @State private var resources: [CrisisResource] = CrisisResource.fallbackResources
     @State private var isLoading = true
 
     var body: some View {
@@ -56,7 +56,7 @@ struct CrisisResourcesView: View {
                     .buttonStyle(.plain)
 
                     // Resources list
-                    if isLoading {
+                    if isLoading && resources.isEmpty {
                         ProgressView()
                             .padding(.top, 20)
                     } else {
@@ -107,7 +107,8 @@ struct CrisisResourcesView: View {
         defer { isLoading = false }
 
         do {
-            resources = try await container.supabaseDataService.getCrisisResources()
+            let fetched = try await container.supabaseDataService.getCrisisResources()
+            if !fetched.isEmpty { resources = fetched }
         } catch {
             // Load fallback resources
             resources = CrisisResource.fallbackResources
