@@ -21,8 +21,11 @@ struct ProgramsLibraryView: View {
         return programs.filter { $0.category == category }
     }
 
+    /// Set by the stable shell so pushed work adds no second NavigationStack; standalone callers keep their own.
+    @Environment(\.supportRootEmbedded) private var supportEmbedded
+
     var body: some View {
-        NavigationStack {
+        SupportRootNavigation(embedded: supportEmbedded) {
             ScrollView {
                 VStack(spacing: 24) {
                     // Active program card

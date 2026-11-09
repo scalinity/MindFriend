@@ -14,15 +14,158 @@ final class DependencyContainer: ObservableObject {
     /// Captured via _globalSupabaseClient to avoid circular reference issues.
     let supabaseClient: SupabaseClient = _globalSupabaseClient
 
+    @Published private(set) var supportSessionCoordinator: SupportSessionCoordinator?
+    @Published private(set) var supportSessionLoadError: String?
+    @Published private(set) var supportSessionRecovery: SupportSessionCoordinator?
+    private(set) var supportSessionAccountEpoch: UInt64?
+    private var supportScopeRequest = UUID()
+    private var supportTeardown: Task<Void, Never>?
+    private var supportPending: SupportSessionCoordinator?
+    private var supportLoadTask: Task<Void, Never>?
+    private var supportLoadingOwner: UUID?
+    private var supportLoadingEpoch: UInt64?
+    private var supportHighestEpoch: UInt64?
+    private var supportHighestOwner: UUID?
+
+    func prepareSupportSessionScope(ownerID: UUID, accountEpoch: UInt64) async {
+        guard !Task.isCancelled else { return }
+        if let highest = supportHighestEpoch,
+           accountEpoch < highest || (accountEpoch == highest && ownerID != supportHighestOwner) { return }
+        supportHighestEpoch = accountEpoch
+        supportHighestOwner = ownerID
+        if supportSessionCoordinator?.identity.ownerID == ownerID,
+           supportSessionAccountEpoch == accountEpoch { return }
+        if supportLoadingOwner == ownerID, supportLoadingEpoch == accountEpoch, let supportLoadTask {
+            await supportLoadTask.value
+            return
+        }
+        endSupportSessionScope()
+        let request = supportScopeRequest
+        let previous = supportTeardown
+        supportLoadingOwner = ownerID
+        supportLoadingEpoch = accountEpoch
+        let task = Task { @MainActor in
+            await previous?.value
+            await self.loadSupportSessionScope(ownerID: ownerID, accountEpoch: accountEpoch, request: request)
+        }
+        supportLoadTask = task
+        await task.value
+        if request == supportScopeRequest {
+            supportLoadTask = nil
+            supportLoadingOwner = nil
+            supportLoadingEpoch = nil
+        }
+    }
+
+    private func loadSupportSessionScope(ownerID: UUID, accountEpoch: UInt64, request: UUID) async {
+        guard request == supportScopeRequest, !Task.isCancelled else { return }
+        do {
+            let base = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask,
+                                                   appropriateFor: nil, create: true)
+                .appendingPathComponent("MindFriend/SupportSessions", isDirectory: true)
+            let repository = SupportSessionRepository(identity: SupportSessionIdentity(ownerID: ownerID),
+                                                      io: FileSupportJournalIO(baseDirectory: base))
+            let coordinator = SupportSessionCoordinator(repository: repository)
+            supportPending = coordinator
+            do { try await coordinator.load() }
+            catch {
+                if request == supportScopeRequest, !Task.isCancelled,
+                   error as? SupportSessionError == .journalCorrupt {
+                    supportSessionRecovery = coordinator
+                    supportSessionAccountEpoch = accountEpoch
+                } else { await coordinator.invalidate().value }
+                throw error
+            }
+            try await prepareOfflineScope(ownerID: ownerID, accountEpoch: accountEpoch, request: request)
+            guard request == supportScopeRequest, !Task.isCancelled else { coordinator.invalidate(); return }
+            supportSessionAccountEpoch = accountEpoch
+            supportSessionCoordinator = coordinator
+            supportPending = nil
+        } catch {
+            guard request == supportScopeRequest, !Task.isCancelled else { return }
+            if let pending = supportPending, pending !== supportSessionRecovery { await pending.invalidate().value }
+            supportSessionLoadError = SupportSessionCoordinator.message(for: error)
+            supportPending = nil
+        }
+    }
+
+    func endSupportSessionScope() {
+        supportScopeRequest = UUID()
+        OfflineScope.shared.unbind()
+        let old = supportSessionCoordinator?.invalidate()
+        let recovery = supportSessionRecovery?.invalidate()
+        let pending = supportPending?.invalidate()
+        let loading = supportLoadTask
+        loading?.cancel()
+        let previous = supportTeardown
+        supportTeardown = Task { await previous?.value; await old?.value; await recovery?.value; await pending?.value; await loading?.value }
+        supportPending = nil
+        supportLoadTask = nil
+        supportLoadingOwner = nil
+        supportLoadingEpoch = nil
+        supportSessionCoordinator = nil
+        supportSessionRecovery = nil
+        supportSessionAccountEpoch = nil
+        supportSessionLoadError = nil
+    }
+
+    func startFreshSupportJournal(ownerID: UUID, accountEpoch: UInt64) async {
+        guard let coordinator = supportSessionRecovery,
+              coordinator.identity.ownerID == ownerID, supportSessionAccountEpoch == accountEpoch else { return }
+        let request = supportScopeRequest
+        do {
+            try await coordinator.repository.startFreshAfterQuarantine(epoch: coordinator.identity.epochID)
+            try await coordinator.load()
+            try await prepareOfflineScope(ownerID: ownerID, accountEpoch: accountEpoch, request: request)
+            guard request == supportScopeRequest, !Task.isCancelled else { return }
+            supportSessionRecovery = nil
+            supportSessionLoadError = nil
+            supportSessionCoordinator = coordinator
+        } catch {
+            if request == supportScopeRequest { supportSessionLoadError = SupportSessionCoordinator.message(for: error) }
+        }
+    }
+
+    private func prepareOfflineScope(ownerID: UUID, accountEpoch: UInt64, request: UUID) async throws {
+        let service = OfflineMutationService(client: supabaseClient, ownerProof: { [weak self] in
+            await MainActor.run {
+                guard let self, self.supportScopeRequest == request,
+                      self.supportHighestEpoch == accountEpoch, self.supportHighestOwner == ownerID,
+                      self.supabaseClient.auth.currentSession?.user.id == ownerID,
+                      self.supabaseAuthService.userId == ownerID else { return nil }
+                return OfflineOwnerProof(userId: ownerID, epoch: accountEpoch)
+            }
+        })
+        let handlers = service.handlers(userId: ownerID.uuidString, epoch: accountEpoch)
+        try await OfflineContentService.shared.bindOfflineScope(userId: ownerID.uuidString, epoch: accountEpoch,
+            moodHandler: handlers.mood, questHandler: handlers.quest, exerciseHandler: handlers.exercise)
+    }
+
+    private func removeDeletedSupportJournal(ownerID: UUID) async throws {
+        if supportSessionCoordinator?.identity.ownerID == ownerID || supportSessionRecovery?.identity.ownerID == ownerID {
+            endSupportSessionScope()
+        }
+        await supportTeardown?.value
+        let base = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask,
+                                               appropriateFor: nil, create: true)
+            .appendingPathComponent("MindFriend/SupportSessions", isDirectory: true)
+        try FileSupportJournalIO(baseDirectory: base).eraseOwner(ownerID: ownerID)
+    }
+
     // MARK: - Supabase Services
     lazy var supabaseAuthService: SupabaseAuthService = {
         let service = SupabaseAuthService(secureStorage: secureStorage)
         // ✅ ARCHITECTURE FIX: Wire up logout handler to break circular dependency
         service.setLogoutHandler { [weak self] in
+            self?.endSupportSessionScope()
             self?.pathwayCacheService.clearAllCaches()
             // Clear UI-level session caches keyed only by time (not user id)
             // to prevent cross-user leakage on shared devices / account switch.
             ProgressStoryLoadCache.clear()
+        }
+        service.setAccountDeletedHandler { [weak self] owner in
+            guard let self else { return }
+            try await self.removeDeletedSupportJournal(ownerID: owner)
         }
         return service
     }()

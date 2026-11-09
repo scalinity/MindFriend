@@ -256,8 +256,9 @@ struct DownloadButton: View {
                 // Downloaded state
                 Menu {
                     Button(role: .destructive) {
+                        guard let binding = OfflineScope.shared.binding else { return }
                         Task {
-                            try? await offlineService.deleteDownload(contentId: content.id)
+                            try? await offlineService.deleteDownload(contentId: content.id, binding: binding)
                         }
                     } label: {
                         Label("Remove Download", systemImage: "trash")
@@ -286,9 +287,10 @@ struct DownloadButton: View {
             } else {
                 // Available for download
                 Button {
+                    guard let binding = OfflineScope.shared.binding else { return }
                     Task {
                         do {
-                            try await offlineService.download(content)
+                            try await offlineService.download(content, binding: binding)
                         } catch {
                             errorMessage = error.localizedDescription
                             showError = true

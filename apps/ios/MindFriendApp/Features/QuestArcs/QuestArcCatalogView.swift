@@ -22,8 +22,11 @@ struct QuestArcCatalogView: View {
 
     private let categories = ["stress", "sleep", "confidence", "focus", "resilience"]
 
+    /// Set by the stable shell so pushed work adds no second NavigationStack; standalone callers keep their own.
+    @Environment(\.supportRootEmbedded) private var supportEmbedded
+
     var body: some View {
-        NavigationStack {
+        SupportRootNavigation(embedded: supportEmbedded) {
             ScrollView {
                 VStack(spacing: 24) {
                     // Active Arc Banner (tappable to view details)

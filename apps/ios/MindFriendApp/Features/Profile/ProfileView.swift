@@ -472,13 +472,15 @@ struct ProfileView: View {
     }
 
     private func deleteAccount() {
+        guard let owner = appState.currentUser?.id else { return }
         Task {
             do {
-                try await container.supabaseAuthService.deleteAccount()
+                try await container.supabaseAuthService.deleteAccount(expectedOwner: owner)
                 await MainActor.run {
-                    appState.setUnauthenticated()
+                    if container.supabaseAuthService.userId == nil { appState.setUnauthenticated() }
                 }
             } catch {
+                guard appState.currentUser?.id == owner else { return }
                 appState.showError(.apiError(error.localizedDescription))
             }
         }
