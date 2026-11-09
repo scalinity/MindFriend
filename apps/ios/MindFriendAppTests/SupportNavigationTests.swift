@@ -213,6 +213,11 @@ final class SupportNavigationTests: XCTestCase {
         XCTAssertTrue(SupportShellFeature.isEnabled(defaults: suite))
     }
 
+    func testShellIsOnByDefaultInEveryBuild() {
+        let suite = UserDefaults(suiteName: "SupportNavigationTests.\(UUID().uuidString)")!
+        XCTAssertTrue(SupportShellFeature.isEnabled(defaults: suite))
+    }
+
     func testExploreSearchFindsCapabilitiesByOldNames() {
         XCTAssertTrue(SupportDestination.circles.matches("buddy"))
         XCTAssertTrue(SupportDestination.outcomes.matches("PHQ"))
