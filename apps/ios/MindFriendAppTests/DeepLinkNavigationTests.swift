@@ -248,14 +248,14 @@ final class DeepLinkNavigationTests: XCTestCase {
         let user = profile(tier: "free")
         state.setAuthenticated(user: user)
         XCTAssertNil(state.entitlementSnapshot?.usage)
-        state.recordChatQuota(ownerID: user.id, used: 4, limit: 30)
+        state.recordChatQuota(ownerID: user.id, used: 4, limit: 30, countedOn: nil)
         state.setAuthenticated(user: user)
         XCTAssertEqual(state.entitlementSnapshot?.usage, 4)
         state.updateEntitlements(.premium)
         XCTAssertEqual(state.entitlements.tier, .premium)
         XCTAssertEqual(state.entitlementSnapshot?.usage, 4)
         XCTAssertFalse(state.entitlementSnapshot?.isUnlimited ?? true)
-        state.recordChatQuota(ownerID: UUID(), used: 0, limit: 30)
+        state.recordChatQuota(ownerID: UUID(), used: 0, limit: 30, countedOn: nil)
         XCTAssertEqual(state.entitlementSnapshot?.usage, 4)
         state.setAuthenticated(user: profile(tier: "free", userID: UUID()))
         XCTAssertNil(state.entitlementSnapshot?.usage)
@@ -283,26 +283,100 @@ final class DeepLinkNavigationTests: XCTestCase {
         let state = AppState()
         let user = profile(tier: "free")
         state.setAuthenticated(user: user)
-        let formatter = ISO8601DateFormatter()
-        state.recordChatQuota(ownerID: user.id, used: 30, limit: 30,
-                              receivedAt: try XCTUnwrap(formatter.date(from: "2026-11-08T23:59:00Z")))
-        state.recordChatQuota(ownerID: user.id, used: 1, limit: 30,
-                              receivedAt: try XCTUnwrap(formatter.date(from: "2026-11-09T00:01:00Z")))
+        state.recordChatQuota(ownerID: user.id, used: 30, limit: 30, countedOn: "2026-11-08")
+        state.recordChatQuota(ownerID: user.id, used: 1, limit: 30, countedOn: "2026-11-09")
         XCTAssertEqual(state.entitlementSnapshot?.usage, 1)
+        XCTAssertEqual(state.entitlementSnapshot?.quotaPeriodStartedAt,
+                       ISO8601DateFormatter().date(from: "2026-11-09T00:00:00Z"))
     }
 
     func testUsageFromAnEarlierServerDayNoLongerCounts() {
         let state = AppState()
         let user = profile(tier: "free")
         state.setAuthenticated(user: user)
-        state.recordChatQuota(ownerID: user.id, used: 30, limit: 30, receivedAt: Date().addingTimeInterval(-2 * 86_400))
+        state.recordChatQuota(ownerID: user.id, used: 30, limit: 30, countedOn: serverDay(offset: -2))
         XCTAssertEqual(state.entitlementSnapshot?.remaining, 30)
         XCTAssertFalse(state.isOutOfFreeMessages)
-        state.recordChatQuota(ownerID: user.id, used: 30, limit: 30)
+        state.recordChatQuota(ownerID: user.id, used: 30, limit: 30, countedOn: serverDay(offset: 0))
         XCTAssertEqual(state.entitlementSnapshot?.remaining, 0)
         XCTAssertTrue(state.isOutOfFreeMessages)
         state.updateEntitlements(.premium)
         XCTAssertFalse(state.isOutOfFreeMessages)
+    }
+
+    func testFailureWithoutUsageKeepsTheQuotaPeriod() {
+        let state = AppState()
+        let user = profile(tier: "free")
+        state.setAuthenticated(user: user)
+        state.recordChatQuota(ownerID: user.id, used: 30, limit: 30, countedOn: serverDay(offset: -1))
+        XCTAssertEqual(state.entitlementSnapshot?.remaining, 30)
+        // A network or sign-in failure reports no usage, so it says nothing about today.
+        state.recordChatQuota(ownerID: user.id, used: nil, limit: nil, countedOn: nil)
+        XCTAssertEqual(state.entitlementSnapshot?.remaining, 30)
+        XCTAssertFalse(state.isOutOfFreeMessages)
+        state.recordChatQuota(ownerID: user.id, used: 1, limit: 30, countedOn: serverDay(offset: 0))
+        XCTAssertEqual(state.entitlementSnapshot?.remaining, 29)
+    }
+
+    func testReplayedReceiptFromAnEarlierDayKeepsTodaysCount() {
+        let state = AppState()
+        let user = profile(tier: "free")
+        state.setAuthenticated(user: user)
+        state.recordChatQuota(ownerID: user.id, used: 3, limit: 30, countedOn: serverDay(offset: 0))
+        // Yesterday's final message, replayed today from its stored receipt.
+        state.recordChatQuota(ownerID: user.id, used: 30, limit: 30, countedOn: serverDay(offset: -1))
+        XCTAssertEqual(state.entitlementSnapshot?.remaining, 27)
+        XCTAssertFalse(state.isOutOfFreeMessages)
+    }
+
+    func testServerDayAcceptsOnlyItsDateFormat() {
+        XCTAssertEqual(EntitlementSnapshot.serverDay(reported: "2026-11-09"),
+                       ISO8601DateFormatter().date(from: "2026-11-09T00:00:00Z"))
+        XCTAssertNil(EntitlementSnapshot.serverDay(reported: nil))
+        XCTAssertNil(EntitlementSnapshot.serverDay(reported: "11/09/2026"))
+        XCTAssertNil(EntitlementSnapshot.serverDay(reported: "2026-11-09T00:00:00Z"))
+    }
+
+    private func serverDay(offset days: Int) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "UTC")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: Date().addingTimeInterval(Double(days) * 86_400))
+    }
+
+    func testUsageFromAnEarlierPeriodNeverRaisesTheCurrentCount() {
+        let now = Date()
+        let today = EntitlementSnapshot.serverDay(containing: now)
+        var snapshot = EntitlementSnapshot(ownerID: UUID(), tier: .free, source: .chatReceipt,
+            verifiedAt: now, usage: 3, quota: 30, quotaPeriodStartedAt: today)
+        snapshot.merge(tier: .free, usage: 30, quota: 30, period: today.addingTimeInterval(-86_400),
+                       verifiedAt: now, source: .chatReceipt)
+        XCTAssertEqual(snapshot.usage, 3)
+        XCTAssertEqual(snapshot.quotaPeriodStartedAt, today)
+    }
+
+    func testCelebrationsStayWithTheirAccount() {
+        let state = AppState()
+        let first = profile(tier: "free")
+        let second = profile(tier: "free", userID: UUID())
+        func event(for owner: UUID) -> CelebrationEvent {
+            CelebrationEvent(id: UUID(), userId: owner, celebrationType: .levelUp, value: 2, badgeId: nil,
+                             shownAt: nil, sharedToCircle: false, sharedExternally: false,
+                             circlePostId: nil, createdAt: Date())
+        }
+        state.setAuthenticated(user: first)
+        state.addCelebrations([event(for: first.id), event(for: second.id)])
+        XCTAssertEqual(state.pendingCelebrations.map(\.userId), [first.id])
+        state.setAuthenticated(user: second)
+        XCTAssertTrue(state.pendingCelebrations.isEmpty)
+        // A response requested by the previous account arrives late.
+        state.addCelebrations([event(for: first.id)])
+        XCTAssertTrue(state.pendingCelebrations.isEmpty)
+        state.addCelebrations([event(for: second.id)])
+        XCTAssertEqual(state.pendingCelebrations.count, 1)
+        state.setUnauthenticated()
+        XCTAssertTrue(state.pendingCelebrations.isEmpty)
     }
 
     func testServerQuotaDayResetsAtUTCMidnight() throws {

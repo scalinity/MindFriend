@@ -70,7 +70,7 @@ final class AppState: ObservableObject {
     func retryAccountScope() { accountEpoch &+= 1 }
 
     func setAuthenticated(user: UserProfile) {
-        if currentUser?.id != user.id { accountEpoch &+= 1; entitlementSnapshot = nil }
+        if currentUser?.id != user.id { accountEpoch &+= 1; entitlementSnapshot = nil; pendingCelebrations = [] }
         self.currentUser = user
         refreshProfileEntitlements(user, cached: false)
         self.authState = user.needsOnboarding ? .onboarding : .authenticated
@@ -81,7 +81,7 @@ final class AppState: ObservableObject {
 
     /// Set authenticated state with cached data (before network verification)
     func setAuthenticatedFromCache(user: UserProfile) {
-        if currentUser?.id != user.id { accountEpoch &+= 1; entitlementSnapshot = nil }
+        if currentUser?.id != user.id { accountEpoch &+= 1; entitlementSnapshot = nil; pendingCelebrations = [] }
         self.currentUser = user
         refreshProfileEntitlements(user, cached: true)
         self.authState = user.needsOnboarding ? .onboarding : .authenticated
@@ -93,6 +93,7 @@ final class AppState: ObservableObject {
         if currentUser != nil { accountEpoch &+= 1 }
         self.currentUser = nil
         self.entitlementSnapshot = nil
+        self.pendingCelebrations = []
         self.todayQuest = nil
         self.todayMood = nil
         self.todayActionPlan = nil
@@ -137,11 +138,14 @@ final class AppState: ObservableObject {
                           source: .serverBilling)
     }
 
-    /// A chat receipt reports usage for the server day it was counted in.
-    func recordChatQuota(ownerID: UUID, used: Int?, limit: Int?, receivedAt: Date = Date()) {
+    /// A chat receipt reports usage for the server day it was counted in. A receipt can
+    /// arrive after that day ends, or be replayed later, so only the server's day moves the
+    /// quota period, and only when the receipt carries usage.
+    func recordChatQuota(ownerID: UUID, used: Int?, limit: Int?, countedOn day: String?) {
         guard currentUser?.id == ownerID else { return }
+        let period = used == nil ? nil : EntitlementSnapshot.serverDay(reported: day)
         mergeEntitlements(ownerID: ownerID, tier: entitlements.tier, usage: used, quota: limit,
-                          period: receivedAt, verifiedAt: receivedAt, source: .chatReceipt)
+                          period: period, verifiedAt: Date(), source: .chatReceipt)
     }
 
     /// The server's count shows no free messages left until its next reset.
@@ -210,8 +214,11 @@ final class AppState: ObservableObject {
 
     func addCelebrations(_ celebrations: [CelebrationEvent]) {
         // Filter out any that were already shown (have shownAt). Streak milestones stay on the
-        // server but are not shown.
-        let newCelebrations = celebrations.filter { $0.shownAt == nil && $0.celebrationType != .streakMilestone }
+        // server but are not shown. A response requested by an earlier account is dropped.
+        guard let owner = currentUser?.id else { return }
+        let newCelebrations = celebrations.filter {
+            $0.userId == owner && $0.shownAt == nil && $0.celebrationType != .streakMilestone
+        }
         // Limit queue size to prevent memory issues or overwhelming UX
         let spaceAvailable = maxPendingCelebrations - pendingCelebrations.count
         let toAdd = Array(newCelebrations.prefix(max(0, spaceAvailable)))

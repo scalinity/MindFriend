@@ -40,10 +40,12 @@ struct ChatRequestFailure: LocalizedError {
     let resetAt: Date?
     let messageSaved: Bool?
     let userMessageId: String?
+    let quotaDay: String?
 
-    init(kind: Kind, code: String? = nil, retryable: Bool = false, quotaUsed: Int? = nil, quotaLimit: Int? = nil, retryAt: Date? = nil, resetAt: Date? = nil, messageSaved: Bool? = nil, userMessageId: String? = nil) {
+    init(kind: Kind, code: String? = nil, retryable: Bool = false, quotaUsed: Int? = nil, quotaLimit: Int? = nil, retryAt: Date? = nil, resetAt: Date? = nil, messageSaved: Bool? = nil, userMessageId: String? = nil, quotaDay: String? = nil) {
         self.kind = kind; self.code = code; self.retryable = retryable; self.quotaUsed = quotaUsed; self.quotaLimit = quotaLimit
         self.retryAt = retryAt; self.resetAt = resetAt; self.messageSaved = messageSaved; self.userMessageId = userMessageId
+        self.quotaDay = quotaDay
     }
     var canRetryRequest: Bool {
         retryable || kind == .pending || kind == .signIn
@@ -100,7 +102,8 @@ struct ChatRequestFailure: LocalizedError {
         let reset = (body["resetAt"] as? String).flatMap { ISO8601DateFormatter().date(from: $0) }
         let mayRetry = body["retryable"] as? Bool ?? (kind == .quota || kind == .sharedBudget || kind == .rateLimited)
         return .init(kind: kind, code: code, retryable: mayRetry, quotaUsed: body["quotaUsed"] as? Int, quotaLimit: body["quotaLimit"] as? Int,
-                     retryAt: retryAt, resetAt: reset, messageSaved: body["messageSaved"] as? Bool, userMessageId: body["userMessageId"] as? String)
+                     retryAt: retryAt, resetAt: reset, messageSaved: body["messageSaved"] as? Bool, userMessageId: body["userMessageId"] as? String,
+                     quotaDay: body["quotaDay"] as? String)
     }
 }
 
@@ -223,6 +226,7 @@ struct ChatResponse: Codable {
     var memoryUsed: Bool? = nil
     var memoryIdsUsed: [String]? = nil
     var support: SupportChatMetadata? = nil
+    var quotaDay: String? = nil
 }
 
 struct ChatFunctionResponse: Codable {
@@ -236,6 +240,7 @@ struct ChatFunctionResponse: Codable {
     var memoryUsed: Bool? = nil
     var memoryIdsUsed: [String]? = nil
     var support: SupportChatMetadata? = nil
+    var quotaDay: String? = nil
 
     static func decode(_ data: Data) throws -> ChatFunctionResponse {
         let decoder = JSONDecoder()
@@ -1366,7 +1371,8 @@ final class SupabaseDataService: ObservableObject {
             coachData: chatResponse.coachData,
             memoryUsed: chatResponse.memoryUsed,
             memoryIdsUsed: chatResponse.memoryIdsUsed,
-            support: chatResponse.support
+            support: chatResponse.support,
+            quotaDay: chatResponse.quotaDay
         )
     }
 
