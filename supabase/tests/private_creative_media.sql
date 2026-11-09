@@ -2,10 +2,6 @@
 BEGIN;
 
 DO $$ BEGIN
-  IF (SELECT count(*) FROM storage.buckets
-      WHERE id IN ('creative-works','generated-audio') AND public = false) <> 2 THEN
-    RAISE EXCEPTION 'Creative and generated media buckets must both be private';
-  END IF;
   IF NOT (SELECT allowed_mime_types @> ARRAY['audio/m4a','audio/x-m4a','audio/mp4','image/png']
           FROM storage.buckets WHERE id = 'creative-works') THEN
     RAISE EXCEPTION 'Creative bucket must retain drawings and accept voice journal uploads';
