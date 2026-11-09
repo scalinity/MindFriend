@@ -43,7 +43,7 @@ struct VisualAccessibilityView: View {
                         Text("Primary Button")
                             .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.supportPrimary)
 
                     // Secondary button preview
                     Button(action: {}) {

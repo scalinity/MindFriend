@@ -72,7 +72,7 @@ struct BoundariesListView: View {
                 Label("list.button_new", systemImage: "plus.circle.fill")
                     .font(.headline)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.supportPrimary)
         }
         .padding()
     }

@@ -379,7 +379,7 @@ private struct AuthenticatedSupportRoot: View {
                     if let message = container.supportSessionLoadError {
                         ContentUnavailableView("Saved work unavailable", systemImage: "lock.doc",
                                                description: Text(message))
-                        Button("Try again") { appState.retryAccountScope(); retry = UUID() }.buttonStyle(.borderedProminent)
+                        Button("Try again") { appState.retryAccountScope(); retry = UUID() }.buttonStyle(.supportPrimary)
                         if container.supportSessionRecovery != nil {
                             Button("Start with an empty journal") { showFreshJournalChoice = true }
                         }

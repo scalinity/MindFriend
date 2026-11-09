@@ -65,7 +65,7 @@ struct StressSignatureView: View {
                     await viewModel.fetchSignature()
                 }
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.supportPrimary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

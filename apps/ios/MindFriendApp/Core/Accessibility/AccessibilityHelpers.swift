@@ -268,7 +268,7 @@ struct AccessibleErrorView: View {
 
             if let retryAction = retryAction {
                 Button("Retry", action: retryAction)
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.supportPrimary)
             }
         }
         .padding()
