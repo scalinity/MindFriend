@@ -42,7 +42,13 @@ struct SupportChatEntryView: View {
                             Text("Draft saved on this device. Reconnecting does not send it.").font(.caption).foregroundStyle(.secondary)
                         }.padding(20).frame(maxWidth: SupportTheme.readableWidth, alignment: .leading)
                     }
-                    ChatInputBar(text: $text, isSending: sending, onSend: { send(sessionID: sessionID) })
+                    if appState.isOutOfFreeMessages {
+                        QuotaWarningBanner(remaining: 0, resetsAt: EntitlementSnapshot.nextServerReset(after: Date())) {
+                            appState.showPaywall = true
+                        }
+                    }
+                    ChatInputBar(text: $text, isSending: sending, isOutOfMessages: appState.isOutOfFreeMessages,
+                                 onSend: { send(sessionID: sessionID) })
                 }
                 .navigationTitle(dynamicTypeSize.isAccessibilitySize ? "Chat" : coordinator.journal.sessions[sessionID]?.title ?? "Conversation")
                 .toolbar {

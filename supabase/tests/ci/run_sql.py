@@ -22,6 +22,7 @@ SUITES = (
     "apple_account_notifications.sql",
     "mentorship_messages.sql",
     "drift_reconciliation.sql",
+    "current_premium_access.sql",
 )
 
 

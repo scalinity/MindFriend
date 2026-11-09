@@ -193,7 +193,7 @@ final class DeepLinkNavigationTests: XCTestCase {
         let row = DBProfileRow(
             id: userID, handle: "synthetic", displayName: "Synthetic", email: nil,
             avatarUrl: nil, timezone: "America/New_York", subscriptionTier: "free",
-            dailyAiQuota: 5, dailyAiUsed: 0, quotaResetAt: nil, premiumBadge: nil,
+            dailyAiQuota: 30, dailyAiUsed: 0, quotaResetAt: nil, premiumBadge: nil,
             wellnessFocus: nil, onboardingCompletedAt: Date(), createdAt: Date(), updatedAt: Date()
         )
         let settings = DBUserSettingsRow(
@@ -248,14 +248,14 @@ final class DeepLinkNavigationTests: XCTestCase {
         let user = profile(tier: "free")
         state.setAuthenticated(user: user)
         XCTAssertNil(state.entitlementSnapshot?.usage)
-        state.recordChatQuota(ownerID: user.id, used: 4, limit: 5)
+        state.recordChatQuota(ownerID: user.id, used: 4, limit: 30)
         state.setAuthenticated(user: user)
         XCTAssertEqual(state.entitlementSnapshot?.usage, 4)
         state.updateEntitlements(.premium)
         XCTAssertEqual(state.entitlements.tier, .premium)
         XCTAssertEqual(state.entitlementSnapshot?.usage, 4)
         XCTAssertFalse(state.entitlementSnapshot?.isUnlimited ?? true)
-        state.recordChatQuota(ownerID: UUID(), used: 0, limit: 5)
+        state.recordChatQuota(ownerID: UUID(), used: 0, limit: 30)
         XCTAssertEqual(state.entitlementSnapshot?.usage, 4)
         state.setAuthenticated(user: profile(tier: "free", userID: UUID()))
         XCTAssertNil(state.entitlementSnapshot?.usage)
@@ -277,6 +277,39 @@ final class DeepLinkNavigationTests: XCTestCase {
         snapshot.merge(tier: .free, usage: nil, quota: nil, period: nil,
                        verifiedAt: nil, source: .serverBilling)
         XCTAssertFalse(snapshot.isUnlimited)
+    }
+
+    func testChatReceiptFromANewServerDayReplacesEarlierUsage() throws {
+        let state = AppState()
+        let user = profile(tier: "free")
+        state.setAuthenticated(user: user)
+        let formatter = ISO8601DateFormatter()
+        state.recordChatQuota(ownerID: user.id, used: 30, limit: 30,
+                              receivedAt: try XCTUnwrap(formatter.date(from: "2026-11-08T23:59:00Z")))
+        state.recordChatQuota(ownerID: user.id, used: 1, limit: 30,
+                              receivedAt: try XCTUnwrap(formatter.date(from: "2026-11-09T00:01:00Z")))
+        XCTAssertEqual(state.entitlementSnapshot?.usage, 1)
+    }
+
+    func testUsageFromAnEarlierServerDayNoLongerCounts() {
+        let state = AppState()
+        let user = profile(tier: "free")
+        state.setAuthenticated(user: user)
+        state.recordChatQuota(ownerID: user.id, used: 30, limit: 30, receivedAt: Date().addingTimeInterval(-2 * 86_400))
+        XCTAssertEqual(state.entitlementSnapshot?.remaining, 30)
+        XCTAssertFalse(state.isOutOfFreeMessages)
+        state.recordChatQuota(ownerID: user.id, used: 30, limit: 30)
+        XCTAssertEqual(state.entitlementSnapshot?.remaining, 0)
+        XCTAssertTrue(state.isOutOfFreeMessages)
+        state.updateEntitlements(.premium)
+        XCTAssertFalse(state.isOutOfFreeMessages)
+    }
+
+    func testServerQuotaDayResetsAtUTCMidnight() throws {
+        let formatter = ISO8601DateFormatter()
+        let evening = try XCTUnwrap(formatter.date(from: "2026-11-09T18:30:00-05:00"))
+        XCTAssertEqual(EntitlementSnapshot.nextServerReset(after: evening),
+                       formatter.date(from: "2026-11-10T00:00:00Z"))
     }
 
     func testCompletedCachedProfileRetainsOfflineAccess() {

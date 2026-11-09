@@ -137,10 +137,16 @@ final class AppState: ObservableObject {
                           source: .serverBilling)
     }
 
-    func recordChatQuota(ownerID: UUID, used: Int?, limit: Int?) {
+    /// A chat receipt reports usage for the server day it was counted in.
+    func recordChatQuota(ownerID: UUID, used: Int?, limit: Int?, receivedAt: Date = Date()) {
         guard currentUser?.id == ownerID else { return }
         mergeEntitlements(ownerID: ownerID, tier: entitlements.tier, usage: used, quota: limit,
-                          period: nil, verifiedAt: Date(), source: .chatReceipt)
+                          period: receivedAt, verifiedAt: receivedAt, source: .chatReceipt)
+    }
+
+    /// The server's count shows no free messages left until its next reset.
+    var isOutOfFreeMessages: Bool {
+        entitlements.tier != .premium && entitlementSnapshot?.remaining == 0
     }
 
     private func mergeEntitlements(ownerID: UUID, tier: Tier, usage: Int?, quota: Int?,

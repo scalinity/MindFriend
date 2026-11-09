@@ -662,7 +662,7 @@ struct Entitlements: Codable, Equatable {
         return remaining <= 3 && remaining > 0
     }
 
-    static let free = Entitlements(tier: .free, dailyAiQuota: 5, dailyAiUsed: 0)
+    static let free = Entitlements(tier: .free, dailyAiQuota: Constants.freeUserDailyAiQuota, dailyAiUsed: 0)
     static let premium = Entitlements(tier: .premium, dailyAiQuota: 9999, dailyAiUsed: 0)
 }
 
@@ -678,18 +678,36 @@ struct EntitlementSnapshot: Equatable {
     var quota: Int?
     var quotaPeriodStartedAt: Date?
 
+    /// The server counts chat messages per UTC calendar day (Postgres CURRENT_DATE
+    /// in UTC) and resets lazily on the next message, so every quota period is
+    /// kept as the start of its server day.
+    static func serverDay(containing date: Date) -> Date {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        return calendar.startOfDay(for: date)
+    }
+    static func nextServerReset(after date: Date) -> Date {
+        serverDay(containing: date).addingTimeInterval(86_400)
+    }
+
+    /// Usage recorded on an earlier server day no longer counts against today.
+    var currentUsage: Int? {
+        guard let usage, let quotaPeriodStartedAt else { return usage }
+        return quotaPeriodStartedAt < Self.serverDay(containing: Date()) ? 0 : usage
+    }
     var remaining: Int? {
-        guard let quota, let usage else { return nil }
+        guard let quota, let usage = currentUsage else { return nil }
         return quota == -1 ? nil : max(0, quota - usage)
     }
     var isUnlimited: Bool { quota == -1 }
     var legacy: Entitlements {
-        Entitlements(tier: tier, dailyAiQuota: quota ?? 5, dailyAiUsed: usage ?? 0,
+        Entitlements(tier: tier, dailyAiQuota: quota ?? Constants.freeUserDailyAiQuota, dailyAiUsed: currentUsage ?? 0,
                      quotaPeriodStartedAt: quotaPeriodStartedAt, verifiedAt: verifiedAt)
     }
 
     mutating func merge(tier: Tier, usage: Int?, quota: Int?, period: Date?,
                         verifiedAt: Date?, source: Source) {
+        let period = period.map(Self.serverDay(containing:))
         self.tier = tier
         self.source = source
         // A decrease needs a newer server quota period. Refreshing metadata or
