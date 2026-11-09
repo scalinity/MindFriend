@@ -36,6 +36,20 @@ jobs:
           with open(os.environ["GITHUB_ENV"], "a") as output:
               output.write("SIMULATOR_ID=" + phones[0]["udid"] + "\n")
           PY
+      # Sentry's binary xcframeworks come from GitHub Releases, which intermittently
+      # answers 504. Resolve into the same derived data first, retrying with backoff,
+      # so a transient download failure does not fail the test job.
+      - name: Resolve Swift packages
+        run: |
+          for attempt in 1 2 3 4 5; do
+            xcodebuild -resolvePackageDependencies \
+              -project apps/ios/MindFriendApp.xcodeproj \
+              -scheme MindFriendApp \
+              -derivedDataPath build && exit 0
+            echo "Package resolution failed (attempt $attempt of 5)"
+            sleep $((attempt * 20))
+          done
+          exit 1
       - name: Compile both test bundles and run deterministic regressions
         run: |
           mkdir -p artifacts
