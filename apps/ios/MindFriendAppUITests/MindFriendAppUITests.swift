@@ -716,6 +716,8 @@ final class SupportSessionFlowUITests: XCTestCase {
             open(destination, in: app)
             capture("Audit-\(destination)-\(label)-\(appearance)-\(size)", app: app)
             try app.performAccessibilityAudit(for: .all) { issue in
+                // The DEBUG fixture's appearance overlay is test scaffolding, not app UI.
+                if issue.element?.identifier == "support-fixture-appearance" { return true }
                 XCTFail("\(destination) [\(label) \(appearance) \(size)]: \(issue.auditType) \(issue.compactDescription) — \(issue.element?.debugDescription ?? "no element")")
                 return true
             }

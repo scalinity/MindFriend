@@ -731,6 +731,10 @@ extension View {
         self
             .scrollContentBackground(.hidden)
             .background(SupportTheme.canvas.ignoresSafeArea())
+            // The app-wide accent and the default gray section headers fall just under 4.5:1 on
+            // this canvas; the support palette and prominent headers keep both readable.
+            .tint(SupportTheme.accent)
+            .headerProminence(.increased)
     }
 }
 
@@ -794,10 +798,12 @@ struct SupportRowLabel: View {
                 Text(title)
                     .font(.body)
                     .foregroundStyle(SupportTheme.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
                 if let subtitle {
                     Text(subtitle)
                         .font(.subheadline)
                         .foregroundStyle(SupportTheme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         } icon: {

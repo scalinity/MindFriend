@@ -38,6 +38,8 @@ struct SupportYouView: View {
     @State private var badgeCount: Int?
     @State private var replaceCandidate: SupportPin?
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
         NavigationStack(path: $navigator.youPath) {
             List {
@@ -71,7 +73,10 @@ struct SupportYouView: View {
             Button {
                 showEditProfile = true
             } label: {
-                HStack(spacing: SupportTheme.Spacing.m) {
+                // Stacked at accessibility sizes so the name wraps on word boundaries.
+                (dynamicTypeSize.isAccessibilitySize
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: SupportTheme.Spacing.s))
+                    : AnyLayout(HStackLayout(spacing: SupportTheme.Spacing.m))) {
                     Image(systemName: "person.crop.circle.fill")
                         .font(.largeTitle)
                         .foregroundStyle(SupportTheme.accent)
@@ -260,9 +265,15 @@ struct SupportYouView: View {
 
     private func summaryItem(value: Int?, label: String) -> some View {
         VStack(spacing: SupportTheme.Spacing.xxs) {
-            Text(value.map(String.init) ?? "–")
-                .font(.title2.weight(.bold))
-                .foregroundStyle(SupportTheme.textPrimary)
+            if let value {
+                Text(String(value))
+                    .font(.title2.weight(.bold))
+                    .foregroundStyle(SupportTheme.textPrimary)
+            } else {
+                Text("Not yet")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(SupportTheme.textSecondary)
+            }
             Text(label)
                 .font(.footnote)
                 .foregroundStyle(SupportTheme.textSecondary)
