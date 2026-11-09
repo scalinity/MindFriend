@@ -587,7 +587,9 @@ final class SupportSessionFlowUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Closed session"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["Continue as a new session"].exists)
         capture("Support-History-closed-step", app: app)
-        app.navigationBars.buttons.element(boundBy: 0).tap()
+        // On iPad the first navigation-bar button is the sidebar toggle, not Back.
+        let back = app.navigationBars.buttons["Today"]
+        if back.exists { back.tap() } else { app.navigationBars.buttons.element(boundBy: 0).tap() }
         tap("View your history", in: app)
         XCTAssertTrue(app.navigationBars["History"].waitForExistence(timeout: 5), app.debugDescription)
         if app.buttons["Search"].exists { app.buttons["Search"].tap() }
