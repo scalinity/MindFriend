@@ -103,6 +103,9 @@ Deno.serve(async (req) => {
         status: 400, headers: { "Content-Type": "application/json" },
       });
     }
+    // Swift sends uppercase UUID strings; PostgREST returns lowercase.
+    body.sessionId = body.sessionId.toLowerCase();
+    body.exerciseId = body.exerciseId.toLowerCase();
 
     // Verify session ownership (prevent unauthorized efficacy submission)
     const { data: session, error: sessionError } = await supabaseAdmin

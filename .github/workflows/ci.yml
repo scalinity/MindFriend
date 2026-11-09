@@ -79,7 +79,8 @@ jobs:
             supabase/tests/family_handlers_test.ts \
             supabase/functions/_shared/sleep-session-records.test.ts \
             supabase/functions/_shared/sleep-session-readers.test.ts \
-            supabase/functions/manage-safety-plan/handler.test.ts
+            supabase/functions/manage-safety-plan/handler.test.ts \
+            supabase/functions/delete-account/request-body.test.ts
 
   sql-tests:
     runs-on: ubuntu-latest
