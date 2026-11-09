@@ -206,6 +206,8 @@ END;
 $function$;
 REVOKE ALL ON FUNCTION public.encrypt_message_content(text) FROM PUBLIC, anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.encrypt_message_content(text) TO service_role;
+-- sanitize_mentorship_message() runs as the inserting user and encrypts each new message.
+GRANT EXECUTE ON FUNCTION public.encrypt_message_content(text) TO authenticated;
 CREATE OR REPLACE FUNCTION public.flag_mentorship_message(p_message_id uuid, p_reason text)
  RETURNS boolean
  LANGUAGE plpgsql
@@ -1015,8 +1017,9 @@ GRANT EXECUTE ON FUNCTION public.enforce_profiles_insert_defaults() TO anon;
 GRANT EXECUTE ON FUNCTION public.enforce_profiles_insert_defaults() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.enforce_profiles_insert_defaults() TO service_role;
 
--- 3b. No client calls the prediction or message-encryption functions; the predict-mood job and
--- the definer-owned mentorship trigger and RPCs do. The grants above leave them service-role only.
+-- 3b. No client calls the prediction, decryption or capacity-cleanup functions; the predict-mood job and
+-- definer-owned RPCs do. The grants above leave them service-role only. encrypt_message_content is also
+-- granted to authenticated because the message trigger runs as the sender.
 
 -- 9. Two functions where production's definition is the safer one; the fresh chain adopts it.
 -- The repository version created a key on demand but ignored revoked_at; production ignored

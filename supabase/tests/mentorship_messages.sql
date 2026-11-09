@@ -19,11 +19,18 @@ INSERT INTO public.mentorship_messages(id,match_id,sender_id,content) VALUES
 SET LOCAL request.jwt.claim.sub='22222222-2222-4222-8222-222222222222';
 INSERT INTO public.mentorship_messages(id,match_id,sender_id,content) VALUES
  ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',auth.uid(),'Synthetic message from mentor') RETURNING id,read_at,flagged;
+-- Decryption is service-role only; clients never call it.
+DO $$ BEGIN
+  PERFORM public.decrypt_message_content('\x00'::bytea,'none');
+  RAISE EXCEPTION 'Clients can call decrypt_message_content';
+EXCEPTION WHEN insufficient_privilege THEN NULL; END $$;
+SET LOCAL ROLE service_role;
 DO $$ DECLARE ciphertext bytea; key_id text; decrypted text; BEGIN
   SELECT encrypted_content,encryption_key_id INTO ciphertext,key_id FROM public.mentorship_messages WHERE id='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2';
   decrypted := public.decrypt_message_content(ciphertext,key_id);
   IF decrypted <> 'Synthetic message from mentor' THEN RAISE EXCEPTION 'Persisted ciphertext cannot round-trip'; END IF;
 END $$;
+SET LOCAL ROLE authenticated;
 SELECT public.mark_messages_read('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
 DO $$ BEGIN
   IF (SELECT read_at FROM public.mentorship_messages WHERE id='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1') IS NULL OR
