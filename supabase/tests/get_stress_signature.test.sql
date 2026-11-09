@@ -86,6 +86,7 @@ VALUES (
   'test4@example.com',
   'synthetic-not-a-password',
   NOW(),
+  NOW(),
   NOW()
 );
 
@@ -145,6 +146,7 @@ VALUES (
   'test5@example.com',
   'synthetic-not-a-password',
   NOW(),
+  NOW(),
   NOW()
 );
 
@@ -197,6 +199,7 @@ VALUES (
   '00000000-0000-0000-0000-000000000006'::uuid,
   'test6@example.com',
   'synthetic-not-a-password',
+  NOW(),
   NOW(),
   NOW()
 );
@@ -257,6 +260,7 @@ VALUES (
   'test7@example.com',
   'synthetic-not-a-password',
   NOW(),
+  NOW(),
   NOW()
 );
 
@@ -300,6 +304,7 @@ VALUES (
   '00000000-0000-0000-0000-000000000008'::uuid,
   'test8@example.com',
   'synthetic-not-a-password',
+  NOW(),
   NOW(),
   NOW()
 );

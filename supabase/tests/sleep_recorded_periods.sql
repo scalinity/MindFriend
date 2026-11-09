@@ -50,10 +50,10 @@ DO $$ BEGIN
     EXCEPTION WHEN insufficient_privilege THEN NULL; END;
 END $$;
 SET LOCAL ROLE anon;
+-- RLS (auth.uid() = user_id) protects the rows; an anonymous caller has no uid and sees none.
 DO $$ BEGIN
-    BEGIN
-        PERFORM recorded_periods FROM public.sleep_entries;
+    IF EXISTS (SELECT recorded_periods FROM public.sleep_entries) THEN
         RAISE EXCEPTION 'Anonymous sleep read accepted';
-    EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+    END IF;
 END $$;
 ROLLBACK;

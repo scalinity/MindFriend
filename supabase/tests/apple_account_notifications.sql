@@ -55,8 +55,8 @@ DO $$ DECLARE t bigint; result uuid; metadata jsonb; BEGIN
     has_function_privilege('authenticated','public.process_apple_account_event(text,text,bigint,text)','EXECUTE') THEN RAISE EXCEPTION 'Client can forge Apple events'; END IF;
 END $$;
 -- Ambiguous trusted identities fail rather than picking an arbitrary account.
-INSERT INTO auth.identities(id,user_id,provider,identity_data) VALUES
- ('18100000-0000-4000-8000-000000000014','18100000-0000-4000-8000-000000000002','apple','{"sub":"synthetic.apple.subject"}');
+INSERT INTO auth.identities(id,user_id,provider_id,provider,identity_data) VALUES
+ ('18100000-0000-4000-8000-000000000014','18100000-0000-4000-8000-000000000002','synthetic.apple.subject.second','apple','{"sub":"synthetic.apple.subject"}');
 DO $$ BEGIN
  BEGIN
   PERFORM public.process_apple_account_event('synthetic.apple.subject','account-deleted',(SELECT event_time FROM apple_event_clock));
