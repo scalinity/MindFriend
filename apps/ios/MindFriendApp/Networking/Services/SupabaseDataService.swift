@@ -2224,14 +2224,6 @@ final class SupabaseDataService: ObservableObject {
 
     // MARK: - Circle Invites
 
-    private struct CircleInviteRequest: Encodable {
-        let inviteId: String
-        let circleId: String
-        let inviteeEmail: String?
-        let inviteePhone: String?
-        let inviteCode: String
-    }
-
     /// Create an invite for a circle
     func createCircleInvite(circleId: String, email: String?, phone: String?) async throws -> CircleInvite {
         guard let circleUUID = UUID(uuidString: circleId) else {
@@ -2275,25 +2267,6 @@ final class SupabaseDataService: ObservableObject {
             .single()
             .execute()
             .value
-
-        // Send invite email/SMS via edge function (fire-and-forget)
-        Task {
-            do {
-                let _ = try await supabase.functions.invoke(
-                    "send-circle-invite",
-                    options: .init(body: CircleInviteRequest(
-                        inviteId: result.id?.uuidString ?? "",
-                        circleId: circleId,
-                        inviteeEmail: email,
-                        inviteePhone: phone,
-                        inviteCode: result.inviteCode
-                    ))
-                )
-            } catch {
-                // Log but don't fail the invite creation
-                print("Failed to send circle invite notification: \(error)")
-            }
-        }
 
         return CircleInvite(
             id: result.id?.uuidString ?? "",

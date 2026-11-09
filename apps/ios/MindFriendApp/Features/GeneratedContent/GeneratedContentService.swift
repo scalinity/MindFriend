@@ -174,10 +174,20 @@ final class GeneratedContentService: ObservableObject {
 
     /// Record that content was played
     func recordPlay(contentId: UUID) async throws {
-        try await supabase.rpc(
-            "increment_play_count",
-            params: ["content_id": contentId.uuidString]
-        ).execute()
+        // No increment_play_count RPC exists; the owner updates its own row (as for favorites).
+        struct PlayCount: Decodable { let play_count: Int? }
+        let current: PlayCount = try await supabase
+            .from("generated_content")
+            .select("play_count")
+            .eq("id", value: contentId.uuidString)
+            .single()
+            .execute()
+            .value
+        try await supabase
+            .from("generated_content")
+            .update(["play_count": (current.play_count ?? 0) + 1])
+            .eq("id", value: contentId.uuidString)
+            .execute()
     }
 
     /// Delete generated content
