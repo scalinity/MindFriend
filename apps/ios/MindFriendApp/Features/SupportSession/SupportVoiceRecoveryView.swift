@@ -62,7 +62,7 @@ struct SupportVoiceRecoveryView: View {
         }
         .navigationTitle("Voice turns on this device")
         .navigationBarTitleDisplayMode(.inline)
-        .confirmationDialog("Remove this local voice turn?", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } })) {
+        .alert("Remove this local voice turn?", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } })) {
             if let event = removing {
                 Button("Remove local copy", role: .destructive) { removing = nil; change(event, retry: false) }
             }
