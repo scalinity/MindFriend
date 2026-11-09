@@ -13,7 +13,7 @@ INSERT INTO auth.users(id,aud,role,email,raw_user_meta_data,created_at,updated_a
  ('d1000000-0000-4000-8000-000000000003','authenticated','authenticated','drift-other@example.invalid','{}',now(),now());
 INSERT INTO public.mentorship_matches(id,mentor_id,mentee_id,status,mentor_alias,mentee_alias) VALUES
  ('d2000000-0000-4000-8000-000000000001','d1000000-0000-4000-8000-000000000002','d1000000-0000-4000-8000-000000000001','pending','Synthetic mentor','Synthetic mentee'),
- ('d2000000-0000-4000-8000-000000000002','d1000000-0000-4000-8000-000000000002','d1000000-0000-4000-8000-000000000001','active','Synthetic mentor','Synthetic mentee');
+ ('d2000000-0000-4000-8000-000000000002','d1000000-0000-4000-8000-000000000002','d1000000-0000-4000-8000-000000000003','active','Synthetic mentor','Synthetic mentee two');
 
 -- Anonymous callers cannot read another user's dashboard (fail closed on a null uid).
 SET LOCAL ROLE anon;
@@ -43,6 +43,9 @@ DO $$ BEGIN
   EXCEPTION WHEN insufficient_privilege THEN NULL; END;
   DELETE FROM public.mentorship_matches WHERE id='d2000000-0000-4000-8000-000000000001';
   IF FOUND THEN RAISE EXCEPTION 'Mentee deleted the pending request'; END IF;
+END $$;
+SET LOCAL request.jwt.claim.sub='d1000000-0000-4000-8000-000000000003';
+DO $$ BEGIN
   DELETE FROM public.mentorship_matches WHERE id='d2000000-0000-4000-8000-000000000002';
   IF FOUND THEN RAISE EXCEPTION 'Participant deleted an active mentorship'; END IF;
 END $$;
@@ -80,7 +83,7 @@ DO $$ BEGIN
   IF FOUND THEN RAISE EXCEPTION 'Mentor deleted an accepted mentorship'; END IF;
 END $$;
 -- Either participant may end an active mentorship; a closed one stays closed.
-SET LOCAL request.jwt.claim.sub='d1000000-0000-4000-8000-000000000001';
+SET LOCAL request.jwt.claim.sub='d1000000-0000-4000-8000-000000000003';
 DO $$ BEGIN
   UPDATE public.mentorship_matches SET status='completed', ended_at=now(), end_reason='Synthetic end'
   WHERE id='d2000000-0000-4000-8000-000000000002';
@@ -102,13 +105,13 @@ END $$;
 RESET ROLE;
 -- A valid 6-10 mood is saved even when a prediction is pending for that day.
 INSERT INTO public.mood_predictions(user_id,predicted_for,predicted_mood,confidence)
-VALUES ('d1000000-0000-4000-8000-000000000003',current_date,7,0.5);
-INSERT INTO public.moods(user_id,mood_score,local_date) VALUES ('d1000000-0000-4000-8000-000000000003',8,current_date);
+VALUES ('d1000000-0000-4000-8000-000000000001',current_date,7,0.5);
+INSERT INTO public.moods(user_id,mood_score,local_date) VALUES ('d1000000-0000-4000-8000-000000000001',8,current_date);
 DO $$ BEGIN
-  IF NOT EXISTS (SELECT FROM public.moods WHERE user_id='d1000000-0000-4000-8000-000000000003' AND mood_score=8) THEN
+  IF NOT EXISTS (SELECT FROM public.moods WHERE user_id='d1000000-0000-4000-8000-000000000001' AND mood_score=8) THEN
     RAISE EXCEPTION 'Mood rejected by prediction bookkeeping';
   END IF;
-  IF (SELECT actual_mood FROM public.mood_predictions WHERE user_id='d1000000-0000-4000-8000-000000000003') <> 10 THEN
+  IF (SELECT actual_mood FROM public.mood_predictions WHERE user_id='d1000000-0000-4000-8000-000000000001') <> 10 THEN
     RAISE EXCEPTION 'Prediction actual mood not clamped to the 1-10 range';
   END IF;
 END $$;
