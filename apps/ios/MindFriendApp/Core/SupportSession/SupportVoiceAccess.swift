@@ -79,10 +79,10 @@ final class SessionVoiceAccess: VoiceSupportAccess {
         } else if sessionID == nil {
             session = try await coordinator.createSession(conversationID: existingConversationID, scope: .conversationOnly)
             sessionID = session.id
-        } else if let id = sessionID, let closed = coordinator.journal.sessions[id], closed.status == .closed {
-            // A closed session's conversation continues by voice in a new session linked to it.
-            session = try await coordinator.createSession(conversationID: closed.conversationID ?? existingConversationID,
-                                                          previousSessionID: id, scope: .conversationOnly)
+        } else if let id = sessionID, existingConversationID == nil, coordinator.journal.sessions[id]?.status == .closed {
+            // A closed session continues as a new linked session with a conversation of its own:
+            // a conversation belongs to one session, and a closed one stays as it was.
+            session = try await coordinator.createSession(previousSessionID: id, scope: .conversationOnly)
             sessionID = session.id
         } else { throw VoiceSupportAccessError.unavailable }
         try requireOwner()

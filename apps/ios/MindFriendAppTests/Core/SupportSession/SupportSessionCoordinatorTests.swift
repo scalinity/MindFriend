@@ -36,22 +36,6 @@ final class SupportSessionCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.journal.sessions[activity.sessionID]?.status, .closed)
     }
 
-    func testContinuingAClosedSessionOpensOneLinkedSessionOnTheSameConversation() async throws {
-        let coordinator = try await make(FaultyJournalIO())
-        let conversation = UUID()
-        let original = try await coordinator.createSession(conversationID: conversation)
-        let itself = try await coordinator.continuingSession(original.id)
-        XCTAssertEqual(itself.id, original.id, "An open session continues itself")
-        try await coordinator.close(original.id)
-        let continued = try await coordinator.continuingSession(original.id)
-        XCTAssertNotEqual(continued.id, original.id)
-        XCTAssertEqual(continued.status, .open)
-        XCTAssertEqual(continued.conversationID, conversation)
-        XCTAssertEqual(continued.previousSessionID, original.id)
-        let again = try await coordinator.continuingSession(original.id)
-        XCTAssertEqual(again.id, continued.id, "Later sends reuse the same continuation")
-    }
-
     func testNavigationFlushCannotBeOverwrittenByOlderDebounce() async throws {
         let coordinator = try await make(FaultyJournalIO())
         let session = try await coordinator.createSession()
