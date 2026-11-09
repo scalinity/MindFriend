@@ -802,12 +802,19 @@ struct SupportPrimaryButtonStyle: ButtonStyle {
 /// Secondary actions: field fill, a 3:1 boundary and accent text.
 struct SupportSecondaryButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
+    /// Narrower for a row of several short choices, so their labels keep whole words.
+    let horizontalPadding: CGFloat
+
+    init(horizontalPadding: CGFloat = SupportTheme.Spacing.m) {
+        self.horizontalPadding = horizontalPadding
+    }
+
     func makeBody(configuration: ButtonStyleConfiguration) -> some View {
         configuration.label
             .font(.body.weight(.medium))
             .multilineTextAlignment(.center)
             .foregroundStyle(SupportTheme.accent)
-            .padding(.horizontal, SupportTheme.Spacing.m)
+            .padding(.horizontal, horizontalPadding)
             .padding(.vertical, SupportTheme.Spacing.s)
             .frame(maxWidth: .infinity, minHeight: SupportTheme.minimumTarget)
             .background(SupportTheme.field, in: RoundedRectangle(cornerRadius: SupportTheme.controlRadius))

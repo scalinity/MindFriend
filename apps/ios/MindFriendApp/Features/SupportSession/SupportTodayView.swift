@@ -138,7 +138,8 @@ struct SupportTodayView: View {
 
     private func quickLabel(_ title: String, icon: String) -> some View {
         VStack(spacing: SupportTheme.Spacing.xs) {
-            Image(systemName: icon).font(.title2).accessibilityHidden(true)
+            // Symbol weight matches the medium-weight label beside it.
+            Image(systemName: icon).font(.title2.weight(.medium)).accessibilityHidden(true)
             Text(title).fixedSize(horizontal: false, vertical: true)
         }
         // Equal-height tiles: each fills the row, which takes the tallest tile's height.
