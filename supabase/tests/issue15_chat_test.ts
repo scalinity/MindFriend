@@ -53,6 +53,7 @@ function state() {
     legacyMemory: false,
     quotaCalls: 0,
     quotaUsed: 0,
+    quotaDay: "2026-11-08" as unknown,
     budgetCalls: [] as Row[],
     userInserts: 0,
     retryClaims: 0,
@@ -269,9 +270,10 @@ Deno.test("issue 15: offline admission, durable explicit retry and legacy chat c
         if (allowed) s.quotaUsed++;
         const quota = {
           allowed,
-          quota_used: allowed ? s.quotaUsed : 5,
-          quota_limit: s.invalidNegativeQuota || body.p_is_premium ? -1 : 5,
+          quota_used: allowed ? s.quotaUsed : 30,
+          quota_limit: s.invalidNegativeQuota || body.p_is_premium ? -1 : 30,
           was_reset: false,
+          ...(s.quotaDay === undefined ? {} : { quota_day: s.quotaDay }),
         };
         return Response.json(s.quotaArray ? [quota] : quota);
       }
@@ -526,7 +528,7 @@ Deno.test("issue 15: offline admission, durable explicit retry and legacy chat c
       s = state();
       s.staleProfilePremium = true;
       const data = await result(await chat());
-      equal(data.quotaLimit, 5);
+      equal(data.quotaLimit, 30);
       assert(s.calls.includes("refresh_user_entitlement"));
     });
     await t.step("entitlement lookup failure stops provider work", async () => {
@@ -537,6 +539,15 @@ Deno.test("issue 15: offline admission, durable explicit retry and legacy chat c
       equal(response.status, 503);
       equal([s.providerCalls, s.userInserts, s.quotaCalls], [0, 0, 0]);
     });
+    for (const day of [undefined, "11/08/2026", 20261108]) {
+      await t.step(`quota day ${JSON.stringify(day)} from the database is omitted, never guessed`, async () => {
+        s = state();
+        s.quotaDay = day;
+        const data = await result(await chat());
+        equal(data.quotaUsed, 1);
+        assert(!("quotaDay" in data));
+      });
+    }
     for (const tier of ["premium", "sponsored"] as const) {
       await t.step(
         `${tier} preserves the established unlimited quota sentinel`,
@@ -544,7 +555,7 @@ Deno.test("issue 15: offline admission, durable explicit retry and legacy chat c
           s = state();
           s[tier] = true;
           const data = await result(await chat());
-          equal([data.quotaUsed, data.quotaLimit], [1, -1]);
+          equal([data.quotaUsed, data.quotaLimit, data.quotaDay], [1, -1, "2026-11-08"]);
           equal([s.providerCalls, s.userInserts, s.quotaCalls], [1, 1, 1]);
         },
       );
@@ -597,10 +608,11 @@ Deno.test("issue 15: offline admission, durable explicit retry and legacy chat c
           true,
           false,
         );
-        equal([data.error, data.quotaUsed, data.quotaLimit], [
+        equal([data.error, data.quotaUsed, data.quotaLimit, data.quotaDay], [
           "AI_QUOTA_EXCEEDED",
-          5,
-          5,
+          30,
+          30,
+          "2026-11-08",
         ]);
         assert(!/midnight|UTC|Premium|unlimited|tomorrow/i.test(data.message));
         equal([s.userInserts, s.providerCalls, s.quotaCalls], [0, 0, 1]);
@@ -1161,7 +1173,8 @@ Deno.test("issue 15: offline admission, durable explicit retry and legacy chat c
         equal(final.data.message, final.data.assistantMessage);
         equal(final.data.userMessage.id, requestId);
         equal(final.data.userMessageId, requestId);
-        equal([final.data.quotaUsed, final.data.quotaLimit], [1, 5]);
+        equal([final.data.quotaUsed, final.data.quotaLimit, final.data.quotaDay], [1, 30, "2026-11-08"]);
+        // The stored receipt keeps the day the message was counted in, so a later replay reports it unchanged.
         equal(receipt().response, final.data);
         equal(s.providerCalls, 1);
       },

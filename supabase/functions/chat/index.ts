@@ -587,6 +587,9 @@ async function handleChat(req: Request, execution: ChatExecution, onDelta?: (tex
 
     let quotaUsed = 0;
     let quotaLimit = 0;
+    // The database's UTC day the message was counted in, so a receipt read later
+    // (or replayed) is attributed to that day rather than to when it arrived.
+    let quotaDay: string | undefined;
     // Atomic user-quota debit, then the user message save. Both contracts call this only
     // after spending is approved and immediately before the single provider request.
     const admitQuotaAndSaveUser = async () => {
@@ -624,6 +627,10 @@ async function handleChat(req: Request, execution: ChatExecution, onDelta?: (tex
         (quotaData.quota_limit < 0 && !(isPremium && quotaData.quota_limit === -1))) {
         throw new Error("QUOTA_ADMISSION_UNCONFIRMED");
       }
+      quotaDay = typeof quotaData.quota_day === "string" &&
+          /^\d{4}-\d{2}-\d{2}$/.test(quotaData.quota_day)
+        ? quotaData.quota_day
+        : undefined;
       if (!quotaData.allowed) {
         throw new Response(
           JSON.stringify({
@@ -632,6 +639,7 @@ async function handleChat(req: Request, execution: ChatExecution, onDelta?: (tex
               "You've reached your daily AI chat allowance.",
             quotaUsed: quotaData.quota_used,
             quotaLimit: quotaData.quota_limit,
+            ...(quotaDay ? { quotaDay } : {}),
             code: "chat_quota_exhausted",
             retryable: true,
           }),
@@ -904,7 +912,7 @@ async function handleChat(req: Request, execution: ChatExecution, onDelta?: (tex
         reserveBudget: openAIBudgetReservation(supabaseAdmin, user.id, "chat.response", req.signal),
         beforeProvider: admitQuotaAndSaveUser,
         getUserMessage: () => userMessage,
-        getQuota: () => ({ used: quotaUsed, limit: quotaLimit }),
+        getQuota: () => ({ used: quotaUsed, limit: quotaLimit, day: quotaDay }),
         markProviderFailure: (error) => {
           knownProviderFailure = error instanceof Error &&
             (/^AI_HTTP_\d{3}$/.test(error.message) || ["AI_EMPTY_RESPONSE", "AI_TERMINAL_FAILED", "AI_STREAM_FAILED"].includes(error.message));
@@ -1424,7 +1432,7 @@ async function handleChat(req: Request, execution: ChatExecution, onDelta?: (tex
         template: buildLegacyWireTemplate({
           trimmedContent,
           userMessage,
-          quota: { used: quotaUsed, limit: quotaLimit },
+          quota: { used: quotaUsed, limit: quotaLimit, day: quotaDay },
           now: new Date(),
           content: assistantContent,
           memoryUsed: memoryContext.length > 0 || companionMemoryContext.length > 0,
@@ -1565,6 +1573,7 @@ async function handleChat(req: Request, execution: ChatExecution, onDelta?: (tex
         userMessageId: userMessage?.id, // Legacy field for backward compatibility
         quotaUsed: quotaUsed,
         quotaLimit: quotaLimit,
+        ...(quotaDay ? { quotaDay } : {}),
         conversationTitle: conversationTitle,
         memoryUsed: memoryContext.length > 0 || companionMemoryContext.length > 0,
         memoryIdsUsed: memoryIdsUsed,

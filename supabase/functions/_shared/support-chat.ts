@@ -1255,7 +1255,7 @@ export function buildLegacyTurnContext(a: {
 export function buildLegacyWireTemplate(a: {
   trimmedContent: string;
   userMessage: { id: string; created_at: string | null } | null;
-  quota: { used: number; limit: number };
+  quota: { used: number; limit: number; day?: string };
   now: Date;
   content: string;
   memoryUsed: boolean;
@@ -1280,6 +1280,7 @@ export function buildLegacyWireTemplate(a: {
     userMessageId: a.userMessage?.id,
     quotaUsed: a.quota.used,
     quotaLimit: a.quota.limit,
+    ...(a.quota.day ? { quotaDay: a.quota.day } : {}),
     conversationTitle: null,
     memoryUsed: a.memoryUsed,
     memoryIdsUsed: a.memoryIds,
@@ -1478,7 +1479,7 @@ export interface WireTemplateArgs {
   trimmedContent: string;
   userMessage: { id: string; created_at: string | null } | null;
   /** null for a safety response: no quota was debited. */
-  quota: { used: number; limit: number } | null;
+  quota: { used: number; limit: number; day?: string } | null;
   now: Date;
   scope: ContextScope;
   privacyRevision: number;
@@ -1532,7 +1533,9 @@ export function buildWireTemplate(
     assistantMessage: assistant,
     userMessageId: a.userMessage?.id,
     ...(safety ? { isCrisisResponse: true } : {}),
-    ...(a.quota ? { quotaUsed: a.quota.used, quotaLimit: a.quota.limit } : {}),
+    ...(a.quota
+      ? { quotaUsed: a.quota.used, quotaLimit: a.quota.limit, ...(a.quota.day ? { quotaDay: a.quota.day } : {}) }
+      : {}),
     conversationTitle: null,
     memoryUsed: personalIncluded,
     memoryIdsUsed: memoryIds,
@@ -1846,7 +1849,7 @@ export interface SupportTurnDeps {
   /** Atomic user quota debit, then the user message save. Owned by the handler. */
   beforeProvider: () => Promise<void>;
   getUserMessage: () => { id: string; created_at: string | null } | null;
-  getQuota: () => { used: number; limit: number };
+  getQuota: () => { used: number; limit: number; day?: string };
   /** Lets the handler classify provider errors for its existing 503 mapping. */
   markProviderFailure: (error: unknown) => void;
   now?: () => Date;
@@ -2134,7 +2137,7 @@ export async function confirmSafetyTurn(d: {
   accountPrivate: boolean;
   safetyText: string;
   userMessage: { id: string; created_at: string | null } | null;
-  quota: { used: number; limit: number } | null;
+  quota: { used: number; limit: number; day?: string } | null;
   now?: () => Date;
   confirm?: ConfirmOptions;
 }): Promise<SafetyTurnResult> {
