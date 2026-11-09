@@ -12,58 +12,48 @@ struct QuestConceptStep: View {
     let onNext: () -> Void
     let onSkip: () -> Void
 
-    @State private var showElements = false
-
     var body: some View {
         TutorialStepView(
             icon: "star.fill",
-            iconColor: .orange,
-            headline: "What Are Quests?",
+            iconColor: SupportTheme.Celebration.gold,
+            headline: "What are quests?",
             subheadline: "Quests are small, achievable daily challenges designed to improve your wellbeing.",
             primaryAction: onNext,
             skipAction: onSkip
         ) {
-            VStack(spacing: 8) {
+            VStack(spacing: SupportTheme.Spacing.xs) {
                 // Quest characteristics
                 ForEach(Array(characteristics.enumerated()), id: \.element.title) { index, item in
-                    HStack(spacing: 12) {
+                    HStack(spacing: SupportTheme.Spacing.s) {
                         Image(systemName: item.icon)
                             .font(.title3)
                             .foregroundStyle(item.color)
                             .frame(width: 28)
 
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                             Text(item.title)
                                 .font(.subheadline.weight(.medium))
                             Text(item.description)
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
 
                         Spacer()
                     }
-                    .opacity(showElements ? 1 : 0)
-                    .offset(y: showElements ? 0 : 10)
-                    .animation(
-                        .easeOut(duration: 0.4).delay(0.2 + Double(index) * 0.15),
-                        value: showElements
-                    )
+                    .celebrationReveal(delay: Double(index) * 0.1)
                 }
             }
-            .padding(.horizontal, 20)
-            .onAppear {
-                showElements = true
-            }
+            .padding(.horizontal, SupportTheme.Spacing.l)
         }
     }
 
     private var characteristics: [(icon: String, color: Color, title: String, description: String)] {
         [
-            ("clock", .blue, "Quick & Easy", "Most quests take just 5-15 minutes"),
-            ("brain.head.profile", .purple, "Science-Backed", "Based on proven wellbeing practices"),
-            ("person.fill.checkmark", .green, "Personalized", "Matched to your current energy level"),
-            ("sparkles", .orange, "Rewarding", "Earn XP and maintain your streak")
+            ("clock", SupportTheme.accent, "Quick and simple", "Most quests take just 5-15 minutes"),
+            ("brain.head.profile", SupportTheme.accent, "Science-backed", "Based on proven wellbeing practices"),
+            ("person.fill.checkmark", SupportTheme.accent, "Personalized", "Matched to your current energy level"),
+            ("sparkles", SupportTheme.Celebration.gold, "Rewarding", "Earn XP and see your progress")
         ]
     }
 }

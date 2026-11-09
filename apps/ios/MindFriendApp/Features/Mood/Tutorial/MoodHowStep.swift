@@ -13,41 +13,43 @@ struct MoodHowStep: View {
 
     @State private var selectedMood: Int? = nil
     @State private var showDetails = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     private let moods: [(emoji: String, label: String, color: Color)] = [
-        ("😔", "Awful", .red),
-        ("😕", "Bad", .orange),
-        ("😐", "Okay", .yellow),
-        ("🙂", "Good", .green),
-        ("😁", "Great", .blue)
+        ("😔", "Awful", SupportTheme.accent),
+        ("😕", "Bad", SupportTheme.Celebration.gold),
+        ("😐", "Okay", SupportTheme.Celebration.gold),
+        ("🙂", "Good", SupportTheme.accent),
+        ("😁", "Great", SupportTheme.accent)
     ]
 
     var body: some View {
         TutorialStepView(
             icon: "clock.badge.checkmark.fill",
-            iconColor: .green,
-            headline: "Quick & Easy",
-            subheadline: "Just tap how you're feeling. Takes 5 seconds!",
+            iconColor: SupportTheme.accent,
+            headline: "A moment to check in",
+            subheadline: "Choose how you're feeling. Add details if you'd like.",
             primaryLabel: "Start Logging",
             primaryAction: onComplete
         ) {
-            VStack(spacing: 16) {
+            VStack(spacing: SupportTheme.Spacing.m) {
                 // Mood selector preview
-                VStack(spacing: 8) {
+                VStack(spacing: SupportTheme.Spacing.xs) {
                     Text("How are you feeling?")
                         .font(.subheadline.weight(.medium))
 
-                    HStack(spacing: 12) {
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: typeSize.isAccessibilitySize ? 1 : (typeSize >= .xxLarge ? 2 : 5)), spacing: SupportTheme.Spacing.xs) {
                         ForEach(Array(moods.enumerated()), id: \.element.label) { index, mood in
                             Button {
-                                withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                                withAnimation(.easeInOut(duration: reduceMotion ? 0.2 : 0.3)) {
                                     selectedMood = index
                                 }
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                                    withAnimation { showDetails = true }
+                                    withAnimation(.easeInOut(duration: 0.2)) { showDetails = true }
                                 }
                             } label: {
-                                VStack(spacing: 6) {
+                                VStack(spacing: SupportTheme.Spacing.xs) {
                                     Text(mood.emoji)
                                         .font(.title)
                                         .grayscale(selectedMood == index ? 0 : 0.8)
@@ -55,42 +57,44 @@ struct MoodHowStep: View {
 
                                     Text(mood.label)
                                         .font(.caption2)
-                                        .foregroundStyle(selectedMood == index ? .primary : .secondary)
+                                        .foregroundStyle(selectedMood == index ? SupportTheme.textPrimary : SupportTheme.textSecondary)
                                 }
                             }
-                            .scaleEffect(selectedMood == index ? 1.15 : 1.0)
+                            .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
+                            .accessibilityLabel(mood.label)
+                            .accessibilityAddTraits(selectedMood == index ? .isSelected : [])
                         }
                     }
                 }
-                .padding(12)
-                .background(Color(.secondarySystemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 16))
-                .padding(.horizontal, 20)
+                .padding(SupportTheme.Spacing.s)
+                .background(SupportTheme.surface)
+                .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
+                .padding(.horizontal, SupportTheme.Spacing.l)
 
                 // Optional details
                 if showDetails {
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                         Text("Add context (optional)")
                             .font(.caption.weight(.medium))
 
-                        HStack(spacing: 8) {
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 100))], spacing: SupportTheme.Spacing.xs) {
                             TagPill(text: "Work")
                             TagPill(text: "Sleep")
                             TagPill(text: "Exercise")
                             TagPill(text: "Social")
                         }
                     }
-                    .padding(12)
-                    .background(Color(.tertiarySystemBackground))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .padding(.horizontal, 20)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .padding(SupportTheme.Spacing.s)
+                    .background(SupportTheme.elevated)
+                    .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
+                    .padding(.horizontal, SupportTheme.Spacing.l)
+                    .transition(.opacity)
                 }
 
                 // Tip
-                Text("Tap a mood above to try it out!")
+                Text("Tap a mood above to try it out.")
                     .font(.caption)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .opacity(selectedMood == nil ? 1 : 0)
             }
         }
@@ -103,9 +107,9 @@ private struct TagPill: View {
     var body: some View {
         Text(text)
             .font(.caption)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(Color(.systemGray5))
+            .padding(.horizontal, SupportTheme.Spacing.xs)
+            .padding(.vertical, SupportTheme.Spacing.xs)
+            .background(SupportTheme.separator)
             .clipShape(Capsule())
     }
 }

@@ -19,7 +19,7 @@ struct WelcomeBackView: View {
 
             // Main content
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: SupportTheme.Spacing.l) {
                     // Warm illustration
                     illustrationSection
 
@@ -27,27 +27,17 @@ struct WelcomeBackView: View {
                     messageSection
 
                     // What you missed (if any activity)
-                    if absenceSummary.hasActivity {
-                        WhatYouMissedCard(summary: absenceSummary)
-                    }
+                    if hasVisibleActivity { missedActivityCard }
 
                     // Action buttons
                     actionButtons
                 }
-                .padding(.horizontal, 24)
-                .padding(.bottom, 40)
+                .padding(.horizontal, SupportTheme.Spacing.l)
+                .padding(.bottom, SupportTheme.Spacing.xl)
             }
         }
-        .background(
-            LinearGradient(
-                colors: [
-                    Color(.systemBackground),
-                    Color.blue.opacity(0.05)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        )
+        .supportSheet()
+        .foregroundStyle(SupportTheme.textPrimary)
         .overlay {
             if showConfetti {
                 CelebrationParticles()
@@ -70,6 +60,29 @@ struct WelcomeBackView: View {
         }
     }
 
+    private var hasVisibleActivity: Bool {
+        absenceSummary.hugsReceived > 0 || absenceSummary.circlePosts > 0
+            || absenceSummary.friendMilestones.contains { !$0.isStreak }
+    }
+
+    private var missedActivityCard: some View {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
+            Text("While you were away").font(.headline).accessibilityAddTraits(.isHeader)
+            if absenceSummary.hugsReceived > 0 {
+                SupportRowLabel(title: absenceSummary.hugsReceived == 1
+                    ? "Someone sent you a hug" : "\(absenceSummary.hugsReceived) people sent you hugs", icon: "heart")
+            }
+            if absenceSummary.circlePosts > 0 {
+                SupportRowLabel(title: absenceSummary.circlePosts == 1
+                    ? "1 new post in your circles" : "\(absenceSummary.circlePosts) new posts in your circles", icon: "bubble.left.and.bubble.right")
+            }
+            ForEach(absenceSummary.friendMilestones.filter { !$0.isStreak }.prefix(3)) { milestone in
+                SupportRowLabel(title: "\(milestone.name)'s milestone", subtitle: milestone.milestone, icon: "star")
+            }
+        }
+        .supportCard()
+    }
+
     // MARK: - Header
 
     private var headerSection: some View {
@@ -80,46 +93,19 @@ struct WelcomeBackView: View {
             } label: {
                 Image(systemName: "xmark.circle.fill")
                     .font(.title2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
+                    .frame(width: SupportTheme.minimumTarget, height: SupportTheme.minimumTarget)
             }
             .accessibilityLabel("Close")
         }
-        .padding()
+        .padding(SupportTheme.Spacing.m)
     }
 
     // MARK: - Illustration
 
     private var illustrationSection: some View {
-        VStack(spacing: 16) {
-            // Friendly wave/sunrise illustration
-            ZStack {
-                Circle()
-                    .fill(
-                        RadialGradient(
-                            colors: [
-                                Color.orange.opacity(0.3),
-                                Color.yellow.opacity(0.1),
-                                Color.clear
-                            ],
-                            center: .center,
-                            startRadius: 20,
-                            endRadius: 80
-                        )
-                    )
-                    .frame(width: 160, height: 160)
-
-                Image(systemName: illustrationIcon)
-                    .font(.system(size: 64))
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [.orange, .yellow],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-            }
-        }
-        .padding(.top, 16)
+        CelebrationEmblem(.symbol(illustrationIcon), diameter: 96)
+            .padding(.top, SupportTheme.Spacing.m)
     }
 
     private var illustrationIcon: String {
@@ -138,26 +124,27 @@ struct WelcomeBackView: View {
     // MARK: - Message
 
     private var messageSection: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: SupportTheme.Spacing.s) {
             Text(absenceSummary.lapseTier.welcomeMessage)
                 .font(.title2)
                 .fontWeight(.bold)
+                .accessibilityAddTraits(.isHeader)
                 .multilineTextAlignment(.center)
-                .foregroundStyle(.primary)
+                .foregroundStyle(SupportTheme.textPrimary)
 
             Text(absenceSummary.lapseTier.subMessage)
                 .font(.body)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.horizontal)
+        .padding(.horizontal, SupportTheme.Spacing.m)
     }
 
     // MARK: - Actions
 
     private var actionButtons: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             // Primary: Continue Journey
             Button {
                 continueJourney()
@@ -166,19 +153,8 @@ struct WelcomeBackView: View {
                     Image(systemName: "arrow.right.circle.fill")
                     Text("Continue My Journey")
                 }
-                .font(.headline)
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 16)
-                .background(
-                    LinearGradient(
-                        colors: [.blue, .purple],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                )
-                .cornerRadius(16)
             }
+            .buttonStyle(.supportPrimary)
             .accessibilityLabel("Continue My Journey")
 
             // Secondary: Fresh Start (only for extended breaks+)
@@ -189,29 +165,24 @@ struct WelcomeBackView: View {
                     HStack {
                         if isPerformingFreshStart {
                             ProgressView()
-                                .tint(.primary)
+                                .tint(SupportTheme.textPrimary)
                         } else {
                             Image(systemName: "arrow.counterclockwise.circle")
-                            Text("Start Fresh (Day 2 Bonus!)")
+                            Text("Start fresh")
                         }
                     }
-                    .font(.subheadline.weight(.medium))
-                    .foregroundColor(.primary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background(Color(.secondarySystemBackground))
-                    .cornerRadius(12)
                 }
+                .buttonStyle(.supportSecondary)
                 .disabled(isPerformingFreshStart)
-                .accessibilityLabel("Start Fresh with Day 2 Bonus")
+                .accessibilityLabel("Start fresh")
 
-                Text("Reset your visible streak and start at Day 2 as a welcome-back bonus")
+                Text("Make room for a fresh start. Your completed activities and earned XP stay with you.")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .multilineTextAlignment(.center)
             }
         }
-        .padding(.top, 8)
+        .padding(.top, SupportTheme.Spacing.xs)
     }
 
     // MARK: - Actions
@@ -297,7 +268,7 @@ struct WelcomeBackView: View {
             hugsReceived: 3,
             circlePosts: 5,
             friendMilestones: [
-                .init(name: "Sarah", milestone: "7-day streak!", isStreak: true)
+                .init(name: "Sarah", milestone: "A new level reached", isStreak: false)
             ]
         )
     )

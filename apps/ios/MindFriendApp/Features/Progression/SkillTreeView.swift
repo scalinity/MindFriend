@@ -9,22 +9,27 @@ struct SkillTreeView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 16) {
+            VStack(spacing: SupportTheme.Spacing.m) {
                 // Header
                 headerSection
 
                 // Skills list
                 if isLoading {
                     ProgressView()
-                        .padding(.top, 40)
+                        .padding(.top, SupportTheme.Spacing.xl)
+                } else if let error {
+                    SupportUnavailableState(title: "Skills couldn't load", message: error.localizedDescription,
+                        actionTitle: "Try again", action: { Task { await loadSkills() } })
                 } else if skills.isEmpty {
                     emptyState
                 } else {
                     skillsList
                 }
             }
-            .padding()
+            .padding(SupportTheme.Spacing.m)
         }
+        .supportScreen()
+        .foregroundStyle(SupportTheme.textPrimary)
         .navigationTitle("Skills")
         .navigationBarTitleDisplayMode(.large)
         .task {
@@ -39,20 +44,20 @@ struct SkillTreeView: View {
     // MARK: - Sections
 
     private var headerSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Your Mastery Progress")
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
+            Text("Your skill progress")
                 .font(.title2)
-                .fontWeight(.bold)
+                .fontWeight(.bold).accessibilityAddTraits(.isHeader)
 
             Text("Complete exercises to level up each skill. Higher skill levels unlock advanced techniques.")
                 .font(.subheadline)
-                .foregroundColor(.secondary)
+                .foregroundColor(SupportTheme.textSecondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var skillsList: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: SupportTheme.Spacing.s) {
             ForEach(skills) { skill in
                 SkillRow(skill: skill)
             }
@@ -60,26 +65,27 @@ struct SkillTreeView: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             Image(systemName: "sparkles")
                 .font(.system(size: 48))
-                .foregroundColor(.secondary)
+                .foregroundColor(SupportTheme.textSecondary)
 
-            Text("No Skill Progress Yet")
+            Text("No skill progress yet")
                 .font(.headline)
 
             Text("Complete exercises to start building your skills. Each exercise type has its own mastery track.")
                 .font(.subheadline)
-                .foregroundColor(.secondary)
+                .foregroundColor(SupportTheme.textSecondary)
                 .multilineTextAlignment(.center)
         }
-        .padding(.top, 40)
-        .padding(.horizontal)
+        .padding(.top, SupportTheme.Spacing.xl)
+        .padding(.horizontal, SupportTheme.Spacing.m)
     }
 
     // MARK: - Data Loading
 
     private func loadSkills() async {
+        error = nil
         do {
             skills = try await container.supabaseDataService.getSkillProgress()
             isLoading = false
@@ -93,11 +99,15 @@ struct SkillTreeView: View {
 /// Individual skill row with progress visualization
 struct SkillRow: View {
     let skill: SkillProgress
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             // Skill header
-            HStack {
+            let layout = typeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: SupportTheme.Spacing.s))
+                : AnyLayout(HStackLayout(alignment: .top, spacing: SupportTheme.Spacing.s))
+            layout {
                 // Icon
                 ZStack {
                     Circle()
@@ -109,19 +119,19 @@ struct SkillRow: View {
                         .foregroundColor(skillColor)
                 }
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     Text(skill.skillType.displayName)
                         .font(.headline)
 
                     Text(skill.levelTitle)
                         .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(SupportTheme.textSecondary)
                 }
 
-                Spacer()
+                if !typeSize.isAccessibilitySize { Spacer() }
 
                 // Level badge
-                VStack(alignment: .trailing, spacing: 2) {
+                VStack(alignment: .trailing, spacing: SupportTheme.Spacing.xxs) {
                     Text("Level \(skill.skillLevel)")
                         .font(.subheadline)
                         .fontWeight(.semibold)
@@ -129,24 +139,20 @@ struct SkillRow: View {
 
                     Text("\(skill.xp) XP")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(SupportTheme.textSecondary)
                 }
             }
 
             // Progress bar
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(Color(.systemGray5))
+                    RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                        .fill(SupportTheme.separator)
                         .frame(height: 8)
 
-                    RoundedRectangle(cornerRadius: 4)
+                    RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
                         .fill(
-                            LinearGradient(
-                                colors: [skillColor, skillColor.opacity(0.7)],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
+                            SupportTheme.accent
                         )
                         .frame(width: geometry.size.width * progressPercentage, height: 8)
                 }
@@ -158,9 +164,9 @@ struct SkillRow: View {
                 if skill.skillLevel < 5 {
                     Text("\(xpToNextLevel) XP to next level")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(SupportTheme.textSecondary)
                 } else {
-                    Text("Max level reached!")
+                    Text("Highest level reached")
                         .font(.caption)
                         .foregroundColor(skillColor)
                 }
@@ -170,12 +176,10 @@ struct SkillRow: View {
                 Text("\(Int(progressPercentage * 100))%")
                     .font(.caption)
                     .fontWeight(.medium)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(SupportTheme.textSecondary)
             }
         }
-        .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(12)
+        .supportCard()
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(skill.skillType.displayName), level \(skill.skillLevel), \(skill.levelTitle). \(skill.xp) XP total.")
     }
@@ -183,7 +187,7 @@ struct SkillRow: View {
     // MARK: - Computed Properties
 
     private var skillIcon: String { skill.skillType.icon }
-    private var skillColor: Color { skill.skillType.themeColor }
+    private var skillColor: Color { SupportTheme.accent }
 
     private var progressPercentage: Double {
         let thresholds = SkillLevel.thresholds
@@ -215,10 +219,10 @@ struct SkillIndicatorView: View {
     let xp: Int
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: SupportTheme.Spacing.xs) {
             Image(systemName: skillType.icon)
                 .font(.caption)
-                .foregroundColor(skillType.themeColor)
+                .foregroundColor(SupportTheme.accent)
 
             Text("Lvl \(level)")
                 .font(.caption)
@@ -226,16 +230,16 @@ struct SkillIndicatorView: View {
 
             Text("•")
                 .font(.caption2)
-                .foregroundColor(.secondary)
+                .foregroundColor(SupportTheme.textSecondary)
 
             Text("\(xp) XP")
                 .font(.caption)
-                .foregroundColor(.secondary)
+                .foregroundColor(SupportTheme.textSecondary)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 5)
-        .background(skillType.themeColor.opacity(0.1))
-        .cornerRadius(12)
+        .padding(.horizontal, SupportTheme.Spacing.xs)
+        .padding(.vertical, SupportTheme.Spacing.xxs)
+        .background(SupportTheme.accent.opacity(0.1))
+        .cornerRadius(SupportTheme.controlRadius)
     }
 }
 
@@ -247,7 +251,7 @@ struct SkillIndicatorView: View {
 }
 
 #Preview("Skill Row") {
-    VStack(spacing: 16) {
+    VStack(spacing: SupportTheme.Spacing.m) {
         SkillRow(skill: SkillProgress(
             id: "1",
             userId: "u1",
@@ -280,5 +284,5 @@ struct SkillIndicatorView: View {
 
         SkillIndicatorView(skillType: .breathing, level: 2, xp: 320)
     }
-    .padding()
+    .padding(SupportTheme.Spacing.m)
 }

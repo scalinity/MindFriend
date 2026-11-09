@@ -3,7 +3,7 @@
 //  MindFriendApp
 //
 //  First-time tutorial for the Quest feature
-//  Explains quest selection, completion, streaks, and shields
+//  Explains quest selection, completion, progress, and room for pauses
 //
 
 import SwiftUI
@@ -11,6 +11,7 @@ import SwiftUI
 /// Main container for the Quest tutorial walkthrough
 struct QuestTutorialFlow: View {
     @EnvironmentObject var container: DependencyContainer
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let onComplete: () -> Void
 
@@ -28,9 +29,9 @@ struct QuestTutorialFlow: View {
             // Progress bar
             ProgressView(value: currentStep.progress)
                 .progressViewStyle(.linear)
-                .tint(.orange)
-                .padding(.horizontal)
-                .padding(.top, 60)
+                .tint(SupportTheme.Celebration.gold)
+                .padding(.horizontal, SupportTheme.Spacing.m)
+                .padding(.top, SupportTheme.Spacing.xl)
 
             // Step content
             Group {
@@ -45,18 +46,16 @@ struct QuestTutorialFlow: View {
                     QuestShieldStep(onComplete: completeTutorial)
                 }
             }
-            .transition(.asymmetric(
-                insertion: .move(edge: .trailing).combined(with: .opacity),
-                removal: .move(edge: .leading).combined(with: .opacity)
-            ))
+            .id(currentStep)
+            .transition(.opacity)
         }
-        .background(Color(.systemBackground))
-        .animation(.easeInOut(duration: 0.3), value: currentStep)
+        .background(SupportTheme.canvas)
+        .animation(.easeInOut(duration: reduceMotion ? 0.2 : 0.3), value: currentStep)
     }
 
     private func advanceStep() {
         if let nextStep = TutorialStep(rawValue: currentStep.rawValue + 1) {
-            withAnimation {
+            withAnimation(.easeInOut(duration: reduceMotion ? 0.2 : 0.3)) {
                 currentStep = nextStep
             }
         }

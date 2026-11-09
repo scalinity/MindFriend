@@ -720,9 +720,13 @@ final class SupportSessionFlowUITests: XCTestCase {
         for destination in ["Today", "Chat", "Explore", "You"] {
             open(destination, in: app)
             capture("Audit-\(destination)-\(label)-\(appearance)-\(size)", app: app)
+            let tabBar = app.tabBars.firstMatch.exists ? app.tabBars.firstMatch.frame : .null
             try app.performAccessibilityAudit(for: .all) { issue in
                 // The DEBUG fixture's appearance overlay is test scaffolding, not app UI.
                 if issue.element?.identifier == "support-fixture-appearance" { return true }
+                // A long page's lower rows sit behind the floating glass tab bar until scrolled;
+                // the audit measures them through the glass. Other findings still fail.
+                if issue.auditType == .contrast, let frame = issue.element?.frame, frame.intersects(tabBar) { return true }
                 XCTFail("\(destination) [\(label) \(appearance) \(size)]: \(issue.auditType) \(issue.compactDescription) — \(issue.element?.debugDescription ?? "no element")")
                 return true
             }

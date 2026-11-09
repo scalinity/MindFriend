@@ -3,6 +3,7 @@ import SwiftUI
 /// Horizontal bar of emoji reactions for milestone posts in circle feed
 struct CelebrationReactionsBar: View {
     @EnvironmentObject var container: DependencyContainer
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let celebrationId: UUID
     @State private var reactions: [CelebrationReactionSummary] = []
@@ -10,7 +11,9 @@ struct CelebrationReactionsBar: View {
     @State private var isProcessingReaction = false
 
     var body: some View {
-        HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
+            ScrollView(.horizontal) {
+            HStack(spacing: SupportTheme.Spacing.xs) {
             ForEach(CelebrationEmoji.allCases, id: \.rawValue) { emoji in
                 ReactionButton(
                     emoji: emoji.rawValue,
@@ -20,16 +23,18 @@ struct CelebrationReactionsBar: View {
                 )
             }
 
-            Spacer()
+            }
+            }
+            .scrollIndicators(.hidden)
 
             if !reactions.isEmpty {
                 let totalCount = reactions.reduce(0) { $0 + $1.count }
                 Text("\(totalCount) \(totalCount == 1 ? "reaction" : "reactions")")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
         }
-        .padding(.horizontal, 4)
+        .padding(.horizontal, SupportTheme.Spacing.xxs)
         .task {
             await loadReactions()
         }
@@ -62,7 +67,7 @@ struct CelebrationReactionsBar: View {
         // Optimistic update
         let wasSelected = isUserReaction(emoji)
 
-        withAnimation(.spring(response: 0.3)) {
+        withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .spring(response: 0.3)) {
             if wasSelected {
                 // Remove reaction
                 if let index = reactions.firstIndex(where: { $0.emoji == emoji }) {
@@ -146,25 +151,25 @@ struct ReactionButton: View {
         Button {
             onTap()
         } label: {
-            HStack(spacing: 4) {
+            HStack(spacing: SupportTheme.Spacing.xxs) {
                 Text(emoji)
                     .font(.system(size: 16))
 
                 if count > 0 {
                     Text("\(count)")
                         .font(.caption2.monospacedDigit())
-                        .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+                        .foregroundStyle(isSelected ? SupportTheme.accent : SupportTheme.textSecondary)
                 }
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
+            .padding(.horizontal, SupportTheme.Spacing.xs)
+            .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
             .background(
                 Capsule()
-                    .fill(isSelected ? Color.accentColor.opacity(0.15) : Color(uiColor: .systemGray6))
+                    .fill(isSelected ? SupportTheme.elevated : SupportTheme.surface)
             )
             .overlay(
                 Capsule()
-                    .strokeBorder(isSelected ? Color.accentColor.opacity(0.3) : .clear, lineWidth: 1)
+                    .strokeBorder(isSelected ? SupportTheme.accent : SupportTheme.border, lineWidth: 1)
             )
         }
         .buttonStyle(ScaleButtonStyle())
@@ -174,10 +179,12 @@ struct ReactionButton: View {
 }
 
 struct ScaleButtonStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     func makeBody(configuration: Self.Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed ? 0.9 : 1.0)
-            .animation(.spring(response: 0.2), value: configuration.isPressed)
+            .scaleEffect(reduceMotion ? 1 : (configuration.isPressed ? 0.96 : 1))
+            .opacity(configuration.isPressed ? 0.75 : 1)
+            .animation(reduceMotion ? .easeInOut(duration: 0.2) : .spring(response: 0.2), value: configuration.isPressed)
     }
 }
 
@@ -189,11 +196,11 @@ struct MilestonePostCard: View {
     let celebrationId: UUID?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             // Header
             HStack {
                 Image(systemName: "star.fill")
-                    .foregroundStyle(.yellow)
+                    .foregroundStyle(SupportTheme.Celebration.gold)
 
                 Text(post.userDisplayName)
                     .font(.subheadline.weight(.semibold))
@@ -202,7 +209,7 @@ struct MilestonePostCard: View {
 
                 Text(post.createdAt.timeAgoShort)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
 
             // Milestone content
@@ -212,13 +219,13 @@ struct MilestonePostCard: View {
             // Reactions bar (if celebration ID is available)
             if let celebrationId = celebrationId {
                 CelebrationReactionsBar(celebrationId: celebrationId)
-                    .padding(.top, 4)
+                    .padding(.top, SupportTheme.Spacing.xxs)
             }
         }
-        .padding(16)
+        .padding(SupportTheme.Spacing.m)
         .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color(.secondarySystemBackground))
+            RoundedRectangle(cornerRadius: SupportTheme.cardRadius)
+                .fill(SupportTheme.surface)
         )
     }
 }
@@ -236,25 +243,25 @@ extension Date {
 // MARK: - Preview
 
 #Preview("Reactions Bar") {
-    VStack(spacing: 20) {
+    VStack(spacing: SupportTheme.Spacing.l) {
         CelebrationReactionsBar(celebrationId: UUID())
             .environmentObject(DependencyContainer.preview)
-            .padding()
-            .background(Color(.systemBackground))
+            .padding(SupportTheme.Spacing.m)
+            .background(SupportTheme.canvas)
 
         CelebrationReactionsBar(celebrationId: UUID())
             .environmentObject(DependencyContainer.preview)
-            .padding()
-            .background(Color(.secondarySystemBackground))
+            .padding(SupportTheme.Spacing.m)
+            .background(SupportTheme.surface)
     }
-    .padding()
+    .padding(SupportTheme.Spacing.m)
 }
 
 #Preview("Reaction Button") {
-    HStack(spacing: 12) {
+    HStack(spacing: SupportTheme.Spacing.s) {
         ReactionButton(emoji: "🎉", count: 5, isSelected: true, onTap: {})
         ReactionButton(emoji: "👏", count: 3, isSelected: false, onTap: {})
         ReactionButton(emoji: "🔥", count: 0, isSelected: false, onTap: {})
     }
-    .padding()
+    .padding(SupportTheme.Spacing.m)
 }

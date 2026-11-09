@@ -46,6 +46,8 @@ struct QuestChoiceView: View {
                     )
                 }
             }
+            .supportScreen()
+            .foregroundStyle(SupportTheme.textPrimary)
             .navigationTitle("Today's Quest")
             .navigationBarTitleDisplayMode(.inline)
             .navigationDestination(item: $selectedQuest) { quest in
@@ -214,21 +216,21 @@ private struct QuestOptionsContent: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 20) {
+            VStack(spacing: SupportTheme.Spacing.l) {
                 // Header
-                VStack(spacing: 8) {
-                    Text("Choose Your Quest")
+                VStack(spacing: SupportTheme.Spacing.xs) {
+                    Text("Choose your quest")
                         .font(.title2)
-                        .fontWeight(.bold)
+                        .fontWeight(.bold).accessibilityAddTraits(.isHeader)
 
                     Text("Pick the option that fits your day")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
-                .padding(.top)
+                .padding(.top, SupportTheme.Spacing.m)
 
                 // Quest options
-                VStack(spacing: 16) {
+                VStack(spacing: SupportTheme.Spacing.m) {
                     // Assigned quest (Your Current Quest) - show at top if user has one
                     if let assignedQuest = assignedQuest {
                         AssignedQuestCard(
@@ -243,7 +245,7 @@ private struct QuestOptionsContent: View {
                         QuestOptionCard(
                             template: primaryQuest,
                             badge: "Recommended",
-                            badgeColor: .green,
+                            badgeColor: SupportTheme.accent,
                             xpNote: nil,
                             onSelect: onSelectPrimary
                         )
@@ -263,14 +265,14 @@ private struct QuestOptionsContent: View {
                     if let altQuest = alternatives.altQuest {
                         QuestOptionCard(
                             template: altQuest,
-                            badge: "Different Focus",
-                            badgeColor: .purple,
+                            badge: "Different focus",
+                            badgeColor: SupportTheme.accent,
                             xpNote: nil,
                             onSelect: onSelectAlt
                         )
                     }
                 }
-                .padding(.horizontal)
+                .padding(.horizontal, SupportTheme.Spacing.m)
 
                 // Reroll section
                 RerollButton(
@@ -278,8 +280,8 @@ private struct QuestOptionsContent: View {
                     isRerolling: isRerolling,
                     onReroll: onReroll
                 )
-                .padding(.horizontal)
-                .padding(.top, 8)
+                .padding(.horizontal, SupportTheme.Spacing.m)
+                .padding(.top, SupportTheme.Spacing.xs)
 
                 Spacer(minLength: 20)
             }
@@ -298,14 +300,14 @@ struct QuestOptionCard: View {
 
     var body: some View {
         Button(action: onSelect) {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                 // Header with badge
                 HStack {
                     Image(systemName: template.type.icon)
                         .font(.title2)
                         .foregroundStyle(badgeColor)
 
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                         Text(badge)
                             .font(.caption)
                             .fontWeight(.semibold)
@@ -313,43 +315,43 @@ struct QuestOptionCard: View {
 
                         Text(template.title)
                             .font(.headline)
-                            .foregroundStyle(.primary)
+                            .foregroundStyle(SupportTheme.textPrimary)
                     }
 
                     Spacer()
 
                     Image(systemName: "chevron.right")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
 
                 Text(template.description)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
+                    .foregroundStyle(SupportTheme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
                     .multilineTextAlignment(.leading)
 
                 // Metadata
-                HStack(spacing: 16) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                     Label("\(template.estimatedMinutes) min", systemImage: "clock")
                     Label(template.difficulty, systemImage: "speedometer")
 
                     if let xpNote = xpNote {
                         Text(xpNote)
                             .fontWeight(.medium)
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(SupportTheme.Celebration.gold)
                     }
                 }
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
             }
-            .padding()
+            .padding(SupportTheme.Spacing.m)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(.secondarySystemBackground))
-            .cornerRadius(16)
+            .background(SupportTheme.surface)
+            .cornerRadius(SupportTheme.cardRadius)
             .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(badgeColor.opacity(0.3), lineWidth: 1)
+                RoundedRectangle(cornerRadius: SupportTheme.cardRadius)
+                    .stroke(SupportTheme.border, lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
@@ -364,52 +366,52 @@ struct AssignedQuestCard: View {
 
     var body: some View {
         Button(action: onSelect) {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                 // Header with badge
                 HStack {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.title2)
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(SupportTheme.accent)
 
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Your Current Quest")
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
+                        Text("Your current quest")
                             .font(.caption)
                             .fontWeight(.semibold)
-                            .foregroundStyle(.blue)
+                            .foregroundStyle(SupportTheme.accent)
 
                         Text(quest.template.title)
                             .font(.headline)
-                            .foregroundStyle(.primary)
+                            .foregroundStyle(SupportTheme.textPrimary)
                     }
 
                     Spacer()
 
                     Image(systemName: "chevron.right")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
 
                 Text(quest.template.description)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
+                    .foregroundStyle(SupportTheme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
                     .multilineTextAlignment(.leading)
 
                 // Metadata
-                HStack(spacing: 16) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                     Label("\(quest.template.estimatedMinutes) min", systemImage: "clock")
                     Label(quest.template.difficulty, systemImage: "speedometer")
                 }
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
             }
-            .padding()
+            .padding(SupportTheme.Spacing.m)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(.secondarySystemBackground))
-            .cornerRadius(16)
+            .background(SupportTheme.surface)
+            .cornerRadius(SupportTheme.cardRadius)
             .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(Color.blue.opacity(0.3), lineWidth: 1)
+                RoundedRectangle(cornerRadius: SupportTheme.cardRadius)
+                    .stroke(SupportTheme.border, lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
@@ -425,56 +427,56 @@ struct QuickVariantCard: View {
 
     var body: some View {
         Button(action: onSelect) {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                 // Header with badge
                 HStack {
                     Image(systemName: "bolt.fill")
                         .font(.title2)
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(SupportTheme.Celebration.gold)
 
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Quick Version")
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
+                        Text("Quick version")
                             .font(.caption)
                             .fontWeight(.semibold)
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(SupportTheme.Celebration.gold)
 
                         Text(variant.title)
                             .font(.headline)
-                            .foregroundStyle(.primary)
+                            .foregroundStyle(SupportTheme.textPrimary)
                     }
 
                     Spacer()
 
                     Image(systemName: "chevron.right")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
 
                 Text(variant.description)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
+                    .foregroundStyle(SupportTheme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
                     .multilineTextAlignment(.leading)
 
                 // Metadata
-                HStack(spacing: 16) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                     Label("\(variant.estimatedMinutes) min", systemImage: "clock")
                     Label("Easy", systemImage: "speedometer")
 
                     Text("\(Int(variant.xpMultiplier * 100))% XP")
                         .fontWeight(.medium)
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(SupportTheme.Celebration.gold)
                 }
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
             }
-            .padding()
+            .padding(SupportTheme.Spacing.m)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(.secondarySystemBackground))
-            .cornerRadius(16)
+            .background(SupportTheme.surface)
+            .cornerRadius(SupportTheme.cardRadius)
             .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(Color.orange.opacity(0.3), lineWidth: 1)
+                RoundedRectangle(cornerRadius: SupportTheme.cardRadius)
+                    .stroke(SupportTheme.border, lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
@@ -489,7 +491,7 @@ struct RerollButton: View {
     let onReroll: () -> Void
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: SupportTheme.Spacing.xs) {
             Button(action: onReroll) {
                 HStack {
                     if isRerolling {
@@ -500,25 +502,19 @@ struct RerollButton: View {
                     }
                     Text(isRerolling ? "Getting new quest..." : "Try a different quest")
                 }
-                .font(.subheadline)
-                .fontWeight(.medium)
-                .foregroundStyle(alternatives.canReroll ? Color.accentColor : Color.secondary)
-                .padding(.vertical, 12)
-                .padding(.horizontal, 20)
-                .background(Color(.tertiarySystemBackground))
-                .cornerRadius(20)
             }
+            .buttonStyle(.supportSecondary)
             .disabled(!alternatives.canReroll || isRerolling)
 
             // Reroll count indicator
             if alternatives.isPremiumUnlimited {
                 Label("Unlimited rerolls", systemImage: "star.fill")
                     .font(.caption2)
-                    .foregroundStyle(.yellow)
+                    .foregroundStyle(SupportTheme.Celebration.gold)
             } else {
                 Text("\(alternatives.rerollsRemaining) reroll\(alternatives.rerollsRemaining == 1 ? "" : "s") remaining")
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
         }
     }
@@ -528,11 +524,11 @@ struct RerollButton: View {
 
 private struct LoadingView: View {
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             ProgressView()
             Text("Loading quest options...")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
     }
 }
@@ -544,25 +540,25 @@ private struct ErrorView: View {
     let onRetry: () async -> Void
 
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             Image(systemName: "exclamationmark.triangle")
                 .font(.largeTitle)
-                .foregroundStyle(.orange)
+                .foregroundStyle(SupportTheme.Celebration.gold)
 
             Text("Couldn't load quests")
                 .font(.headline)
 
             Text(message)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .multilineTextAlignment(.center)
 
             Button("Try Again") {
                 Task { await onRetry() }
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.supportPrimary)
         }
-        .padding()
+        .padding(SupportTheme.Spacing.m)
     }
 }
 

@@ -40,22 +40,25 @@ struct SupportActivityView: View {
             Group {
                 if let activity {
                     ScrollView {
-                        VStack(alignment: .leading, spacing: 24) {
-                            if activity.status.isTerminal { reflection(activity) }
-                            else { work(activity) }
-                            if let error { Label(error, systemImage: "exclamationmark.circle").foregroundStyle(.primary) }
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.l) {
+                            VStack(alignment: .leading, spacing: SupportTheme.Spacing.l) {
+                                if activity.status.isTerminal { reflection(activity) }
+                                else { work(activity) }
+                            }
+                            .supportCard()
+                            if let error { Label(error, systemImage: "exclamationmark.circle").foregroundStyle(SupportTheme.textPrimary) }
                             if needsRecoveryChoice {
-                                Button("Review recovery files") { showRecoveryChoice = true }.frame(minHeight: 44)
+                                Button("Review recovery files") { showRecoveryChoice = true }.frame(minHeight: SupportTheme.minimumTarget)
                             }
                             Label(isSaving || draftSavePending ? "Saving on this device…" : "Saved on this device · account sync pending",
                                   systemImage: isSaving || draftSavePending ? "clock" : "checkmark.circle")
                                 .font(.subheadline).foregroundStyle(SupportTheme.textSecondary)
                         }
                         .frame(maxWidth: SupportTheme.readableWidth, alignment: .leading)
-                        .padding(20).frame(maxWidth: .infinity)
+                        .padding(SupportTheme.Spacing.m).frame(maxWidth: .infinity)
                     }
                     .scrollDismissesKeyboard(.interactively)
-                    .background(SupportTheme.canvas)
+                    .supportScreen()
                     .safeAreaInset(edge: .bottom) {
                         // While typing, Next and Skip move into the keyboard toolbar.
                         if !fieldFocused && !activity.status.isTerminal && activity.kind != .chooseStep { progression(activity) }
@@ -83,7 +86,8 @@ struct SupportActivityView: View {
                                            description: Text("Your other saved work is still available."))
                 }
             }
-            .tint(SupportTheme.accent)
+            .supportScreen()
+            .foregroundStyle(SupportTheme.textPrimary)
             .alert("Pause this activity?", isPresented: $showPause) {
                 Button("Save and leave") { pause() }
                 Button("Keep going", role: .cancel) {}
@@ -141,7 +145,7 @@ struct SupportActivityView: View {
                 .font(.subheadline).foregroundStyle(SupportTheme.textSecondary)
         }
         if activity.kind == .untangle {
-            Button("Ask for help") { showDiscussion() }.frame(minHeight: 44).disabled(isSaving)
+            Button("Ask for help") { showDiscussion() }.frame(minHeight: SupportTheme.minimumTarget).disabled(isSaving)
         }
         TextField(activity.kind == .chooseStep ? "Your next step" : "Optional response", text: $answer, axis: .vertical)
             .lineLimit(3...10).supportField()
@@ -151,18 +155,17 @@ struct SupportActivityView: View {
         if activity.kind == .chooseStep {
             Text("\(answer.unicodeScalars.count) of 400 characters").font(.caption)
             if !askedForFirstPart {
-                Button("Make it smaller") { askForFirstPart() }.frame(minHeight: 44)
+                Button("Make it smaller") { askForFirstPart() }.frame(minHeight: SupportTheme.minimumTarget)
             }
             // The choices return when typing ends, so they never crowd the keyboard.
             if !fieldFocused {
-                VStack(spacing: 12) {
-                    Button("I did it") { choose(.didIt) }.buttonStyle(.borderedProminent).foregroundStyle(SupportTheme.onAccent)
-                    Button("Save for later") { choose(.saveForLater) }.buttonStyle(.bordered)
-                    Button("Not now") { choose(.notNow) }
+                VStack(spacing: SupportTheme.Spacing.s) {
+                    Button("I did it") { choose(.didIt) }.buttonStyle(.supportPrimary)
+                    Button("Save for later") { choose(.saveForLater) }.buttonStyle(.supportSecondary)
+                    Button("Not now") { choose(.notNow) }.buttonStyle(.supportSecondary)
                 }
                 .disabled(isSaving)
                 .frame(maxWidth: .infinity)
-                .buttonStyle(.bordered)
             }
         }
     }
@@ -181,12 +184,12 @@ struct SupportActivityView: View {
     }
 
     private func progression(_ activity: SupportActivity) -> some View {
-        VStack(spacing: 8) {
+        VStack(spacing: SupportTheme.Spacing.xs) {
             Button(isLastPrompt(activity) ? "Finish" : "Next") { advance(skipped: false) }
-                .buttonStyle(.borderedProminent).foregroundStyle(SupportTheme.onAccent).frame(minHeight: 48)
-            Button("Skip this prompt") { advance(skipped: true) }.frame(minHeight: 44)
+                .buttonStyle(.supportPrimary)
+            Button("Skip this prompt") { advance(skipped: true) }.frame(minHeight: SupportTheme.minimumTarget)
         }
-        .disabled(isSaving).frame(maxWidth: .infinity).padding(16).background(SupportTheme.surface)
+        .disabled(isSaving).frame(maxWidth: .infinity).padding(SupportTheme.Spacing.m).background(SupportTheme.surface)
     }
 
     @ViewBuilder private func reflection(_ activity: SupportActivity) -> some View {
@@ -198,8 +201,8 @@ struct SupportActivityView: View {
         }
         if let reflection = activity.reflection {
             Text("Your reflection: \(reflection.outcome.displayTitle.lowercased()).")
-            Button("Talk about this") { showDiscussion() }.frame(minHeight: 44).disabled(isSaving)
-            Button(returnTitle) { leave() }.buttonStyle(.borderedProminent).foregroundStyle(SupportTheme.onAccent).frame(minHeight: 48)
+            Button("Talk about this") { showDiscussion() }.frame(minHeight: SupportTheme.minimumTarget).disabled(isSaving)
+            Button(returnTitle) { leave() }.buttonStyle(.supportPrimary)
         } else {
             Text("How was that for you?").font(.title2).accessibilityAddTraits(.isHeader)
             TextField("Optional note", text: $note, axis: .vertical).lineLimit(2...6).supportField()
@@ -208,12 +211,13 @@ struct SupportActivityView: View {
             Text(includeAnswers ? "Only the written preview below may be included in later AI context for this session." : "This written preview stays out of automatic session context. Answers you sent in Chat remain in that conversation.")
                 .font(.subheadline).foregroundStyle(SupportTheme.textSecondary)
             if includeAnswers {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Sharing preview").font(.headline)
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
+                    Text("Sharing preview").font(.headline).accessibilityAddTraits(.isHeader)
                     Text(SupportActivityDiscussion.reflectionPreview(activity, note: note)).textSelection(.enabled)
                     Text("This preview is limited to 1,000 text units; emoji can count as two. Your full answers stay saved. Use Talk about this to choose other answers for a message.")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.caption).foregroundStyle(SupportTheme.textSecondary)
                 }
+                .supportCard()
             }
             ForEach([SupportReflectionOutcome.helpful, .notForMe, .notSure, .skip], id: \.self) { outcome in
                 Button(outcome.displayTitle) {
@@ -221,7 +225,7 @@ struct SupportActivityView: View {
                         try await coordinator.reflect(activity.id, outcome: outcome, note: note, includeAnswers: includeAnswers)
                         if outcome != .skip { appState.celebrateCompletion(String(localized: "Reflection saved"), soft: true) }
                     }
-                }.buttonStyle(.bordered).frame(minHeight: 44).disabled(isSaving || note.unicodeScalars.count > 1_000)
+                }.buttonStyle(.supportSecondary).frame(minHeight: SupportTheme.minimumTarget).disabled(isSaving || note.unicodeScalars.count > 1_000)
             }
         }
     }
@@ -362,14 +366,25 @@ struct SupportActivityChoiceButton: View {
     var sessionID: UUID?
     var origin: SupportEntryOrigin = .explore
     var title: String?
+    var icon: String?
     @State private var pendingSession: UUID?
     @State private var showPreviousChoice = false
     @State private var isWorking = false
     @State private var error: String?
 
     var body: some View {
-        Button(title ?? template.title) { start(previous: nil) }
-            .frame(minHeight: 44, alignment: .leading)
+        Button { start(previous: nil) } label: {
+            if let icon {
+                VStack(spacing: SupportTheme.Spacing.xs) {
+                    Image(systemName: icon).font(.title2).accessibilityHidden(true)
+                    Text(title ?? template.title).fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            } else {
+                Text(title ?? template.title)
+            }
+        }
+            .frame(minHeight: SupportTheme.minimumTarget, alignment: .leading)
             .disabled(isWorking)
             .confirmationDialog("An activity is still unfinished", isPresented: $showPreviousChoice, titleVisibility: .visible) {
                 Button("Save it and start this activity") { start(previous: .saveAndPause) }

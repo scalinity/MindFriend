@@ -14,10 +14,10 @@ struct XPGainEvent: Identifiable, Equatable {
 
     var activityLabel: String {
         switch source {
-        case .quest: return "Quest Complete"
+        case .quest: return "Quest complete"
         case .exercise: return "Exercise"
-        case .mood: return "Mood Check-in"
-        case .badge: return "Badge Earned"
+        case .mood: return "Mood check-in"
+        case .badge: return "Badge earned"
         case .streak: return "Bonus"
         case .bonus: return "Bonus"
         case .meditation: return "Meditation"
@@ -41,19 +41,17 @@ struct XPGainToast: View {
     let onDismiss: () -> Void
 
     @State private var isVisible = false
-    @State private var showSparkles = false
     @State private var showLabel = false
     @State private var animationWorkItems: [DispatchWorkItem] = []
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         HStack(spacing: SupportTheme.Spacing.s) {
-            Image(systemName: "sparkles")
+            Image(systemName: haptic ? "sparkles" : "checkmark.circle")
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(SupportTheme.Celebration.gold)
-                .symbolEffect(.bounce, options: .nonRepeating, value: reduceMotion ? false : showSparkles)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("+\(xpAmount) XP")
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
+                Text(haptic ? "+\(xpAmount) XP" : "Check-in saved")
                     .font(.headline)
                     .foregroundStyle(SupportTheme.textPrimary)
                 Text(activityLabel)
@@ -64,11 +62,11 @@ struct XPGainToast: View {
         }
         .padding(.horizontal, SupportTheme.Spacing.m)
         .padding(.vertical, SupportTheme.Spacing.s)
-        .background(SupportTheme.elevated, in: Capsule())
-        .overlay(Capsule().strokeBorder(SupportTheme.Celebration.gold.opacity(0.35), lineWidth: 1))
-        .shadow(color: .black.opacity(0.15), radius: 14, y: 6)
-        .scaleEffect(isVisible || reduceMotion ? 1 : 0.9)
-        .offset(y: isVisible || reduceMotion ? 0 : -16)
+        .background(SupportTheme.elevated, in: RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
+        .overlay(RoundedRectangle(cornerRadius: SupportTheme.controlRadius).strokeBorder(SupportTheme.border, lineWidth: 1))
+
+        .scaleEffect(isVisible || reduceMotion || !haptic ? 1 : 0.9)
+        .offset(y: isVisible || reduceMotion || !haptic ? 0 : -16)
         .opacity(isVisible ? 1 : 0)
         .padding(.top, SupportTheme.Spacing.s)
         .onAppear {
@@ -78,7 +76,7 @@ struct XPGainToast: View {
             cancelAllAnimations()
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Earned \(xpAmount) XP for \(activityLabel)")
+        .accessibilityLabel(haptic ? "Earned \(xpAmount) XP for \(activityLabel)" : "Check-in saved")
         .accessibilityAddTraits(.isStaticText)
     }
 
@@ -90,7 +88,7 @@ struct XPGainToast: View {
     private func startAnimation() {
         if haptic { HapticManager.xpGain() }
 
-        if reduceMotion {
+        if reduceMotion || !haptic {
             // Simple fade for reduced motion
             withAnimation(.easeOut(duration: 0.2)) {
                 isVisible = true
@@ -115,13 +113,6 @@ struct XPGainToast: View {
         withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
             isVisible = true
         }
-
-        // Show sparkles
-        let sparklesWorkItem = DispatchWorkItem {
-            showSparkles = true
-        }
-        animationWorkItems.append(sparklesWorkItem)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: sparklesWorkItem)
 
         // Show activity label
         let labelWorkItem = DispatchWorkItem {
@@ -151,6 +142,7 @@ struct XPGainToast: View {
 
 /// View modifier to show XP gain toast overlay
 struct XPGainModifier: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var achievementService: AchievementService
 
     func body(content: Content) -> some View {
@@ -163,12 +155,10 @@ struct XPGainModifier: ViewModifier {
                         haptic: event.source != .mood,
                         onDismiss: { achievementService.clearXPGain() }
                     )
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .top).combined(with: .opacity),
-                        removal: .opacity
-                    ))
+                    .transition(reduceMotion || event.source == .mood ? .opacity : .asymmetric(
+                        insertion: .move(edge: .top).combined(with: .opacity), removal: .opacity))
                     .zIndex(1000)
-                    .animation(.spring(response: 0.4, dampingFraction: 0.7), value: achievementService.pendingXPGain != nil)
+                    .animation(reduceMotion ? .easeInOut(duration: 0.2) : .spring(response: 0.4, dampingFraction: 0.7), value: achievementService.pendingXPGain != nil)
                 }
             }
     }
@@ -185,7 +175,7 @@ extension View {
 
 #Preview("XP Toast - Quest") {
     ZStack {
-        Color.blue.opacity(0.3).ignoresSafeArea()
+        SupportTheme.accent.opacity(0.3).ignoresSafeArea()
         VStack {
             Text("Main Content")
             Spacer()
@@ -202,7 +192,7 @@ extension View {
 
 #Preview("XP Toast - Exercise") {
     ZStack {
-        Color.green.opacity(0.3).ignoresSafeArea()
+        SupportTheme.accent.opacity(0.3).ignoresSafeArea()
     }
     .overlay(alignment: .top) {
         XPGainToast(
@@ -215,7 +205,7 @@ extension View {
 
 #Preview("XP Toast - Mood") {
     ZStack {
-        Color.purple.opacity(0.3).ignoresSafeArea()
+        SupportTheme.accent.opacity(0.3).ignoresSafeArea()
     }
     .overlay(alignment: .top) {
         XPGainToast(

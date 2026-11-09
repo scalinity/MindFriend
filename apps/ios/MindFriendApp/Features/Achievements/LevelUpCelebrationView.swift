@@ -1,132 +1,50 @@
-// MindFriend Level-Up Celebration View
-// Full-screen celebration animation when user levels up
-
 import SwiftUI
 
+/// Full-screen celebration for a confirmed level change.
 struct LevelUpCelebrationView: View {
     let oldLevel: Int
     let newLevel: Int
     let xpEarned: Int
     let onDismiss: () -> Void
-    
-    @State private var showLevel = false
-    @State private var showParticles = false
-    @State private var showContent = false
-    @State private var levelScale: CGFloat = 0.3
-    
+    @State private var hasDismissed = false
+
     var body: some View {
         ZStack {
-            // Dimmed background
-            Color.black.opacity(0.7)
-                .ignoresSafeArea()
-                .onTapGesture(perform: onDismiss)
-            
-            VStack(spacing: 32) {
-                // Particle emitter
-                if showParticles {
-                    ParticleBurstView(
-                        particleCount: 50,
-                        colors: [.purple, .blue, .pink],
-                        duration: 1.5
-                    )
-                    .frame(width: 300, height: 300)
-                }
-                
-                // Level number with glow
-                if showLevel {
-                    ZStack {
-                        Circle()
-                            .fill(
-                                RadialGradient(
-                                    colors: [.purple.opacity(0.3), .clear],
-                                    center: .center,
-                                    startRadius: 0,
-                                    endRadius: 100
-                                )
-                            )
-                            .frame(width: 200, height: 200)
-                            .blur(radius: 20)
-                        
-                        Text("\(newLevel)")
-                            .font(.system(size: 80, weight: .black))
-                            .foregroundStyle(
-                                LinearGradient(
-                                    colors: [.purple, .blue],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
-                    }
-                    .scaleEffect(levelScale)
-                }
-                
-                // Text content
-                if showContent {
-                    VStack(spacing: 12) {
-                        Text("LEVEL UP!")
-                            .font(.title2.bold())
-                            .foregroundStyle(.white)
-                        
+            SupportTheme.canvas.ignoresSafeArea()
+                .onTapGesture { finish() }.accessibilityHidden(true)
+            CelebrationParticles().ignoresSafeArea()
+            ScrollView {
+                VStack(spacing: SupportTheme.Spacing.l) {
+                    CelebrationEmblem(.text("\(newLevel)"), tint: SupportTheme.Celebration.gold, diameter: 120)
+                    VStack(spacing: SupportTheme.Spacing.s) {
+                        Text("Level up").font(.largeTitle.bold()).accessibilityAddTraits(.isHeader)
                         Text("Level \(oldLevel) → \(newLevel)")
-                            .font(.headline)
-                            .foregroundStyle(.white.opacity(0.8))
-                        
-                        HStack(spacing: 8) {
-                            Image(systemName: "sparkles")
-                                .foregroundStyle(.yellow)
-                            Text("+\(xpEarned) XP")
-                                .font(.subheadline.bold())
-                                .foregroundStyle(.yellow)
-                        }
-                        .padding(.top, 8)
+                            .font(.title3).foregroundStyle(SupportTheme.textSecondary)
+                        Label("+\(xpEarned) XP", systemImage: "sparkles")
+                            .font(.headline).foregroundStyle(SupportTheme.Celebration.gold)
                     }
-                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+                    .celebrationReveal(delay: 0.2)
+                    Button("Continue") { finish() }.buttonStyle(.supportPrimary)
                 }
-                
-                if showContent {
-                    Text("Tap anywhere to continue")
-                        .font(.caption)
-                        .foregroundStyle(.white.opacity(0.5))
-                        .padding(.top)
-                }
+                .multilineTextAlignment(.center)
+                .foregroundStyle(SupportTheme.textPrimary)
+                .frame(maxWidth: SupportTheme.readableWidth)
+                .padding(SupportTheme.Spacing.l)
+                .frame(maxWidth: .infinity)
             }
-            .padding(40)
         }
-        .onAppear {
-            triggerAnimation()
-            scheduleAutoDismiss()
+        .accessibilityAddTraits(.isModal)
+        .onAppear { HapticManager.celebrationSuccess() }
+        .task {
+            try? await Task.sleep(for: .seconds(3))
+            guard !Task.isCancelled else { return }
+            finish()
         }
     }
-    
-    private func triggerAnimation() {
-        // Haptic feedback
-        let generator = UINotificationFeedbackGenerator()
-        generator.notificationOccurred(.success)
-        
-        // Level animation
-        withAnimation(.spring(response: 0.5, dampingFraction: 0.6)) {
-            showLevel = true
-            levelScale = 1.0
-        }
-        
-        // Particles after 0.2s
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-            withAnimation {
-                showParticles = true
-            }
-        }
-        
-        // Content after 0.6s
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-            withAnimation(.easeOut(duration: 0.4)) {
-                showContent = true
-            }
-        }
-    }
-    
-    private func scheduleAutoDismiss() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
-            onDismiss()
-        }
+
+    private func finish() {
+        guard !hasDismissed else { return }
+        hasDismissed = true
+        onDismiss()
     }
 }
