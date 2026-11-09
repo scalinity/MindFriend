@@ -711,6 +711,10 @@ enum SupportTheme {
     static let accent = dynamic(light: 0x3557B7, dark: 0x9BB5FF)
     /// Text on an accent-filled primary button (dark action text in dark mode).
     static let onAccent = dynamic(light: 0xFFFFFF, dark: 0x0E1522)
+    /// Fill of text entry fields, distinct from both canvas and surface.
+    static let field = dynamic(light: 0xFFFFFF, dark: 0x131C2C)
+    /// Boundary of fields and controls: at least 3:1 against canvas, surface and field.
+    static let border = dynamic(light: 0x76839A, dark: 0x64779A)
 
     private static func dynamic(light: UInt32, dark: UInt32) -> Color {
         Color(uiColor: UIColor { traits in
@@ -736,6 +740,26 @@ extension View {
             .tint(SupportTheme.accent)
             .headerProminence(.increased)
     }
+}
+
+/// Text entry on support screens: field fill, a 1pt boundary at least 3:1 against
+/// its surroundings, and the small-control radius. Replaces `.roundedBorder`,
+/// which renders a pure black field on the navy canvas in dark mode.
+struct SupportFieldStyle: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .textFieldStyle(.plain)
+            .foregroundStyle(SupportTheme.textPrimary)
+            .padding(SupportTheme.Spacing.s)
+            .frame(minHeight: SupportTheme.minimumTarget)
+            .background(SupportTheme.field, in: RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
+            .overlay(RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                .strokeBorder(SupportTheme.border, lineWidth: 1))
+    }
+}
+
+extension View {
+    func supportField() -> some View { modifier(SupportFieldStyle()) }
 }
 
 // MARK: - Embedded root navigation

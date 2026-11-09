@@ -125,7 +125,7 @@ struct MoodCheckInView: View {
                                     .font(.headline)
 
                                 TextField("What's on your mind?", text: $note, axis: .vertical)
-                                    .textFieldStyle(.roundedBorder)
+                                    .supportField()
                                     .lineLimit(3...6)
                                     .submitLabel(.done)
                                     .onChange(of: note) { _, newValue in
