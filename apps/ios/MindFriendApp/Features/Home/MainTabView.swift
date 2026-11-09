@@ -106,8 +106,25 @@ struct MainTabView: View {
                 }
             )
         }
-        // TODO: Add Celebration folder files to Xcode project to enable
-        // .celebrationOverlay(pending: $appState.pendingCelebrations)
+        // One celebration layer for both shells: XP, simple celebrations and milestones.
+        .xpGainToast()
+        .simpleCelebrations()
+        .celebrationOverlay(pending: $appState.pendingCelebrations)
+        .task {
+            #if DEBUG
+            if SupportSessionUIFixture.isEnabled { return }
+            #endif
+            // The shell owns the greeting's name and the reward queue: refresh the profile
+            // and collect unshown milestones once per launch.
+            if let profile = try? await container.supabaseAuthService.fetchProfile(),
+               appState.currentUser?.id == profile.id {
+                appState.refreshProfileEntitlements(profile)
+                appState.currentUser = profile
+            }
+            if let pending = try? await container.supabaseDataService.getPendingCelebrations() {
+                appState.addCelebrations(pending)
+            }
+        }
     }
 
     /// Legacy shell: tabs appear as features unlock. Kept byte-for-byte equivalent for rollback.

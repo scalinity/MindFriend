@@ -18,7 +18,7 @@ struct XPGainEvent: Identifiable, Equatable {
         case .exercise: return "Exercise"
         case .mood: return "Mood Check-in"
         case .badge: return "Badge Earned"
-        case .streak: return "Streak Bonus"
+        case .streak: return "Bonus"
         case .bonus: return "Bonus"
         case .meditation: return "Meditation"
         case .checkin: return "Check-in"
@@ -36,6 +36,8 @@ struct XPGainEvent: Identifiable, Equatable {
 struct XPGainToast: View {
     let xpAmount: Int
     let activityLabel: String
+    /// Mood check-ins earn XP quietly: the spec allows no haptic reward for a disclosure.
+    var haptic = true
     let onDismiss: () -> Void
 
     @State private var isVisible = false
@@ -44,59 +46,31 @@ struct XPGainToast: View {
     @State private var animationWorkItems: [DispatchWorkItem] = []
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private let goldColor = Color(red: 1.0, green: 0.84, blue: 0.0) // #FFD700
-    private let orangeGold = Color(red: 1.0, green: 0.65, blue: 0.0) // #FFA500
-
     var body: some View {
-        VStack(spacing: 4) {
-            // XP Amount with sparkles
-            ZStack {
-                // Sparkle particles behind
-                if showSparkles {
-                    XPSparkleParticles(particleCount: 12)
-                        .frame(width: 160, height: 60)
-                }
-
-                // XP text
-                HStack(spacing: 4) {
-                    Image(systemName: "sparkles")
-                        .font(.headline)
-                    Text("+\(xpAmount) XP")
-                        .font(.title2.bold())
-                    Image(systemName: "sparkles")
-                        .font(.headline)
-                }
-                .foregroundStyle(
-                    LinearGradient(
-                        colors: [goldColor, orangeGold],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                )
+        HStack(spacing: SupportTheme.Spacing.s) {
+            Image(systemName: "sparkles")
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(SupportTheme.Celebration.gold)
+                .symbolEffect(.bounce, options: .nonRepeating, value: reduceMotion ? false : showSparkles)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("+\(xpAmount) XP")
+                    .font(.headline)
+                    .foregroundStyle(SupportTheme.textPrimary)
+                Text(activityLabel)
+                    .font(.caption)
+                    .foregroundStyle(SupportTheme.textSecondary)
+                    .opacity(showLabel ? 1 : 0)
             }
-
-            // Activity label
-            Text(activityLabel)
-                .font(.caption)
-                .foregroundStyle(.white.opacity(0.7))
-                .opacity(showLabel ? 1 : 0)
         }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 20)
-                .fill(.black.opacity(0.6))
-                .background(
-                    RoundedRectangle(cornerRadius: 20)
-                        .fill(.ultraThinMaterial)
-                )
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 20))
-        .shadow(color: goldColor.opacity(0.3), radius: 10)
-        .scaleEffect(isVisible ? 1 : 0.8)
-        .offset(y: isVisible ? 0 : -20)
+        .padding(.horizontal, SupportTheme.Spacing.m)
+        .padding(.vertical, SupportTheme.Spacing.s)
+        .background(SupportTheme.elevated, in: Capsule())
+        .overlay(Capsule().strokeBorder(SupportTheme.Celebration.gold.opacity(0.35), lineWidth: 1))
+        .shadow(color: .black.opacity(0.15), radius: 14, y: 6)
+        .scaleEffect(isVisible || reduceMotion ? 1 : 0.9)
+        .offset(y: isVisible || reduceMotion ? 0 : -16)
         .opacity(isVisible ? 1 : 0)
-        .padding(.top, 60) // Below safe area
+        .padding(.top, SupportTheme.Spacing.s)
         .onAppear {
             startAnimation()
         }
@@ -114,8 +88,7 @@ struct XPGainToast: View {
     }
 
     private func startAnimation() {
-        // Haptic feedback
-        HapticManager.xpGain()
+        if haptic { HapticManager.xpGain() }
 
         if reduceMotion {
             // Simple fade for reduced motion
@@ -187,6 +160,7 @@ struct XPGainModifier: ViewModifier {
                     XPGainToast(
                         xpAmount: event.amount,
                         activityLabel: event.activityLabel,
+                        haptic: event.source != .mood,
                         onDismiss: { achievementService.clearXPGain() }
                     )
                     .transition(.asymmetric(

@@ -290,6 +290,8 @@ struct MoodCheckInView: View {
                     }
 
                     Log.ui.info("[MoodCheckIn] Saved successfully")
+                    // A disclosure gets a quiet acknowledgement only: no haptic, no particles.
+                    appState.celebrateCompletion(String(localized: "Check-in saved"), soft: true)
                     dismiss()
                 }
             } catch {

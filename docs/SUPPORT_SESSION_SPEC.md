@@ -120,7 +120,7 @@ A physiological regulation dashboard was considered as a stronger alternative an
 
 ### 3.1 What becomes simpler
 
-- Today has one primary next action. Existing prediction, debt, streak, XP, sleep, insights, and programs stop competing for automatic top-level placement.
+- Today opens with a time-of-day greeting by first name, then one primary next action. Prediction, debt, sleep, insights, and programs stop competing for automatic top-level placement. Streak counts are not shown anywhere; streak data stays on the server.
 - Navigation never changes because a person has not completed a mood, quest, or chat milestone.
 - One destination, **What MindFriend remembers**, controls cloud personalization. Private Vault remains separately named **Private journal · on this device**.
 - A suggestion offers one next action and an explicit alternative. It does not generate an unsolicited multi-step treatment-like plan.
@@ -158,7 +158,7 @@ The implementation must generate a registry inventory from existing navigation a
 | Exercises, grounding, breathing, meditation, micro-moments, sensory toolkit, coping kit | Explore → Practices, searchable and pinnable | Existing library/exercise/breathing/meditation/micro-moment links resolve to canonical content |
 | Programs, therapeutic programs, quest arcs, transition pathways | Explore → Programs and Pathways; active item at top | Program links open directly after ownership/entitlement validation; no activation hold |
 | Circles, buddies, invitations, together/couples/family, mentorship, peer support | Explore → People and Circles, direct named rows for each; active circles/invitations first | Preserve circle IDs and buddy invite parsing; Circles reachable in two deliberate taps from any tab root |
-| Mood entry, mood history, outcomes, streak/XP/achievements, certificates, longitudinal Journey, progress stories, weekly insights | Today optional mood entry; named rows in You → Progress / History; Streaks and shields includes vacation/shield controls | `progress`, `streak`, `achievements`, `mood/history`, `insights` open corresponding views |
+| Mood entry, mood history, outcomes, XP/levels/achievements, certificates, longitudinal Journey, progress stories, weekly insights | Today optional mood entry; named rows in You → Progress / History; the You summary shows level, quests and badges | `progress`, `streak`, `achievements`, `mood/history`, `insights` open corresponding views |
 | Text and voice journals; sleep; quotes; assessments | Explore → Practices → Journal (Text / Voice), Sleep, and Quotes; You → Progress → Assessments with an Explore → Tools and Experiments shortcut; records linked from You → History | Preserve journal, sleep, quote and assessment links; do not recategorize stored records destructively |
 | Health/biometrics, nervous-system estimates, Insight Lab, experiments, advanced personalization / For You | You → Measurements for personal data; Explore → Tools and Experiments for tools; direct For You entry on Explore | Keep explicit access and provenance; no automatic Home dominance |
 | Cloud generated/curated memories and daily intent | You → What MindFriend remembers; Chat → Context | Existing memory routes redirect with a source filter if relevant |
@@ -199,7 +199,7 @@ At default text size on a 375 × 667-point iPhone, the greeting, primary card, p
 
 The default primary card chooses the most recently intentionally active unfinished session. It does not rank people by predicted distress. If several sessions are paused, add “Other unfinished sessions (N)” beneath it. Do not silently merge them. After 14 days without an explicit return, use “Previous session available” instead of an imperative continue prompt; retain the record until the person closes/deletes it. This is a display rule, not deletion or a diagnosis.
 
-Default Home previews are discreet: no quoted intimate text, inferred condition, or remembered relationship detail. A person may enable concern-title previews in Settings. The greeting does not say “You seem stressed,” “Your HRV is low,” “You have wellbeing debt,” or “You missed us.” No streak repair, XP animation, or recovery countdown interrupts entry.
+Default Home previews are discreet: no quoted intimate text, inferred condition, or remembered relationship detail. A person may enable concern-title previews in Settings. The greeting does not say “You seem stressed,” “Your HRV is low,” “You have wellbeing debt,” or “You missed us.” Today greets the person by time of day and first name, for example “Good evening, Sam”, using only the account's name; placeholders, handles and email prefixes are left out. No streak repair or recovery countdown interrupts entry. Earned XP, levels, badges, quests, and milestones appear once, as a calm moment after the action that earned them.
 
 ### 5.3 Session entry and Chat
 
@@ -265,7 +265,9 @@ Switching to text stops microphone capture, closes the voice transport, reconcil
 
 ### 6.1 Identity
 
-Preserve MindFriend's established blue family, but use a restrained canvas, readable typography, and content-led hierarchy. Avoid a dashboard full of gradients, permanent glowing orbs, rainbow status cards, and celebratory effects after intimate disclosures. Distinctiveness comes from the session's small, legible thread of work and a warm editorial voice.
+Preserve MindFriend's established blue family, but use a restrained canvas, readable typography, and content-led hierarchy. Avoid a dashboard full of gradients, permanent glowing orbs, and rainbow status cards. Distinctiveness comes from the session's small, legible thread of work and a warm editorial voice.
+
+Rewards use one calm vocabulary on the canvas: a soft glow, an emblem that settles into place, and slow particles in the accent, glow, and gold hues. Levels, badges, quests, and milestones get the full moment with a Continue action. A finished activity, a done step, or a saved reflection gets a brief check with an accent bloom; a closed session or a mood check-in gets only a quiet check, never particles. XP appears as a small toast at the top. No moment blocks touches it does not own, and VoiceOver hears each one once.
 
 | Token | Light | Dark | Use |
 |---|---|---|---|
@@ -306,7 +308,7 @@ Use these within existing design/theme conventions; do not create a second compe
 
 ### 6.3 Motion, haptics, and keyboard
 
-Normal transitions: 180–240ms opacity/position changes; use native navigation animation. A newly accepted card can collapse into a session event row without a celebration. No background pulsing crisis button. Haptics: light selection on deliberate choice and one soft confirmation when a local checkpoint is durably saved, respecting system/user settings; no repeated haptic reward for mood disclosure. Do not haptically signal “healthy” versus “unhealthy.”
+Normal transitions: 180–240ms opacity/position changes; use native navigation animation. A newly accepted card can collapse into a session event row without a celebration. Under Reduce Motion every reward moment cross-fades: no scale, travel, symbol bounce, or particles. No background pulsing crisis button. Haptics: light selection on deliberate choice and one soft confirmation when a local checkpoint is durably saved, respecting system/user settings; no repeated haptic reward for mood disclosure. Do not haptically signal “healthy” versus “unhealthy.”
 
 Reduce Motion replaces breathing scale/orbit motion with static phase text and a discrete progress indicator; instructions remain complete without motion. Reduce Transparency uses solid surfaces. Screen-reader speech does not read every token during streaming: announce “Reply started,” let the user explore, then “Reply complete” when appropriate without interrupting an active utterance.
 
