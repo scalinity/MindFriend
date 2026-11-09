@@ -706,19 +706,32 @@ enum SupportTheme {
 
     static let canvas = dynamic(light: 0xF7F8FC, dark: 0x0E1522)
     static let surface = dynamic(light: 0xFFFFFF, dark: 0x192335)
+    /// Raised surfaces over content: toasts, celebration cards, floating bars.
+    static let elevated = dynamic(light: 0xFFFFFF, dark: 0x22304A)
     static let textPrimary = dynamic(light: 0x182234, dark: 0xEDF2FC)
-    static let textSecondary = dynamic(light: 0x526176, dark: 0xAFBDD1)
-    static let accent = dynamic(light: 0x3557B7, dark: 0x9BB5FF)
+    static let textSecondary = dynamic(light: 0x526176, dark: 0xAFBDD1, highLight: 0x3D4A5E, highDark: 0xC9D4E5)
+    static let accent = dynamic(light: 0x3557B7, dark: 0x9BB5FF, highLight: 0x26449A, highDark: 0xB9CCFF)
     /// Text on an accent-filled primary button (dark action text in dark mode).
     static let onAccent = dynamic(light: 0xFFFFFF, dark: 0x0E1522)
     /// Fill of text entry fields, distinct from both canvas and surface.
     static let field = dynamic(light: 0xFFFFFF, dark: 0x131C2C)
     /// Boundary of fields and controls: at least 3:1 against canvas, surface and field.
-    static let border = dynamic(light: 0x76839A, dark: 0x64779A)
+    static let border = dynamic(light: 0x76839A, dark: 0x64779A, highLight: 0x4F5C72, highDark: 0x8A9CC0)
+    /// Decorative dividers between rows; never the only boundary of a control.
+    static let separator = dynamic(light: 0xDDE2EC, dark: 0x26324A, highLight: 0x8592A6, highDark: 0x5C6F8E)
 
-    private static func dynamic(light: UInt32, dark: UInt32) -> Color {
+    /// Reward moments: the accent, a soft glow behind it and a warm gold for levels and badges.
+    enum Celebration {
+        static let accent = SupportTheme.accent
+        static let glow = dynamic(light: 0xC9D7FF, dark: 0x3E5A9E)
+        static let gold = dynamic(light: 0x9A6A12, dark: 0xF2C46D)
+    }
+
+    /// Increase Contrast selects the `high` values where a token has them.
+    fileprivate static func dynamic(light: UInt32, dark: UInt32, highLight: UInt32? = nil, highDark: UInt32? = nil) -> Color {
         Color(uiColor: UIColor { traits in
-            let hex = traits.userInterfaceStyle == .dark ? dark : light
+            let high = traits.accessibilityContrast == .high
+            let hex = traits.userInterfaceStyle == .dark ? (high ? highDark ?? dark : dark) : (high ? highLight ?? light : light)
             return UIColor(
                 red: CGFloat((hex >> 16) & 0xFF) / 255,
                 green: CGFloat((hex >> 8) & 0xFF) / 255,
@@ -758,8 +771,76 @@ struct SupportFieldStyle: ViewModifier {
     }
 }
 
+/// An opaque content card on the canvas.
+struct SupportCardStyle: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .padding(SupportTheme.Spacing.m)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(SupportTheme.surface, in: RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
+    }
+}
+
+/// The one primary action on a screen: accent fill, at least 48pt tall, grows with text.
+struct SupportPrimaryButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+    func makeBody(configuration: ButtonStyleConfiguration) -> some View {
+        configuration.label
+            .font(.body.weight(.semibold))
+            .multilineTextAlignment(.center)
+            .foregroundStyle(SupportTheme.onAccent)
+            .padding(.horizontal, SupportTheme.Spacing.m)
+            .padding(.vertical, SupportTheme.Spacing.s)
+            .frame(maxWidth: .infinity, minHeight: SupportTheme.primaryButtonHeight)
+            .background(SupportTheme.accent, in: RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
+            .opacity(isEnabled ? (configuration.isPressed ? 0.85 : 1) : 0.45)
+            .contentShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
+    }
+}
+
+/// Secondary actions: field fill, a 3:1 boundary and accent text.
+struct SupportSecondaryButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+    func makeBody(configuration: ButtonStyleConfiguration) -> some View {
+        configuration.label
+            .font(.body.weight(.medium))
+            .multilineTextAlignment(.center)
+            .foregroundStyle(SupportTheme.accent)
+            .padding(.horizontal, SupportTheme.Spacing.m)
+            .padding(.vertical, SupportTheme.Spacing.s)
+            .frame(maxWidth: .infinity, minHeight: SupportTheme.minimumTarget)
+            .background(SupportTheme.field, in: RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
+            .overlay(RoundedRectangle(cornerRadius: SupportTheme.controlRadius).strokeBorder(SupportTheme.border, lineWidth: 1))
+            .opacity(isEnabled ? (configuration.isPressed ? 0.75 : 1) : 0.45)
+            .contentShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
+    }
+}
+
+extension ButtonStyle where Self == SupportPrimaryButtonStyle {
+    static var supportPrimary: SupportPrimaryButtonStyle { .init() }
+}
+
+extension ButtonStyle where Self == SupportSecondaryButtonStyle {
+    static var supportSecondary: SupportSecondaryButtonStyle { .init() }
+}
+
 extension View {
     func supportField() -> some View { modifier(SupportFieldStyle()) }
+    func supportCard() -> some View { modifier(SupportCardStyle()) }
+
+    /// A whole screen in the support look: canvas behind lists and forms, a canvas-coloured
+    /// navigation bar when content scrolls under it, and the support tint. Applied where a
+    /// router hosts a destination, so the destinations inherit it.
+    func supportScreen() -> some View {
+        self
+            .supportCanvas()
+            .toolbarBackground(SupportTheme.canvas, for: .navigationBar)
+    }
+
+    /// A sheet presented from the shell: the support screen look on a canvas sheet background.
+    func supportSheet() -> some View {
+        supportScreen().presentationBackground(SupportTheme.canvas)
+    }
 }
 
 // MARK: - Embedded root navigation
@@ -867,9 +948,27 @@ struct SupportDestinationView: View {
     let destination: SupportDestination
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var container: DependencyContainer
+    @EnvironmentObject private var pins: SupportPinStore
+    @State private var replaceCandidate: SupportPin?
 
     var body: some View {
-        content.environment(\.supportRootEmbedded, true)
+        content.environment(\.supportRootEmbedded, true).supportScreen()
+            .toolbar {
+                if destination.isPinnable {
+                    ToolbarItem(placement: .primaryAction) {
+                        let pinned = pins.isPinned(destination)
+                        Button {
+                            if pinned { pins.unpin(destination) }
+                            else if pins.isFull { replaceCandidate = SupportPin(destination) }
+                            else { pins.pin(destination) }
+                        } label: {
+                            Label(pinned ? "Unpin from Today" : "Pin to Today", systemImage: pinned ? "pin.fill" : "pin")
+                        }
+                        .accessibilityIdentifier("support-pin-toggle")
+                    }
+                }
+            }
+            .sheet(item: $replaceCandidate) { ReplacePinSheet(candidate: $0).environmentObject(pins) }
     }
 
     @ViewBuilder

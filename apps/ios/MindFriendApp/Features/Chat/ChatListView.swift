@@ -103,8 +103,7 @@ struct ChatListView: View {
                     Button {
                         appState.showCrisisResources = true
                     } label: {
-                        Image(systemName: "heart.text.square.fill")
-                            .foregroundStyle(.red)
+                        Image(systemName: "lifepreserver")
                             .frame(minWidth: 44, minHeight: 44)
                     }
                     .accessibilityLabel("Support and crisis resources")

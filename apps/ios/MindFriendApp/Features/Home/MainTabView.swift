@@ -70,16 +70,17 @@ struct MainTabView: View {
         }) { request in
             DeepLinkDestinationView(request: request, stableShell: useSupportShell)
                 .onAppear { deepLinkRouter.consume(request) }
+                .supportSheet()
         }
         .sheet(isPresented: $appState.showCrisisResources) {
-            CrisisResourcesView()
+            CrisisResourcesView().supportSheet()
         }
         .sheet(isPresented: $appState.showPaywall) {
-            SubscriptionView()
+            SubscriptionView().supportSheet()
         }
         .sheet(isPresented: $appState.showWelcomeBack) {
             if let summary = appState.absenceSummary {
-                WelcomeBackView(absenceSummary: summary)
+                WelcomeBackView(absenceSummary: summary).supportSheet()
             }
         }
         .alert(
@@ -303,7 +304,7 @@ private struct SupportShellTabs: View {
     private func root(for tab: SupportShellTab) -> some View {
         switch tab {
         case .today: todayRoot
-        case .chat: ChatListView()
+        case .chat: ChatListView().supportScreen()
         case .explore: SupportExploreView()
         case .you: SupportYouView(extensions: [
             SupportYouExtension(id: "support-history", section: .history, title: "History", icon: "clock") { SupportSessionListView() },
@@ -334,6 +335,7 @@ private struct SupportShellTabs: View {
                     .tag(tab.mainTab)
             }
         }
+        .tint(SupportTheme.accent)
     }
 
     private var sidebarLayout: some View {
@@ -354,6 +356,7 @@ private struct SupportShellTabs: View {
                     .tag(tab)
             }
             .navigationTitle("MindFriend")
+            .supportScreen()
         } detail: {
             ZStack {
                 ForEach(SupportShellTab.allCases) { tab in
