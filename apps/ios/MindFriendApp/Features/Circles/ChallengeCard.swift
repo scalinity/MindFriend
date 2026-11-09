@@ -2,6 +2,7 @@ import SwiftUI
 
 /// Displays an active circle challenge with member completion status
 struct ChallengeCard: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let challenge: CircleChallenge
     let members: [CircleMember]
     let currentUserId: String
@@ -36,17 +37,17 @@ struct ChallengeCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             // Header
             HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
+                    HStack(spacing: SupportTheme.Spacing.xs) {
                         Image(systemName: "flag.fill")
-                            .foregroundColor(.orange)
+                            .foregroundColor(SupportTheme.accent)
                         Text("TODAY'S CHALLENGE")
                             .font(.caption)
                             .fontWeight(.semibold)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(SupportTheme.textSecondary)
                     }
 
                     Text(challenge.title)
@@ -57,17 +58,17 @@ struct ChallengeCard: View {
 
                 Text(challenge.timeRemaining)
                     .font(.caption)
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Color.secondary.opacity(0.1))
+                    .foregroundColor(SupportTheme.textSecondary)
+                    .padding(.horizontal, SupportTheme.Spacing.xs)
+                    .padding(.vertical, SupportTheme.Spacing.xxs)
+                    .background(SupportTheme.surface)
                     .clipShape(Capsule())
             }
 
             if let description = challenge.description {
                 Text(description)
                     .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(SupportTheme.textSecondary)
             }
 
             // Member completion status
@@ -81,7 +82,7 @@ struct ChallengeCard: View {
 
                 if members.count > 6 {
                     Circle()
-                        .fill(Color.secondary.opacity(0.3))
+                        .fill(SupportTheme.textSecondary.opacity(0.3))
                         .frame(width: 32, height: 32)
                         .overlay {
                             Text("+\(members.count - 6)")
@@ -94,7 +95,7 @@ struct ChallengeCard: View {
 
                 Text(completionProgress)
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(SupportTheme.textSecondary)
             }
 
             // Action button
@@ -113,27 +114,22 @@ struct ChallengeCard: View {
                     }
                     .fontWeight(.semibold)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .background(Color.accentColor)
-                    .foregroundColor(.white)
-                    .cornerRadius(10)
                 }
+                .buttonStyle(.supportPrimary)
                 .disabled(isCompleting)
             } else {
                 HStack {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(.green)
+                        .foregroundColor(SupportTheme.accent)
                     Text("Completed!")
                         .fontWeight(.medium)
-                        .foregroundColor(.green)
+                        .foregroundColor(SupportTheme.accent)
                     Spacer()
                 }
-                .padding(.vertical, 8)
+                .padding(.vertical, SupportTheme.Spacing.xs)
             }
         }
-        .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(16)
+        .supportCard()
         // Fix 7: Sync state when completions change from parent
         .onChange(of: challenge.completions) { _, _ in
             syncCompletions()
@@ -149,7 +145,7 @@ struct ChallengeCard: View {
             do {
                 try await container.supabaseDataService.completeChallenge(id: challenge.id)
                 await MainActor.run {
-                    _ = withAnimation {
+                    _ = withAnimation(reduceMotion ? nil : .default) {
                         localCompletions.insert(currentUserId)
                     }
                     isCompleting = false
@@ -171,22 +167,22 @@ private struct MemberCompletionBadge: View {
     var body: some View {
         ZStack {
             Circle()
-                .fill(isCompleted ? Color.green : Color.gray.opacity(0.3))
+                .fill(isCompleted ? SupportTheme.accent : SupportTheme.textSecondary.opacity(0.3))
                 .frame(width: 32, height: 32)
 
             if isCompleted {
                 Image(systemName: "checkmark")
                     .font(.caption.bold())
-                    .foregroundColor(.white)
+                    .foregroundColor(SupportTheme.onAccent)
             } else {
                 Text(String(member.displayName.prefix(1)).uppercased())
                     .font(.caption.bold())
-                    .foregroundColor(.primary)
+                    .foregroundColor(SupportTheme.onAccent)
             }
         }
         .overlay {
             Circle()
-                .stroke(Color(.systemBackground), lineWidth: 2)
+                .stroke(SupportTheme.canvas, lineWidth: 2)
         }
     }
 }
@@ -214,10 +210,13 @@ struct CircleCreateChallengeSheet: View {
                         .autocapitalization(.sentences)
 
                     TextField("Description (optional)", text: $description, axis: .vertical)
+
+                        .supportField()
                         .lineLimit(3...6)
                 } header: {
                     Text("What's the challenge?")
                 }
+                .listRowBackground(SupportTheme.surface)
 
                 Section {
                     Picker("Type", selection: $challengeType) {
@@ -231,7 +230,10 @@ struct CircleCreateChallengeSheet: View {
                 } footer: {
                     Text("Challenges last 24 hours. Members can mark themselves complete.")
                 }
+                .listRowBackground(SupportTheme.surface)
             }
+            .foregroundStyle(SupportTheme.textPrimary)
+            .supportScreen()
             .navigationTitle("New Challenge")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

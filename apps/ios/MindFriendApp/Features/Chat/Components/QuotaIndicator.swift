@@ -21,16 +21,16 @@ private enum QuotaLevel {
     var progressColor: Color {
         switch self {
         case .critical: return .red
-        case .low: return .orange
-        case .healthy: return .blue
+        case .low: return SupportTheme.accent
+        case .healthy: return SupportTheme.accent
         }
     }
 
     var textColor: Color {
         switch self {
         case .critical: return .red
-        case .low: return .orange
-        case .healthy: return .secondary
+        case .low: return SupportTheme.accent
+        case .healthy: return SupportTheme.textSecondary
         }
     }
 
@@ -72,13 +72,13 @@ struct QuotaIndicator: View {
 
     @ViewBuilder
     private var quotaContent: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: SupportTheme.Spacing.xs) {
             // Visual progress bar (shows remaining, not used)
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
                     // Background track
                     Capsule()
-                        .fill(Color.secondary.opacity(0.2))
+                        .fill(SupportTheme.textSecondary.opacity(0.2))
 
                     // Progress fill (shows remaining quota)
                     Capsule()
@@ -99,26 +99,16 @@ struct QuotaIndicator: View {
                 Button(action: onUpgrade) {
                     Text("Upgrade")
                         .font(.caption.bold())
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(
-                            LinearGradient(
-                                colors: [.blue, .purple],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
-                        .cornerRadius(8)
                 }
+                .buttonStyle(.supportPrimary)
                 .accessibilityLabel("Upgrade to premium")
                 .accessibilityHint("Opens subscription options")
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(.ultraThinMaterial)
-        .cornerRadius(20)
+        .padding(.horizontal, SupportTheme.Spacing.s)
+        .padding(.vertical, SupportTheme.Spacing.xs)
+        .background(SupportTheme.surface)
+        .cornerRadius(SupportTheme.cardRadius)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(remaining) of \(total) chat messages remaining")
         .accessibilityValue(quotaLevel.accessibilityValue)
@@ -147,17 +137,17 @@ struct QuotaBadge: View {
         if isPremium {
             EmptyView()
         } else {
-            HStack(spacing: 4) {
+            HStack(spacing: SupportTheme.Spacing.xxs) {
                 Image(systemName: "bubble.left.fill")
                     .font(.caption2)
                 Text("\(remaining)")
                     .font(.caption.monospacedDigit())
             }
             .foregroundStyle(quotaLevel.textColor)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
+            .padding(.horizontal, SupportTheme.Spacing.xs)
+            .padding(.vertical, SupportTheme.Spacing.xxs)
             .background(quotaLevel.textColor.opacity(0.15))
-            .cornerRadius(12)
+            .cornerRadius(SupportTheme.controlRadius)
             .accessibilityElement(children: .combine)
             .accessibilityLabel("\(remaining) chat messages remaining")
             .accessibilityValue(quotaLevel.accessibilityValue)
@@ -168,7 +158,7 @@ struct QuotaBadge: View {
 // MARK: - Preview
 
 #Preview("Quota Indicator - Full") {
-    VStack(spacing: 20) {
+    VStack(spacing: SupportTheme.Spacing.l) {
         QuotaIndicator(remaining: 5, total: 5, isPremium: false, onUpgrade: {})
         QuotaIndicator(remaining: 3, total: 5, isPremium: false, onUpgrade: {})
         QuotaIndicator(remaining: 2, total: 5, isPremium: false, onUpgrade: {})
@@ -180,7 +170,7 @@ struct QuotaBadge: View {
 }
 
 #Preview("Quota Badge") {
-    HStack(spacing: 16) {
+    HStack(spacing: SupportTheme.Spacing.m) {
         QuotaBadge(remaining: 5, total: 5, isPremium: false)
         QuotaBadge(remaining: 2, total: 5, isPremium: false)
         QuotaBadge(remaining: 1, total: 5, isPremium: false)

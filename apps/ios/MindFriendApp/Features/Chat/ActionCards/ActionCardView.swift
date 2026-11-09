@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ActionCardView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let card: ActionCard
     let onTap: () -> Void
     let onDismiss: () -> Void
@@ -9,13 +10,15 @@ struct ActionCardView: View {
 
     var body: some View {
         cardContent
+        .opacity(isPressed ? 0.85 : 1)
+        .animation(.easeInOut(duration: 0.1), value: isPressed)
         .onTapGesture {
             onTap()
         }
         .onLongPressGesture(minimumDuration: 0.5) {
             onDismiss()
         } onPressingChanged: { pressing in
-            withAnimation(.easeInOut(duration: 0.1)) {
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.1)) {
                 isPressed = pressing
             }
         }
@@ -46,12 +49,12 @@ struct ActionCardStackView: View {
     let onCardDismiss: (ActionCard) -> Void
 
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: SupportTheme.Spacing.s) {
             ForEach(cards) { card in
                 ActionCardView(card: card, onTap: { onCardTap(card) }, onDismiss: { onCardDismiss(card) })
             }
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, SupportTheme.Spacing.xs)
     }
 }
 

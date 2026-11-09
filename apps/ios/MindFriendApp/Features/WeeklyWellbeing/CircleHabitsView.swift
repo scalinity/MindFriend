@@ -27,11 +27,11 @@ struct CircleHabitsView: View {
                     upcomingCheckinsTab.tag(CircleHabitsTab.checkins)
                     templatesTab.tag(CircleHabitsTab.templates)
                     nudgesTab.tag(CircleHabitsTab.nudges)
-                    streaksTab.tag(CircleHabitsTab.streaks)
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
             }
-            .background(Color(.systemGroupedBackground))
+            .foregroundStyle(SupportTheme.textPrimary)
+            .supportScreen()
             .navigationTitle("Circle Habits")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -75,7 +75,7 @@ struct CircleHabitsView: View {
                     message: "Set up templates to schedule regular check-ins with your circle"
                 )
             } else {
-                LazyVStack(spacing: 12) {
+                LazyVStack(spacing: SupportTheme.Spacing.s) {
                     ForEach(viewModel.upcomingCheckins) { checkin in
                         UpcomingCheckinCard(checkin: checkin) {
                             Task {
@@ -102,7 +102,7 @@ struct CircleHabitsView: View {
                     showingTemplateEditor = true
                 }
             } else {
-                LazyVStack(spacing: 12) {
+                LazyVStack(spacing: SupportTheme.Spacing.s) {
                     ForEach(viewModel.templates) { template in
                         TemplateCard(template: template) {
                             showingTemplateEditor = true
@@ -125,7 +125,7 @@ struct CircleHabitsView: View {
                     message: "You're all caught up with your circle check-ins!"
                 )
             } else {
-                LazyVStack(spacing: 12) {
+                LazyVStack(spacing: SupportTheme.Spacing.s) {
                     ForEach(viewModel.pendingNudges) { nudge in
                         NudgeCard(nudge: nudge) {
                             Task {
@@ -139,104 +139,10 @@ struct CircleHabitsView: View {
         }
     }
 
-    // MARK: - Streaks Tab
-
-    private var streaksTab: some View {
-        ScrollView {
-            VStack(spacing: 24) {
-                // Current streak card
-                streakCard
-
-                // Streak history
-                if !viewModel.streakHistory.isEmpty {
-                    streakHistorySection
-                }
-
-                // Tips
-                streakTipsSection
-            }
-            .padding()
-        }
-    }
-
-    private var streakCard: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "flame.fill")
-                .font(.system(size: 64))
-                .foregroundStyle(.orange)
-
-            Text("\(viewModel.currentStreak.currentStreak)")
-                .font(.system(size: 72, weight: .bold))
-
-            Text("Day Streak")
-                .font(.title3)
-                .foregroundStyle(.secondary)
-
-            if viewModel.currentStreak.longestStreak > 0 {
-                Text("Best: \(viewModel.currentStreak.longestStreak) days")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            if viewModel.currentStreak.isAtRisk {
-                HStack {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.yellow)
-                    Text("Check in soon to keep your streak!")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .padding()
-                .background(Color.yellow.opacity(0.1))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-            }
-        }
-        .padding()
-        .frame(maxWidth: .infinity)
-        .background(Color(.secondarySystemGroupedBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-    }
-
-    private var streakHistorySection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Recent Activity")
-                .font(.headline)
-
-            ForEach(viewModel.streakHistory) { day in
-                HStack {
-                    Image(systemName: day.completed ? "checkmark.circle.fill" : "circle")
-                        .foregroundStyle(day.completed ? .green : .gray)
-
-                    Text(day.date, style: .date)
-                        .font(.subheadline)
-
-                    Spacer()
-                }
-            }
-        }
-        .padding()
-        .background(Color(.secondarySystemGroupedBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-    }
-
-    private var streakTipsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Tips to Keep Your Streak")
-                .font(.headline)
-
-            tipRow(icon: "alarm", text: "Set reminders for check-in days")
-            tipRow(icon: "calendar", text: "Schedule check-ins at consistent times")
-            tipRow(icon: "person.2", text: "Invite your circle to check in together")
-        }
-        .padding()
-        .background(Color(.secondarySystemGroupedBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-    }
-
     private func tipRow(icon: String, text: String) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: SupportTheme.Spacing.s) {
             Image(systemName: icon)
-                .foregroundStyle(.blue)
+                .foregroundStyle(SupportTheme.accent)
                 .frame(width: 24)
 
             Text(text)
@@ -247,19 +153,19 @@ struct CircleHabitsView: View {
     // MARK: - Helpers
 
     private func emptyStateView(icon: String, title: String, message: String, action: (() -> Void)? = nil) -> some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             Spacer()
 
             Image(systemName: icon)
                 .font(.system(size: 48))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
 
             Text(title)
                 .font(.headline)
 
             Text(message)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
 
@@ -267,13 +173,10 @@ struct CircleHabitsView: View {
                 Button(action: action) {
                     Text("Get Started")
                         .fontWeight(.semibold)
-                        .padding(.horizontal, 24)
-                        .padding(.vertical, 12)
-                        .background(Color.blue)
-                        .foregroundStyle(.white)
                         .clipShape(Capsule())
                 }
-                .padding(.top, 8)
+                .buttonStyle(.supportPrimary)
+                .padding(.top, SupportTheme.Spacing.xs)
             }
 
             Spacer()
@@ -290,36 +193,30 @@ struct UpcomingCheckinCard: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                 HStack {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.title2)
-                        .foregroundStyle(.blue)
 
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                         Text(checkin.name)
                             .font(.headline)
-                            .foregroundStyle(.primary)
 
                         Text("\(checkin.questions.count) questions")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
 
                     Spacer()
 
                     Image(systemName: "chevron.right")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
 
                 HStack {
                     ForEach(checkin.reminderDays, id: \.self) { day in
                         Text(dayAbbreviation(day))
                             .font(.caption2)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 4)
-                            .background(Color.blue.opacity(0.1))
-                            .foregroundStyle(.blue)
                             .clipShape(Capsule())
                     }
 
@@ -327,13 +224,12 @@ struct UpcomingCheckinCard: View {
 
                     Text(checkin.reminderTime)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
             }
-            .padding()
-            .background(Color(.secondarySystemGroupedBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
         }
+        .buttonStyle(.supportSecondary)
         .buttonStyle(.plain)
     }
 
@@ -357,48 +253,44 @@ struct TemplateCard: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                 HStack {
                     Image(systemName: "doc.text.fill")
                         .font(.title2)
-                        .foregroundStyle(.purple)
 
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                         Text(template.name)
                             .font(.headline)
-                            .foregroundStyle(.primary)
 
                         if let description = template.description {
                             Text(description)
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                         }
                     }
 
                     Spacer()
 
                     Image(systemName: template.isActive ? "checkmark.circle.fill" : "circle")
-                        .foregroundStyle(template.isActive ? .green : .gray)
+                        .foregroundStyle(template.isActive ? SupportTheme.accent : SupportTheme.textSecondary)
                 }
 
                 HStack {
                     Text("\(template.questions.count) questions")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
 
                     Spacer()
 
                     if template.isActive {
                         Label("Active", systemImage: "checkmark")
                             .font(.caption)
-                            .foregroundStyle(.green)
                     }
                 }
             }
-            .padding()
-            .background(Color(.secondarySystemGroupedBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
         }
+        .buttonStyle(.supportSecondary)
         .buttonStyle(.plain)
     }
 }
@@ -408,10 +300,10 @@ struct NudgeCard: View {
     let onDismiss: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             HStack {
                 Image(systemName: "bell.fill")
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(SupportTheme.accent)
 
                 Text(nudge.message)
                     .font(.subheadline)
@@ -422,17 +314,19 @@ struct NudgeCard: View {
                     onDismiss()
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
+                    .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                 }
+                .accessibilityLabel("Dismiss nudge")
             }
 
             Text("From: \(nudge.circleId.uuidString.prefix(8))...")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
         .padding()
-        .background(Color.orange.opacity(0.1))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .background(SupportTheme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
     }
 }
 
@@ -442,7 +336,6 @@ enum CircleHabitsTab: String, CaseIterable, Identifiable, Hashable {
     case checkins
     case templates
     case nudges
-    case streaks
 
     var id: String { rawValue }
 
@@ -451,7 +344,6 @@ enum CircleHabitsTab: String, CaseIterable, Identifiable, Hashable {
         case .checkins: return "Check-ins"
         case .templates: return "Templates"
         case .nudges: return "Nudges"
-        case .streaks: return "Streaks"
         }
     }
 
@@ -460,7 +352,6 @@ enum CircleHabitsTab: String, CaseIterable, Identifiable, Hashable {
         case .checkins: return "checkmark.circle"
         case .templates: return "doc.text"
         case .nudges: return "bell"
-        case .streaks: return "flame"
         }
     }
 }

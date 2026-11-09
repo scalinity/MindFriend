@@ -9,28 +9,29 @@ import SwiftUI
 
 /// Step 3: Show group rituals and support features
 struct CirclesRitualsStep: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let onComplete: () -> Void
 
     @State private var showRituals = false
 
     private let rituals: [(icon: String, color: Color, name: String, description: String)] = [
-        ("sunrise.fill", .orange, "Morning Intentions", "Start the day together with shared goals"),
-        ("moon.stars.fill", .purple, "Evening Reflection", "Wind down and share gratitude"),
-        ("figure.mind.and.body", .green, "Group Exercise", "Do wellness exercises together")
+        ("sunrise.fill", SupportTheme.accent, "Morning Intentions", "Start the day together with shared goals"),
+        ("moon.stars.fill", SupportTheme.accent, "Evening Reflection", "Wind down and share gratitude"),
+        ("figure.mind.and.body", SupportTheme.accent, "Group Exercise", "Do wellness exercises together")
     ]
 
     var body: some View {
         TutorialStepView(
             icon: "sparkles",
-            iconColor: .purple,
+            iconColor: SupportTheme.accent,
             headline: "Rituals & Support",
             subheadline: "Join scheduled group activities and support each other's growth.",
             primaryLabel: "Explore Circles",
             primaryAction: onComplete
         ) {
-            VStack(spacing: 8) {
+            VStack(spacing: SupportTheme.Spacing.xs) {
                 ForEach(Array(rituals.enumerated()), id: \.element.name) { index, ritual in
-                    HStack(spacing: 12) {
+                    HStack(spacing: SupportTheme.Spacing.s) {
                         ZStack {
                             Circle()
                                 .fill(ritual.color.opacity(0.15))
@@ -39,44 +40,43 @@ struct CirclesRitualsStep: View {
                                 .foregroundStyle(ritual.color)
                         }
 
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                             Text(ritual.name)
                                 .font(.subheadline.weight(.medium))
                             Text(ritual.description)
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
 
                         Spacer()
                     }
-                    .padding(12)
-                    .background(Color(.secondarySystemBackground))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .padding(SupportTheme.Spacing.s)
+                    .background(SupportTheme.surface)
+                    .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
                     .opacity(showRituals ? 1 : 0)
-                    .offset(x: showRituals ? 0 : 20)
-                    .animation(
-                        .easeOut(duration: 0.3).delay(0.3 + Double(index) * 0.15),
+                    .offset(x: reduceMotion ? 0 : (showRituals ? 0 : 20))
+                    .animation(reduceMotion ? .easeInOut(duration: 0.2) : .easeOut(duration: 0.3).delay(0.3 + Double(index) * 0.15),
                         value: showRituals
                     )
                 }
 
                 // Invite prompt
-                HStack(spacing: 8) {
+                HStack(spacing: SupportTheme.Spacing.xs) {
                     Image(systemName: "person.badge.plus")
-                        .foregroundStyle(.pink)
+                        .foregroundStyle(SupportTheme.accent)
                     Text("Invite friends to create your first circle")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                .padding(12)
-                .background(Color.pink.opacity(0.1))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .padding(.top, 6)
+                .padding(SupportTheme.Spacing.s)
+                .background(SupportTheme.surface)
+                .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
+                .padding(.top, SupportTheme.Spacing.xs)
                 .opacity(showRituals ? 1 : 0)
             }
-            .padding(.horizontal, 20)
+            .padding(.horizontal, SupportTheme.Spacing.l)
             .onAppear { showRituals = true }
         }
     }

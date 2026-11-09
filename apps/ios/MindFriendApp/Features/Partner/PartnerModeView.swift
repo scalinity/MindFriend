@@ -7,6 +7,8 @@ struct PartnerModeView: View {
 
     var body: some View {
         PartnerModeContentView(dataService: container.supabaseDataService)
+            .foregroundStyle(SupportTheme.textPrimary)
+            .supportScreen()
             .navigationTitle("Partner Mode")
     }
 }
@@ -38,20 +40,27 @@ private struct PartnerModeContentView: View {
         .task {
             await viewModel.loadPartnerData()
         }
-        .alert("Error", isPresented: $viewModel.showError) {
-            Button("OK", role: .cancel) { }
-        } message: {
-            Text(viewModel.errorMessage)
+        .safeAreaInset(edge: .bottom) {
+            if viewModel.showError {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
+                    Label(viewModel.errorMessage, systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(SupportTheme.textPrimary)
+                    Button("OK") { viewModel.showError = false }
+                        .buttonStyle(.supportSecondary)
+                }
+                .supportCard()
+                .padding(SupportTheme.Spacing.m)
+            }
         }
     }
 
     private var loadingView: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             ProgressView()
                 .scaleEffect(1.2)
             Text("Loading...")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

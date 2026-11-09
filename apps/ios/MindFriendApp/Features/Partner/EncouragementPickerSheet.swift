@@ -8,9 +8,9 @@ struct EncouragementPickerSheet: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 24) {
+            VStack(spacing: SupportTheme.Spacing.l) {
                 // Header
-                VStack(spacing: 8) {
+                VStack(spacing: SupportTheme.Spacing.xs) {
                     Image(systemName: "hand.wave.fill")
                         .font(.system(size: 40))
                         .foregroundStyle(.tint)
@@ -21,12 +21,12 @@ struct EncouragementPickerSheet: View {
 
                     Text("Choose a message to send to your partner")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
-                .padding(.top, 8)
+                .padding(.top, SupportTheme.Spacing.xs)
 
                 // Options
-                VStack(spacing: 12) {
+                VStack(spacing: SupportTheme.Spacing.s) {
                     EncouragementOption(
                         icon: "hands.clap.fill",
                         title: "Encouragement",
@@ -82,22 +82,19 @@ private struct EncouragementOption: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 16) {
+            HStack(spacing: SupportTheme.Spacing.m) {
                 Image(systemName: icon)
                     .font(.title2)
                     .foregroundStyle(.tint)
                     .frame(width: 44, height: 44)
-                    .background(Color.accentColor.opacity(0.1))
-                    .cornerRadius(10)
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     Text(title)
                         .font(.headline)
-                        .foregroundStyle(.primary)
 
                     Text(description)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
 
                 Spacer()
@@ -107,13 +104,12 @@ private struct EncouragementOption: View {
                 } else {
                     Image(systemName: "chevron.right")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
             }
-            .padding()
-            .background(Color(.secondarySystemBackground))
-            .cornerRadius(12)
+            .supportCard()
         }
+        .buttonStyle(.supportSecondary)
         .buttonStyle(.plain)
         .disabled(isLoading)
         .accessibilityElement(children: .combine)

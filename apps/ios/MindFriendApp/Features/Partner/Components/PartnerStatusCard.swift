@@ -1,57 +1,44 @@
 import SwiftUI
 
-/// Card showing partner's status, streak, and encouragement button
+/// Card showing partner's status and encouragement button
 struct PartnerStatusCard: View {
     let partnerInfo: PartnerInfo
     let onSendEncouragement: () -> Void
 
     var body: some View {
-        VStack(spacing: 16) {
-            HStack(spacing: 12) {
+        VStack(spacing: SupportTheme.Spacing.m) {
+            HStack(spacing: SupportTheme.Spacing.s) {
                 // Avatar
                 Circle()
-                    .fill(Color.accentColor.opacity(0.2))
+                    .fill(SupportTheme.accent.opacity(0.2))
                     .frame(width: 56, height: 56)
                     .overlay(
                         Text(String(partnerInfo.partnerName.prefix(1)).uppercased())
                             .font(.title2)
                             .fontWeight(.semibold)
-                            .foregroundStyle(Color.accentColor)
+                            .foregroundStyle(SupportTheme.accent)
                     )
 
                 // Info
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     Text(partnerInfo.partnerName)
                         .font(.headline)
-                        .lineLimit(1)
+                        .fixedSize(horizontal: false, vertical: true)
 
-                    HStack(spacing: 4) {
+                    HStack(spacing: SupportTheme.Spacing.xxs) {
                         Image(systemName: statusIcon)
                             .font(.caption)
                             .foregroundStyle(statusColor)
 
                         Text(statusMessage)
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                 }
 
                 Spacer()
 
-                // Streak
-                VStack(spacing: 2) {
-                    HStack(spacing: 2) {
-                        Image(systemName: "flame.fill")
-                            .foregroundStyle(.orange)
-                        Text("\(partnerInfo.partnerStreak)")
-                            .fontWeight(.semibold)
-                    }
-                    .font(.subheadline)
 
-                    Text("streak")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
             }
 
             // Encouragement button
@@ -63,17 +50,12 @@ struct PartnerStatusCard: View {
                 .font(.subheadline)
                 .fontWeight(.medium)
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
-                .background(Color.accentColor.opacity(0.1))
-                .foregroundStyle(Color.accentColor)
-                .cornerRadius(10)
             }
+            .buttonStyle(.supportSecondary)
             .accessibilityLabel("Send encouragement to \(partnerInfo.partnerName)")
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .cornerRadius(16)
-        .padding(.horizontal, 16)
+        .supportCard()
+        .padding(.horizontal, SupportTheme.Spacing.m)
     }
 
     // MARK: - Status Helpers
@@ -90,11 +72,11 @@ struct PartnerStatusCard: View {
 
     private var statusColor: Color {
         if partnerInfo.hasCompletedToday {
-            return .green
+            return SupportTheme.accent
         } else if Calendar.current.isDateInToday(partnerInfo.lastActive) {
-            return .blue
+            return SupportTheme.accent
         } else {
-            return .orange
+            return SupportTheme.accent
         }
     }
 
@@ -115,7 +97,7 @@ struct PartnerStatusCard: View {
 }
 
 #Preview {
-    VStack(spacing: 20) {
+    VStack(spacing: SupportTheme.Spacing.l) {
         PartnerStatusCard(
             partnerInfo: PartnerInfo(
                 partnerId: UUID(),

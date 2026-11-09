@@ -5,7 +5,7 @@ struct SharedMoodCard: View {
     let moods: [MoodEntry]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             HStack {
                 Image(systemName: "face.smiling")
                     .foregroundStyle(.tint)
@@ -18,28 +18,26 @@ struct SharedMoodCard: View {
             if moods.isEmpty {
                 Text("No mood data yet")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.vertical, 8)
+                    .padding(.vertical, SupportTheme.Spacing.xs)
             } else {
-                HStack(spacing: 8) {
+                HStack(spacing: SupportTheme.Spacing.xs) {
                     ForEach(moods.prefix(7), id: \.id) { mood in
-                        VStack(spacing: 4) {
+                        VStack(spacing: SupportTheme.Spacing.xxs) {
                             Text(moodEmoji(for: mood.moodScore))
                                 .font(.title2)
 
                             Text(dayLabel(for: mood.createdAt))
                                 .font(.caption2)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                         }
                         .frame(maxWidth: .infinity)
                     }
                 }
             }
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .cornerRadius(12)
+        .supportCard()
     }
 
     private func moodEmoji(for value: Int) -> String {
@@ -67,7 +65,7 @@ struct SharedMoodCard: View {
 }
 
 #Preview {
-    VStack(spacing: 16) {
+    VStack(spacing: SupportTheme.Spacing.m) {
         SharedMoodCard(moods: [
             MoodEntry(id: "1", localDate: "2026-01-20", moodScore: 5, anxietyScore: nil, energyScore: nil, note: nil, source: .manual, createdAt: Date()),
             MoodEntry(id: "2", localDate: "2026-01-19", moodScore: 4, anxietyScore: nil, energyScore: nil, note: nil, source: .manual, createdAt: Date().addingTimeInterval(-86400)),

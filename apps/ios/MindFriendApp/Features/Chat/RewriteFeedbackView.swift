@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct RewriteFeedbackView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let rewriteHistoryId: String
     let onSubmit: (Int, String?) -> Void
     let onSkip: () -> Void
@@ -11,7 +12,7 @@ struct RewriteFeedbackView: View {
 
     var body: some View {
         NavigationView {
-            VStack(spacing: 24) {
+            VStack(spacing: SupportTheme.Spacing.l) {
                 Text("How was this rewrite?")
                     .font(.headline)
 
@@ -24,6 +25,8 @@ struct RewriteFeedbackView: View {
                 submitSection
             }
             .padding()
+            .foregroundStyle(SupportTheme.textPrimary)
+            .supportScreen()
             .navigationTitle("Feedback")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -35,30 +38,34 @@ struct RewriteFeedbackView: View {
     }
 
     private var starRatingSection: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: SupportTheme.Spacing.s) {
             ForEach(1...5, id: \.self) { star in
                 Button {
-                    withAnimation {
+                    withAnimation(reduceMotion ? nil : .default) {
                         rating = star
                         showCommentField = star <= 3
                     }
                 } label: {
                     Image(systemName: star <= rating ? "star.fill" : "star")
                         .font(.system(size: 32))
-                        .foregroundColor(.yellow)
+                        .foregroundColor(SupportTheme.Celebration.gold)
+                        .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                 }
+                .accessibilityLabel("\(star) of 5 stars")
+                .accessibilityAddTraits(star == rating ? .isSelected : [])
             }
         }
     }
 
     private var commentSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             Text("What could be improved?")
                 .font(.subheadline)
-                .foregroundColor(.secondary)
+                .foregroundColor(SupportTheme.textSecondary)
 
             TextField("Optional feedback...", text: $comment, axis: .vertical)
-                .textFieldStyle(RoundedBorderTextFieldStyle())
+
+                .supportField()
                 .lineLimit(3...6)
         }
     }
@@ -69,12 +76,8 @@ struct RewriteFeedbackView: View {
         } label: {
             Text("Submit")
                 .font(.subheadline.weight(.semibold))
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
-                .background(rating > 0 ? Color.blue : Color.gray)
-                .cornerRadius(12)
         }
+        .buttonStyle(.supportPrimary)
         .disabled(rating == 0)
     }
 }

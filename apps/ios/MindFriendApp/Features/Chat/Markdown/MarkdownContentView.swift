@@ -17,7 +17,7 @@ struct MarkdownContentView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             ForEach(Array(elements.enumerated()), id: \.offset) { _, element in
                 renderElement(element)
             }
@@ -38,8 +38,8 @@ struct MarkdownContentView: View {
         case .text(let text):
             // Always apply bubble styling to text elements
             renderMarkdownText(text)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
+                .padding(.horizontal, SupportTheme.Spacing.s)
+                .padding(.vertical, SupportTheme.Spacing.xs)
                 .background(isUserMessage ? SupportTheme.accent : SupportTheme.surface)
                 .foregroundStyle(isUserMessage ? SupportTheme.onAccent : SupportTheme.textPrimary)
                 .clipShape(RoundedRectangle(cornerRadius: hasCodeBlocks ? 16 : 20))
@@ -52,10 +52,10 @@ struct MarkdownContentView: View {
         case .inlineCode(let code):
             Text(code)
                 .font(.system(.callout, design: .monospaced))
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
+                .padding(.horizontal, SupportTheme.Spacing.xs)
+                .padding(.vertical, SupportTheme.Spacing.xxs)
                 .background(isUserMessage ? SupportTheme.onAccent.opacity(0.15) : SupportTheme.field)
-                .clipShape(RoundedRectangle(cornerRadius: 4))
+                .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
         }
     }
 

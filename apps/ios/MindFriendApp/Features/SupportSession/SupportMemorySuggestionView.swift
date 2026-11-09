@@ -45,12 +45,14 @@ struct SupportMemorySuggestionView: View {
         Form {
             if let reason = unavailableReason {
                 Section { Text(reason) }
+                .listRowBackground(SupportTheme.surface)
             } else {
                 content
             }
         }
+        .foregroundStyle(SupportTheme.textPrimary)
+        .supportSheet()
         .navigationTitle("Suggest memories")
-        .supportCanvas()
         .task(id: "\(sessionID)|\(unavailableReason ?? "ready")") { await loadIfNeeded() }
     }
 
@@ -60,11 +62,12 @@ struct SupportMemorySuggestionView: View {
         switch model.phase {
         case .idle, .loadingPreview:
             Section {
-                HStack(spacing: 12) {
+                HStack(spacing: SupportTheme.Spacing.s) {
                     ProgressView()
                     Text("Loading your messages. Nothing is sent to an AI service while you look.")
                 }
             }
+            .listRowBackground(SupportTheme.surface)
         case .preview, .sending:
             if let preview = model.preview { previewSections(preview) }
         case .pending:
@@ -73,6 +76,7 @@ struct SupportMemorySuggestionView: View {
                 Button("Check again") { send { await $0.retry(cloud: $1, isCurrent: $2) } }
                     .disabled(model.phase == .sending)
             }
+            .listRowBackground(SupportTheme.surface)
         case .finished(let result):
             resultSections(result)
         case .stopped(let note):
@@ -83,6 +87,7 @@ struct SupportMemorySuggestionView: View {
                 // Only a preview that never produced a request may be reloaded here; a request is never abandoned.
                 if model.request == nil { Button("Try again") { reload() } }
             }
+            .listRowBackground(SupportTheme.surface)
         }
     }
 
@@ -90,23 +95,25 @@ struct SupportMemorySuggestionView: View {
         Section {
             Text("Choose the messages MindFriend may send to an AI service to look for things you clearly said about yourself. Only your own messages from this session’s conversation are listed. Nothing is sent until you choose Generate.")
             if preview.sessionIsClosed {
-                Text("This session is closed. You can still choose messages from it.").foregroundStyle(.secondary)
+                Text("This session is closed. You can still choose messages from it.").foregroundStyle(SupportTheme.textSecondary)
             }
         }
+        .listRowBackground(SupportTheme.surface)
         if coordinator.journal.personalizedCloudPaused {
             Section {
                 Text("A privacy or context change on this device is still being confirmed with your account. Generating is paused until it is.")
             }
+            .listRowBackground(SupportTheme.surface)
         }
         Section("Messages you can choose") {
             if preview.conversationSuppressed {
                 Text("This conversation was excluded from future context, so nothing can be suggested from it.")
             } else if preview.messages.isEmpty {
-                Text("No eligible messages of yours were found in this conversation.").foregroundStyle(.secondary)
+                Text("No eligible messages of yours were found in this conversation.").foregroundStyle(SupportTheme.textSecondary)
             }
             ForEach(preview.messages) { message in messageRow(message, preview: preview) }
             if !preview.messages.isEmpty {
-                Text(selectionSummary(preview)).font(.footnote).foregroundStyle(.secondary)
+                Text(selectionSummary(preview)).font(.footnote).foregroundStyle(SupportTheme.textSecondary)
                 HStack {
                     Button("Select as many as fit") { model.selectRecent(preview) }
                     Spacer()
@@ -115,14 +122,15 @@ struct SupportMemorySuggestionView: View {
                 .buttonStyle(.borderless)
             }
             if preview.excludedSuppressed > 0 || preview.excludedTooLong > 0 {
-                Text(exclusionNote(preview)).font(.footnote).foregroundStyle(.secondary)
+                Text(exclusionNote(preview)).font(.footnote).foregroundStyle(SupportTheme.textSecondary)
             }
         }
+        .listRowBackground(SupportTheme.surface)
         Section("Exactly what the AI service receives") {
             Text("The selected messages above, shown as they will be sent (line breaks and some characters are simplified), together with these fixed instructions.")
                 .font(.subheadline)
             DisclosureGroup("Instructions sent with your messages") {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                     Text(preview.disclosure.systemPrompt)
                     Text(preview.disclosure.instructions)
                 }
@@ -132,11 +140,13 @@ struct SupportMemorySuggestionView: View {
             Text("Sent to \(providerName(preview.disclosure)) (\(preview.disclosure.providerModel)). We ask the provider not to store the request, but we can’t guarantee that, and anything already sent can’t be taken back.")
                 .font(.subheadline)
             Text("Never sent: " + preview.disclosure.notSent.map(Self.readable).joined(separator: ", ") + ".")
-                .font(.subheadline).foregroundStyle(.secondary)
+                .font(.subheadline).foregroundStyle(SupportTheme.textSecondary)
         }
+        .listRowBackground(SupportTheme.surface)
         Section("What happens next") {
             Text("Suggestions appear under “Suggestions to review” in What MindFriend remembers. They are not used as memory until you save them, they only come from messages you chose, and they expire after 7 days if you don’t review them. This uses one AI request.")
         }
+        .listRowBackground(SupportTheme.surface)
         Section {
             Button {
                 send { await $0.generate(cloud: $1, isCurrent: $2) }
@@ -149,6 +159,7 @@ struct SupportMemorySuggestionView: View {
             .disabled(!canGenerate(preview))
             .accessibilityHint("Sends the selected messages to the AI service. Suggestions are only saved for your review.")
         }
+        .listRowBackground(SupportTheme.surface)
     }
 
     @ViewBuilder private func resultSections(_ result: SupportMemorySuggestionResult) -> some View {
@@ -159,12 +170,12 @@ struct SupportMemorySuggestionView: View {
                     .font(.headline)
                 if result.pendingReviewCount != result.savedCount {
                     Text("This request originally saved \(result.savedCount). Some have since been approved, dismissed, expired, or removed.")
-                        .font(.subheadline).foregroundStyle(.secondary)
+                        .font(.subheadline).foregroundStyle(SupportTheme.textSecondary)
                 }
                 Text("They aren’t used as memory until you save them. Suggestions you don’t review expire after 7 days.")
                 if result.skippedCount > 0 {
                     Text("\(result.skippedCount) more matched something you already have or dismissed, so they were left unchanged.")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
                 if cameFromMemoryList {
                     Button("Review suggestions") {
@@ -197,10 +208,12 @@ struct SupportMemorySuggestionView: View {
                 Text("Your account hasn’t confirmed the outcome yet.")
             }
         }
+        .listRowBackground(SupportTheme.surface)
         if result.status != .saved {
             Section {
                 Button("Choose messages again") { reload() }
             }
+            .listRowBackground(SupportTheme.surface)
         }
     }
 
@@ -210,7 +223,7 @@ struct SupportMemorySuggestionView: View {
             Text(note.detail)
             if note.mayHaveReachedService {
                 Text("Sending the same request again is safe: it never starts a second AI request for the same one.")
-                    .font(.footnote).foregroundStyle(.secondary)
+                    .font(.footnote).foregroundStyle(SupportTheme.textSecondary)
             }
             if note.canRetrySameRequest {
                 Button("Try again with the same request") { send { await $0.retry(cloud: $1, isCurrent: $2) } }
@@ -220,6 +233,7 @@ struct SupportMemorySuggestionView: View {
                 Button("Choose messages again") { reload() }
             }
         }
+        .listRowBackground(SupportTheme.surface)
     }
 
     // MARK: Rows and copy
@@ -230,10 +244,10 @@ struct SupportMemorySuggestionView: View {
             get: { model.selected.contains(message.id) },
             set: { model.setSelected(message.id, $0, preview: preview) }
         )) {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text(message.text).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
                 if let date = message.createdAt {
-                    Text(date.formatted(date: .abbreviated, time: .shortened)).font(.caption).foregroundStyle(.secondary)
+                    Text(date.formatted(date: .abbreviated, time: .shortened)).font(.caption).foregroundStyle(SupportTheme.textSecondary)
                 }
             }
         }

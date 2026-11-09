@@ -44,35 +44,37 @@ struct PartnerSharingSettingsView: View {
             } footer: {
                 Text("Your partner will only see data you explicitly choose to share. Changes take effect immediately.")
             }
+            .listRowBackground(SupportTheme.surface)
 
             // Partner's sharing section
             Section {
                 if case .hasPartner(let info) = viewModel.partnerState {
                     HStack {
                         Image(systemName: "face.smiling")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                             .frame(width: 28)
                         Text("Their mood")
                         Spacer()
                         Text(info.isSharingMood ? "Shared" : "Not shared")
-                            .foregroundStyle(info.isSharingMood ? .green : .secondary)
+                            .foregroundStyle(info.isSharingMood ? SupportTheme.accent : SupportTheme.textSecondary)
                             .font(.subheadline)
                     }
 
                     HStack {
                         Image(systemName: "star")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                             .frame(width: 28)
                         Text("Their exercises")
                         Spacer()
                         Text(info.isSharingExercises ? "Shared" : "Not shared")
-                            .foregroundStyle(info.isSharingExercises ? .green : .secondary)
+                            .foregroundStyle(info.isSharingExercises ? SupportTheme.accent : SupportTheme.textSecondary)
                             .font(.subheadline)
                     }
                 }
             } header: {
                 Text("What your partner shares")
             }
+            .listRowBackground(SupportTheme.surface)
 
             // End partnership section
             Section {
@@ -87,7 +89,10 @@ struct PartnerSharingSettingsView: View {
             } footer: {
                 Text("Ending the partnership will remove shared data access for both of you. This cannot be undone.")
             }
+            .listRowBackground(SupportTheme.surface)
         }
+        .foregroundStyle(SupportTheme.textPrimary)
+        .supportScreen()
         .navigationTitle("Sharing Settings")
         .navigationBarTitleDisplayMode(.inline)
         .alert("End Partnership?", isPresented: $showEndPartnershipAlert) {
@@ -114,18 +119,18 @@ struct SharingToggleRow: View {
     var isLoading: Bool = false
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: SupportTheme.Spacing.s) {
             Image(systemName: icon)
                 .foregroundStyle(.tint)
                 .frame(width: 28)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text(title)
                     .font(.body)
 
                 Text(description)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
 
             Spacer()

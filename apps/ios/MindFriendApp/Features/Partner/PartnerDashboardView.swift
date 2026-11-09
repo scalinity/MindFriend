@@ -2,12 +2,13 @@ import SwiftUI
 
 /// Dashboard view showing partner data and actions
 struct PartnerDashboardView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject var viewModel: PartnerModeViewModel
     let partnerInfo: PartnerInfo
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 20) {
+            VStack(spacing: SupportTheme.Spacing.l) {
                 // Partner status card
                 PartnerStatusCard(
                     partnerInfo: partnerInfo,
@@ -25,7 +26,7 @@ struct PartnerDashboardView: View {
                 // Settings link
                 settingsSection
             }
-            .padding(.vertical, 16)
+            .padding(.vertical, SupportTheme.Spacing.m)
         }
         .refreshable {
             await viewModel.loadPartnerData()
@@ -57,35 +58,35 @@ struct PartnerDashboardView: View {
     // MARK: - Shared Data Section
 
     private var sharedDataSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("Their Progress")
                 .font(.headline)
-                .padding(.horizontal, 20)
+                .padding(.horizontal, SupportTheme.Spacing.l)
 
             // Mood card
             if partnerInfo.isSharingMood {
                 SharedMoodCard(moods: viewModel.partnerMoods)
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal, SupportTheme.Spacing.m)
             } else {
                 PartnerPlaceholder(
                     icon: "face.smiling",
                     title: "Mood not shared",
                     message: "Your partner hasn't enabled mood sharing yet"
                 )
-                .padding(.horizontal, 16)
+                .padding(.horizontal, SupportTheme.Spacing.m)
             }
 
             // Quest card
             if partnerInfo.isSharingExercises {
                 SharedQuestCard(quest: viewModel.partnerQuest)
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal, SupportTheme.Spacing.m)
             } else {
                 PartnerPlaceholder(
                     icon: "star",
                     title: "Quests not shared",
                     message: "Your partner hasn't enabled exercise sharing yet"
                 )
-                .padding(.horizontal, 16)
+                .padding(.horizontal, SupportTheme.Spacing.m)
             }
         }
     }
@@ -93,10 +94,10 @@ struct PartnerDashboardView: View {
     // MARK: - Together Section
 
     private var togetherSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("Together")
                 .font(.headline)
-                .padding(.horizontal, 20)
+                .padding(.horizontal, SupportTheme.Spacing.l)
 
             NavigationLink(destination: SharedExercisesView(viewModel: viewModel)) {
                 HStack {
@@ -105,63 +106,59 @@ struct PartnerDashboardView: View {
                         .foregroundStyle(.tint)
                         .frame(width: 44)
 
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                         Text("Couples Exercises")
                             .font(.subheadline)
                             .fontWeight(.medium)
-                            .foregroundStyle(.primary)
+                            .foregroundStyle(SupportTheme.textPrimary)
 
                         Text("Do mindfulness activities together")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
 
                     Spacer()
 
                     Image(systemName: "chevron.right")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
-                .padding()
-                .background(Color(.secondarySystemBackground))
-                .cornerRadius(12)
+                .supportCard()
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, SupportTheme.Spacing.m)
         }
     }
 
     // MARK: - Settings Section
 
     private var settingsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             NavigationLink(destination: PartnerSharingSettingsView(viewModel: viewModel)) {
                 HStack {
                     Image(systemName: "gearshape")
                         .font(.body)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
 
                     Text("Sharing Settings")
                         .font(.subheadline)
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(SupportTheme.textPrimary)
 
                     Spacer()
 
                     Image(systemName: "chevron.right")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
-                .padding()
-                .background(Color(.secondarySystemBackground))
-                .cornerRadius(12)
+                .supportCard()
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, SupportTheme.Spacing.m)
         }
     }
 
     // MARK: - Encouragement Sent Overlay
 
     private var encouragementSentOverlay: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             Image(systemName: "hand.wave.fill")
                 .font(.system(size: 50))
                 .foregroundStyle(.tint)
@@ -169,11 +166,11 @@ struct PartnerDashboardView: View {
             Text("Encouragement sent!")
                 .font(.headline)
         }
-        .padding(32)
-        .background(.ultraThinMaterial)
-        .cornerRadius(20)
-        .transition(.scale.combined(with: .opacity))
-        .animation(.spring(), value: viewModel.showEncouragementSent)
+        .padding(SupportTheme.Spacing.xl)
+        .background(SupportTheme.surface)
+        .cornerRadius(SupportTheme.cardRadius)
+        .transition(reduceMotion ? .opacity.animation(.easeInOut(duration: 0.2)) : .scale.combined(with: .opacity))
+        .animation(reduceMotion ? .easeInOut(duration: 0.2) : .spring(), value: viewModel.showEncouragementSent)
     }
 }
 

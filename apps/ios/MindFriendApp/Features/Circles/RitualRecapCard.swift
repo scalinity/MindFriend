@@ -11,17 +11,17 @@ struct RitualRecapCard: View {
     @State private var isLoadingReflections = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             // Header
-            HStack(spacing: 12) {
+            HStack(spacing: SupportTheme.Spacing.s) {
                 Image(systemName: "sparkles")
                     .font(.title2)
-                    .foregroundColor(.purple)
+                    .foregroundColor(SupportTheme.accent)
                     .frame(width: 44, height: 44)
-                    .background(Color.purple.opacity(0.15))
-                    .cornerRadius(12)
+                    .background(SupportTheme.surface)
+                    .cornerRadius(SupportTheme.controlRadius)
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     HStack {
                         Text(post.userDisplayName)
                             .fontWeight(.semibold)
@@ -29,16 +29,16 @@ struct RitualRecapCard: View {
                         Text("RITUAL")
                             .font(.caption2)
                             .fontWeight(.bold)
-                            .foregroundColor(.purple)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Color.purple.opacity(0.15))
-                            .cornerRadius(4)
+                            .foregroundColor(SupportTheme.accent)
+                            .padding(.horizontal, SupportTheme.Spacing.xs)
+                            .padding(.vertical, SupportTheme.Spacing.xxs)
+                            .background(SupportTheme.surface)
+                            .cornerRadius(SupportTheme.controlRadius)
                     }
 
                     Text(post.createdAt, style: .relative)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
 
                 Spacer()
@@ -54,11 +54,11 @@ struct RitualRecapCard: View {
             if !reflections.isEmpty {
                 Divider()
 
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                     Text("Reflections")
                         .font(.caption)
                         .fontWeight(.medium)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
 
                     ForEach(reflections) { reflection in
                         ReflectionRow(reflection: reflection)
@@ -71,12 +71,10 @@ struct RitualRecapCard: View {
                         .scaleEffect(0.8)
                     Spacer()
                 }
-                .padding(.vertical, 8)
+                .padding(.vertical, SupportTheme.Spacing.xs)
             }
         }
-        .padding()
-        .background(Color.purple.opacity(0.05))
-        .cornerRadius(16)
+        .supportCard()
         .task {
             if let ritualId = ritualId {
                 await loadReflections(ritualId: ritualId)
@@ -101,23 +99,23 @@ struct ReflectionRow: View {
     let reflection: RitualReflectionInfo
 
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .top, spacing: SupportTheme.Spacing.xs) {
             // Quote mark
             Text("\u{201D}")
                 .font(.title2)
-                .foregroundColor(.purple.opacity(0.5))
+                .foregroundColor(SupportTheme.accent.opacity(0.5))
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text(reflection.content)
                     .font(.subheadline)
                     .italic()
 
                 Text("— \(reflection.displayName)")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, SupportTheme.Spacing.xxs)
     }
 }
 

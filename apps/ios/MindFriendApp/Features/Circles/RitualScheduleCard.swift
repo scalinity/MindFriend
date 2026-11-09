@@ -14,7 +14,7 @@ struct RitualScheduleCard: View {
     @State private var isLoading = true
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             HStack {
                 Label("Rituals", systemImage: "sparkles")
                     .font(.headline)
@@ -25,7 +25,7 @@ struct RitualScheduleCard: View {
                     onCreateRitual()
                 } label: {
                     Image(systemName: "plus.circle.fill")
-                        .foregroundColor(.accentColor)
+                        .foregroundColor(SupportTheme.accent)
                 }
                 .accessibilityLabel("Create ritual")
             }
@@ -36,16 +36,16 @@ struct RitualScheduleCard: View {
                     ProgressView()
                     Spacer()
                 }
-                .padding(.vertical, 8)
+                .padding(.vertical, SupportTheme.Spacing.xs)
             } else if upcomingRituals.isEmpty {
-                VStack(spacing: 8) {
+                VStack(spacing: SupportTheme.Spacing.xs) {
                     Image(systemName: "sparkles")
                         .font(.largeTitle)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
 
                     Text("No upcoming rituals")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
 
                     Button {
                         onCreateRitual()
@@ -53,10 +53,10 @@ struct RitualScheduleCard: View {
                         Text("Start a Ritual")
                             .font(.subheadline.bold())
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.supportSecondary)
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
+                .padding(.vertical, SupportTheme.Spacing.xs)
             } else {
                 ForEach(upcomingRituals) { ritual in
                     RitualRowView(
@@ -66,9 +66,7 @@ struct RitualScheduleCard: View {
                 }
             }
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .cornerRadius(16)
+        .supportCard()
         .task {
             await loadRituals()
         }
@@ -98,33 +96,33 @@ struct RitualRowView: View {
     @State private var timerCancellable: AnyCancellable?
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: SupportTheme.Spacing.s) {
             // Icon
             Image(systemName: ritual.ritualType.icon)
                 .font(.title2)
-                .foregroundColor(ritual.ritualType.swiftUIColor)
+                .foregroundColor(SupportTheme.accent)
                 .frame(width: 40, height: 40)
-                .background(ritual.ritualType.swiftUIColor.opacity(0.15))
-                .cornerRadius(10)
+                .background(SupportTheme.accent)
+                .cornerRadius(SupportTheme.controlRadius)
 
             // Info
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text(ritual.title)
                     .font(.subheadline.bold())
-                    .lineLimit(1)
+                    .fixedSize(horizontal: false, vertical: true)
 
-                HStack(spacing: 4) {
+                HStack(spacing: SupportTheme.Spacing.xxs) {
                     Text(ritual.ritualType.displayName)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
 
                     Text("•")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
 
                     Text(timeRemaining)
                         .font(.caption)
-                        .foregroundColor(ritual.hasStarted ? .green : .secondary)
+                        .foregroundColor(ritual.hasStarted ? SupportTheme.accent : SupportTheme.textSecondary)
                 }
             }
 
@@ -137,18 +135,18 @@ struct RitualRowView: View {
                 } label: {
                     Text(ritual.hasStarted ? "Join" : "Join")
                         .font(.subheadline.bold())
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
+                        .padding(.horizontal, SupportTheme.Spacing.m)
+                        .padding(.vertical, SupportTheme.Spacing.xs)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(ritual.hasStarted ? .green : .accentColor)
+                .buttonStyle(.supportPrimary)
+                .tint(ritual.hasStarted ? SupportTheme.accent : SupportTheme.accent)
             } else {
                 Text("Ended")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, SupportTheme.Spacing.xxs)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(ritual.title), \(ritual.ritualType.displayName), \(timeRemaining)")
         .accessibilityAddTraits(ritual.isJoinable ? .isButton : [])

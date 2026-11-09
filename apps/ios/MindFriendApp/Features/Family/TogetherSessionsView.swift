@@ -23,10 +23,10 @@ struct TogetherSessionsView: View {
     var body: some View {
         ZStack {
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: SupportTheme.Spacing.l) {
                     // Active Sessions
                     if !activeSessions.isEmpty {
-                        VStack(alignment: .leading, spacing: 12) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                             Text("Currently Active")
                                 .font(.headline)
                                 .padding(.horizontal)
@@ -39,7 +39,7 @@ struct TogetherSessionsView: View {
 
                     // Upcoming Sessions
                     if !upcomingSessions.isEmpty {
-                        VStack(alignment: .leading, spacing: 12) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                             Text("Upcoming")
                                 .font(.headline)
                                 .padding(.horizontal)
@@ -52,7 +52,7 @@ struct TogetherSessionsView: View {
                     }
 
                     // Start New Activity
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                         Text("Start an Activity")
                             .font(.headline)
                             .padding(.horizontal)
@@ -69,16 +69,16 @@ struct TogetherSessionsView: View {
                         Text(errorMessage).foregroundStyle(.red).padding(.horizontal)
                     }
                     if sessions.isEmpty && templates.isEmpty && !isLoading {
-                        VStack(spacing: 16) {
+                        VStack(spacing: SupportTheme.Spacing.m) {
                             Image(systemName: "person.2.circle")
                                 .font(.system(size: 40))
-                                .foregroundStyle(.gray)
+                                .foregroundStyle(SupportTheme.textSecondary)
                             Text("No activities yet")
                                 .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                         }
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 40)
+                        .padding(.vertical, SupportTheme.Spacing.xl)
                     }
                 }
                 .padding(.vertical)
@@ -88,6 +88,8 @@ struct TogetherSessionsView: View {
                 ProgressView()
             }
         }
+        .foregroundStyle(SupportTheme.textPrimary)
+        .supportScreen()
         .navigationTitle("Together Sessions")
         .task { await loadData() }
         .refreshable { await loadData() }
@@ -167,25 +169,27 @@ private struct TogetherSessionDetailView: View {
             Section {
                 Text(session.title).font(.headline)
                 Text(session.status.rawValue.replacingOccurrences(of: "_", with: " ").capitalized)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                 if let template {
                     if let description = template.description { Text(description) }
                     Label(template.formattedDuration, systemImage: "clock")
                 }
                 if session.status == .pending {
                     Text("Waiting for at least \(session.minimumParticipants) participants to join.")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.caption).foregroundStyle(SupportTheme.textSecondary)
                 }
             }
+            .listRowBackground(SupportTheme.surface)
             Section("Participants") {
                 ForEach(participants) { participant in
                     HStack {
                         Text(members.first { $0.id == participant.memberId }?.displayName ?? "Family member")
                         Spacer()
-                        Text(participant.status.displayName).foregroundStyle(.secondary)
+                        Text(participant.status.displayName).foregroundStyle(SupportTheme.textSecondary)
                     }
                 }
             }
+            .listRowBackground(SupportTheme.surface)
             if let audioPlayer {
                 Section("Guidance") {
                     Button(isPlaying ? "Pause guidance" : "Play guidance", systemImage: isPlaying ? "pause.fill" : "play.fill") {
@@ -194,6 +198,7 @@ private struct TogetherSessionDetailView: View {
                     }
                     .disabled(session.status != .inProgress || myParticipant?.status != .joined)
                 }
+                .listRowBackground(SupportTheme.surface)
             }
             if isOpen {
                 Section {
@@ -209,6 +214,7 @@ private struct TogetherSessionDetailView: View {
                     }
                     if isBusy { ProgressView() }
                 }
+                .listRowBackground(SupportTheme.surface)
                 .disabled(isBusy)
             }
             if let errorMessage {
@@ -216,8 +222,11 @@ private struct TogetherSessionDetailView: View {
                     Text(errorMessage).foregroundStyle(.red)
                     Button("Refresh") { Task { await refresh() } }
                 }
+                .listRowBackground(SupportTheme.surface)
             }
         }
+        .foregroundStyle(SupportTheme.textPrimary)
+        .supportScreen()
         .navigationTitle("Family Activity")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
@@ -276,43 +285,38 @@ struct TogetherActiveSessionCard: View {
     let action: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             HStack {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     Text(session.title)
                         .font(.headline)
                     Text("In Progress")
                         .font(.caption)
-                        .foregroundStyle(.green)
+                        .foregroundStyle(SupportTheme.accent)
                 }
                 Spacer()
                 Image(systemName: "play.circle.fill")
                     .font(.system(size: 24))
-                    .foregroundStyle(.green)
+                    .foregroundStyle(SupportTheme.accent)
             }
 
             if let timeRemaining = session.timeRemaining {
-                HStack(spacing: 8) {
+                HStack(spacing: SupportTheme.Spacing.xs) {
                     Image(systemName: "clock")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                     Text("Time remaining: \(formatTimeInterval(timeRemaining))")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
             }
 
             Button(action: action) {
                 Text("View Details")
                     .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(.green.opacity(0.1))
-                    .foregroundStyle(.green)
-                    .cornerRadius(8)
             }
+            .buttonStyle(.supportSecondary)
         }
-        .padding()
-        .background(.white)
-        .cornerRadius(12)
+        .supportCard()
         .padding(.horizontal)
     }
 
@@ -327,8 +331,8 @@ struct SessionCard: View {
     let session: TogetherSession
 
     var body: some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
+        HStack(spacing: SupportTheme.Spacing.s) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text(session.title)
                     .font(.subheadline)
                     .fontWeight(.semibold)
@@ -336,18 +340,16 @@ struct SessionCard: View {
                 if let scheduledFor = session.scheduledFor {
                     Text(scheduledFor.formatted(date: .abbreviated, time: .shortened))
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
             }
 
             Spacer()
 
             Image(systemName: "chevron.right")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
-        .padding()
-        .background(.white)
-        .cornerRadius(12)
+        .supportCard()
         .padding(.horizontal)
     }
 }
@@ -357,9 +359,9 @@ struct TogetherTemplateCard: View {
     let action: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             HStack {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     Text(template.title)
                         .font(.subheadline)
                         .fontWeight(.semibold)
@@ -367,34 +369,29 @@ struct TogetherTemplateCard: View {
                     if let description = template.description {
                         Text(description)
                             .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
+                            .foregroundStyle(SupportTheme.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
 
                 Spacer()
 
-                VStack(alignment: .trailing, spacing: 2) {
+                VStack(alignment: .trailing, spacing: SupportTheme.Spacing.xxs) {
                     Text(template.formattedDuration)
                         .font(.caption2)
                         .fontWeight(.semibold)
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(SupportTheme.accent)
                 }
             }
 
             Button(action: action) {
                 Text("Start Activity")
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
-                    .background(.blue)
-                    .foregroundStyle(.white)
-                    .cornerRadius(6)
                     .font(.caption)
             }
+            .buttonStyle(.supportSecondary)
         }
-        .padding()
-        .background(.gray.opacity(0.05))
-        .cornerRadius(12)
+        .supportCard()
         .padding(.horizontal)
     }
 }

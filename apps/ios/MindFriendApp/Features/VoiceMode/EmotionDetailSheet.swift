@@ -29,7 +29,7 @@ struct EmotionDetailSheet: View {
     var body: some View {
         NavigationView {
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: SupportTheme.Spacing.l) {
                     // Current emotion card
                     if let emotion = currentEmotion {
                         currentEmotionCard(emotion)
@@ -50,7 +50,7 @@ struct EmotionDetailSheet: View {
                     // Context note
                     Text("Based on voice analysis using on-device AI emotion detection. Your voice data is never stored or shared.")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal)
 
@@ -63,10 +63,12 @@ struct EmotionDetailSheet: View {
                         Label("Emotion Settings", systemImage: "slider.horizontal.3")
                             .font(.subheadline)
                     }
-                    .padding(.bottom, 16)
+                    .padding(.bottom, SupportTheme.Spacing.m)
                 }
                 .padding()
             }
+            .foregroundStyle(SupportTheme.textPrimary)
+            .supportSheet()
             .navigationTitle("Your Emotional State")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -83,7 +85,7 @@ struct EmotionDetailSheet: View {
 
     @ViewBuilder
     private func currentEmotionCard(_ emotion: EmotionResult) -> some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             // Emoji - use shared helper
             Text(EmotionSnapshot.emoji(for: emotion.emotion))
                 .font(.system(size: 64))
@@ -93,57 +95,57 @@ struct EmotionDetailSheet: View {
                 .font(.title.weight(.semibold))
 
             // Confidence
-            HStack(spacing: 4) {
+            HStack(spacing: SupportTheme.Spacing.xxs) {
                 Image(systemName: "gauge.with.needle")
                     .font(.caption)
                 Text("\(Int(emotion.confidence * 100))% confidence")
                     .font(.subheadline)
             }
-            .foregroundStyle(.secondary)
+            .foregroundStyle(SupportTheme.textSecondary)
 
             // Confidence level description
             Text(confidenceDescription(emotion.confidence))
                 .font(.caption)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
-        .padding(.vertical, 24)
+        .padding(.vertical, SupportTheme.Spacing.l)
         .frame(maxWidth: .infinity)
-        .background(Color(.systemGray6))
-        .cornerRadius(16)
+        .background(SupportTheme.surface)
+        .cornerRadius(SupportTheme.cardRadius)
     }
 
     private var noEmotionCard: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: SupportTheme.Spacing.s) {
             Image(systemName: "waveform.badge.magnifyingglass")
                 .font(.system(size: 40))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
 
             Text("No emotion detected yet")
                 .font(.headline)
 
             Text("Speak for at least 3 seconds to analyze your emotional state")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .multilineTextAlignment(.center)
         }
-        .padding(.vertical, 24)
+        .padding(.vertical, SupportTheme.Spacing.l)
         .frame(maxWidth: .infinity)
-        .background(Color(.systemGray6))
-        .cornerRadius(16)
+        .background(SupportTheme.surface)
+        .cornerRadius(SupportTheme.cardRadius)
     }
 
     // MARK: - Emotion Breakdown
 
     @ViewBuilder
     private func emotionBreakdownSection(_ probabilities: [String: Double]) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("Emotion Breakdown")
                 .font(.headline)
 
             let sortedEmotions = probabilities.sorted { $0.value > $1.value }
 
             ForEach(sortedEmotions, id: \.key) { emotion, probability in
-                HStack(spacing: 12) {
+                HStack(spacing: SupportTheme.Spacing.s) {
                     // Use shared emoji helper
                     Text(EmotionSnapshot.emoji(for: emotion))
                         .font(.title3)
@@ -154,13 +156,13 @@ struct EmotionDetailSheet: View {
 
                     GeometryReader { geometry in
                         ZStack(alignment: .leading) {
-                            RoundedRectangle(cornerRadius: 4)
-                                .fill(Color(.systemGray5))
+                            RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                                .fill(SupportTheme.surface)
                                 .frame(height: 8)
 
-                            RoundedRectangle(cornerRadius: 4)
+                            RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
                                 // Use shared color helper
-                                .fill(EmotionSnapshot.color(for: emotion).opacity(0.8))
+                                .fill(SupportTheme.accent)
                                 .frame(width: geometry.size.width * probability, height: 8)
                         }
                     }
@@ -168,54 +170,50 @@ struct EmotionDetailSheet: View {
 
                     Text("\(Int(probability * 100))%")
                         .font(.caption.monospacedDigit())
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                         .frame(width: 40, alignment: .trailing)
                 }
             }
         }
-        .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(12)
+        .supportCard()
     }
 
     // MARK: - Emotion Timeline
 
     private var emotionTimelineSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("Session Timeline")
                 .font(.headline)
 
             ForEach(emotionHistory.suffix(10).reversed()) { snapshot in
-                HStack(spacing: 12) {
+                HStack(spacing: SupportTheme.Spacing.s) {
                     // Use instance property which calls shared helper
                     Text(snapshot.emoji)
                         .font(.title3)
 
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                         Text(snapshot.emotion.capitalized)
                             .font(.subheadline.weight(.medium))
 
                         Text("\(Int(snapshot.confidence * 100))% confidence")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
 
                     Spacer()
 
                     Text(snapshot.formattedTimestamp())
                         .font(.caption.monospacedDigit())
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
-                .padding(.vertical, 8)
+                .padding(.vertical, SupportTheme.Spacing.xs)
 
                 if snapshot.id != emotionHistory.last?.id {
                     Divider()
                 }
             }
         }
-        .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(12)
+        .supportCard()
     }
 
     // MARK: - Helpers

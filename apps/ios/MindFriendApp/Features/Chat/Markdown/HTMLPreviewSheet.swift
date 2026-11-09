@@ -1,5 +1,6 @@
 import SwiftUI
 import WebKit
+import UIKit
 
 /// A sandboxed HTML preview sheet using WKWebView
 struct HTMLPreviewSheet: View {
@@ -7,12 +8,15 @@ struct HTMLPreviewSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
 
     var body: some View {
         NavigationStack {
             HTMLWebView(htmlContent: wrappedHTML, colorScheme: colorScheme)
                 .ignoresSafeArea(edges: [.bottom, .horizontal])
-                .background(Color.black)
+                .background(SupportTheme.surface)
+                .foregroundStyle(SupportTheme.textPrimary)
+                .supportSheet()
                 .navigationTitle("HTML Preview")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
@@ -35,8 +39,9 @@ struct HTMLPreviewSheet: View {
         }
 
         // Wrap fragment in basic HTML structure
-        let backgroundColor = colorScheme == .dark ? "#1c1c1e" : "#ffffff"
-        let textColor = colorScheme == .dark ? "#ffffff" : "#000000"
+        let backgroundColor = cssColor(SupportTheme.canvas)
+        let textColor = cssColor(SupportTheme.textPrimary)
+        let linkColor = cssColor(SupportTheme.accent)
 
         return """
         <!DOCTYPE html>
@@ -50,12 +55,12 @@ struct HTMLPreviewSheet: View {
                     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
                     background-color: \(backgroundColor);
                     color: \(textColor);
-                    padding: 16px;
+                    padding: \(SupportTheme.Spacing.m)px;
                     margin: 0;
                     line-height: 1.5;
                 }
                 img { max-width: 100%; height: auto; }
-                a { color: #007AFF; }
+                a { color: \(linkColor); }
             </style>
         </head>
         <body>
@@ -63,6 +68,17 @@ struct HTMLPreviewSheet: View {
         </body>
         </html>
         """
+    }
+
+    private func cssColor(_ color: Color) -> String {
+        let traits = UITraitCollection(traitsFrom: [
+            UITraitCollection(userInterfaceStyle: colorScheme == .dark ? .dark : .light),
+            UITraitCollection(accessibilityContrast: colorSchemeContrast == .increased ? .high : .normal)
+        ])
+        let resolved = UIColor(color).resolvedColor(with: traits)
+        var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
+        resolved.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        return "rgba(\(Int(red * 255)), \(Int(green * 255)), \(Int(blue * 255)), \(alpha))"
     }
 }
 

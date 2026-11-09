@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct DistortionCoachCard: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let coachData: CoachData
     let isAcknowledged: Bool  // Passed from parent instead of local @State
     let onAction: (CoachInteraction.Action) -> Void
@@ -8,11 +10,11 @@ struct DistortionCoachCard: View {
     @State private var showFullEducation = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             // Header
             HStack {
                 Image(systemName: "brain.head.profile")
-                    .foregroundColor(.blue)
+                    .foregroundColor(SupportTheme.accent)
                     .accessibilityHidden(true)
                 Text("Noticed something")
                     .font(.subheadline)
@@ -21,23 +23,23 @@ struct DistortionCoachCard: View {
             }
 
             // Short description with distortion name
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                 Text("\"" + coachData.distortionName + "\"")
                     .font(.subheadline)
                     .fontWeight(.semibold)
-                    .foregroundColor(.primary)
+                    .foregroundColor(SupportTheme.textPrimary)
 
                 Text(coachData.shortDescription)
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(SupportTheme.textSecondary)
             }
 
             // Reframe suggestion
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                 HStack {
                     Image(systemName: "lightbulb.fill")
                         .font(.caption)
-                        .foregroundColor(.yellow)
+                        .foregroundColor(SupportTheme.Celebration.gold)
                         .accessibilityHidden(true)
                     Text("Reframe:")
                         .font(.caption)
@@ -46,46 +48,44 @@ struct DistortionCoachCard: View {
 
                 Text(coachData.reframeText)
                     .font(.subheadline)
-                    .foregroundColor(.primary)
+                    .foregroundColor(SupportTheme.textPrimary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(.vertical, 4)
+            .padding(.vertical, SupportTheme.Spacing.xxs)
 
             // Socratic questions (optional expansion)
             if showFullEducation && !coachData.socraticQuestions.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                     Text("Questions to consider:")
                         .font(.caption)
                         .fontWeight(.semibold)
 
                     ForEach(Array(coachData.socraticQuestions.prefix(3).enumerated()), id: \.offset) { index, question in
-                        HStack(alignment: .top, spacing: 6) {
+                        HStack(alignment: .top, spacing: SupportTheme.Spacing.xs) {
                             Text("•")
-                                .foregroundColor(.secondary)
+                                .foregroundColor(SupportTheme.textSecondary)
                             Text(question)
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(SupportTheme.textSecondary)
                         }
                     }
                 }
-                .padding(.top, 4)
+                .padding(.top, SupportTheme.Spacing.xxs)
             }
 
             // Action buttons
             if !isAcknowledged {
-                HStack(spacing: 12) {
+                (dynamicTypeSize.isAccessibilitySize
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: SupportTheme.Spacing.s))
+                    : AnyLayout(HStackLayout(spacing: SupportTheme.Spacing.s))) {
                     Button {
                         onAction(.helpful)
                     } label: {
                         Text("This helps")
                             .font(.caption)
                             .fontWeight(.medium)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(Color.blue)
-                            .foregroundColor(.white)
-                            .cornerRadius(8)
                     }
+                    .buttonStyle(.supportPrimary)
                     .accessibilityLabel("This helps")
                     .accessibilityHint("Marks this cognitive reframe as helpful and records your feedback")
 
@@ -95,12 +95,8 @@ struct DistortionCoachCard: View {
                         Text("Not right now")
                             .font(.caption)
                             .fontWeight(.medium)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(Color.gray.opacity(0.2))
-                            .foregroundColor(.primary)
-                            .cornerRadius(8)
                     }
+                    .buttonStyle(.supportSecondary)
                     .accessibilityLabel("Not right now")
                     .accessibilityHint("Dismisses this suggestion and suppresses coaching for 30 minutes")
 
@@ -110,12 +106,8 @@ struct DistortionCoachCard: View {
                         Text("Learn more")
                             .font(.caption)
                             .fontWeight(.medium)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(Color.gray.opacity(0.2))
-                            .foregroundColor(.primary)
-                            .cornerRadius(8)
                     }
+                    .buttonStyle(.supportSecondary)
                     .accessibilityLabel("Learn more")
                     .accessibilityHint("Shows additional reflection questions about this thinking pattern")
                 }
@@ -123,28 +115,28 @@ struct DistortionCoachCard: View {
                 // Acknowledged state
                 HStack {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(.green)
+                        .foregroundColor(SupportTheme.accent)
                         .accessibilityHidden(true)
                     Text("Thank you for engaging")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(SupportTheme.textSecondary)
                 }
                 .accessibilityLabel("Coach feedback acknowledged")
-                .transition(.opacity)
+                .transition(reduceMotion ? .opacity.animation(.easeInOut(duration: 0.2)) : .opacity)
             }
         }
         .padding()
         .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color(.systemBackground))
-                .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
+            RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                .fill(SupportTheme.canvas)
+                .shadow(color: SupportTheme.canvas.opacity(0.1), radius: 4, x: 0, y: 2)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.blue.opacity(0.3), lineWidth: 1)
+            RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                .stroke(SupportTheme.accent.opacity(0.3), lineWidth: 1)
         )
         .padding(.horizontal)
-        .padding(.vertical, 8)
+        .padding(.vertical, SupportTheme.Spacing.xs)
     }
 }
 
@@ -175,5 +167,5 @@ struct DistortionCoachCard: View {
 
         Spacer()
     }
-    .background(Color.gray.opacity(0.1))
+    .background(SupportTheme.surface)
 }

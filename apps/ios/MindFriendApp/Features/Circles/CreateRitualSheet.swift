@@ -21,17 +21,19 @@ struct CreateRitualSheet: View {
             Form {
                 Section {
                     TextField("Ritual title", text: $title)
+                        .supportField()
                         .accessibilityLabel("Ritual title")
                 } header: {
                     Text("Title")
                 }
+                .listRowBackground(SupportTheme.surface)
 
                 Section {
                     Picker("Ritual Type", selection: $selectedType) {
                         ForEach(RitualType.allCases) { type in
                             HStack {
                                 Image(systemName: type.icon)
-                                    .foregroundColor(type.swiftUIColor)
+                                    .foregroundColor(SupportTheme.accent)
                                 Text(type.displayName)
                             }
                             .tag(type)
@@ -42,11 +44,12 @@ struct CreateRitualSheet: View {
                     if let type = RitualType(rawValue: selectedType.rawValue) {
                         Text(type.description)
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                 } header: {
                     Text("Type")
                 }
+                .listRowBackground(SupportTheme.surface)
 
                 Section {
                     Toggle("Start immediately", isOn: $startNow)
@@ -64,19 +67,21 @@ struct CreateRitualSheet: View {
                 } header: {
                     Text("When")
                 }
+                .listRowBackground(SupportTheme.surface)
 
                 Section {
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                         Label("3 minutes", systemImage: "timer")
                             .font(.subheadline)
 
                         Text("Members will receive a notification and can join within 2 minutes of start time.")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                 } header: {
                     Text("Duration")
                 }
+                .listRowBackground(SupportTheme.surface)
 
                 if let error = errorMessage {
                     Section {
@@ -84,8 +89,11 @@ struct CreateRitualSheet: View {
                             .foregroundColor(.red)
                             .font(.caption)
                     }
+                    .listRowBackground(SupportTheme.surface)
                 }
             }
+            .foregroundStyle(SupportTheme.textPrimary)
+            .supportSheet()
             .navigationTitle("Create Ritual")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -107,8 +115,8 @@ struct CreateRitualSheet: View {
                 if isCreating {
                     ProgressView("Creating...")
                         .padding()
-                        .background(.regularMaterial)
-                        .cornerRadius(10)
+                        .background(SupportTheme.surface)
+                        .cornerRadius(SupportTheme.controlRadius)
                 }
             }
         }

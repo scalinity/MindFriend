@@ -21,7 +21,7 @@ struct MentorshipFindMentorView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: SupportTheme.Spacing.l) {
                     // Area Selection
                     areaSelectionSection
 
@@ -35,6 +35,8 @@ struct MentorshipFindMentorView: View {
                 }
                 .padding()
             }
+            .foregroundStyle(SupportTheme.textPrimary)
+            .supportScreen()
             .navigationTitle("Find a Mentor")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -52,11 +54,15 @@ struct MentorshipFindMentorView: View {
                     }
                 }
             }
-            .alert("Error", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
-                Button("OK") { errorMessage = nil }
-            } message: {
-                if let error = errorMessage {
-                    Text(error)
+            .safeAreaInset(edge: .bottom) {
+                if let errorMessage {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
+                        Label(errorMessage, systemImage: "exclamationmark.triangle")
+                        Button("OK") { self.errorMessage = nil }
+                            .buttonStyle(.supportSecondary)
+                    }
+                    .supportCard()
+                    .padding(SupportTheme.Spacing.m)
                 }
             }
             .task {
@@ -69,11 +75,11 @@ struct MentorshipFindMentorView: View {
     // MARK: - Sections
 
     private var areaSelectionSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("What areas would you like help with?")
                 .font(.headline)
 
-            FlowLayout(spacing: 8) {
+            FlowLayout(spacing: SupportTheme.Spacing.xs) {
                 ForEach(MentorshipExpertiseArea.allCases) { area in
                     AreaChip(
                         title: area.displayName,
@@ -94,7 +100,7 @@ struct MentorshipFindMentorView: View {
             HStack {
                 if isSearching {
                     ProgressView()
-                        .tint(.white)
+                        .tint(SupportTheme.textPrimary)
                 } else {
                     Image(systemName: "magnifyingglass")
                 }
@@ -102,7 +108,7 @@ struct MentorshipFindMentorView: View {
             }
             .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.borderedProminent)
+        .buttonStyle(.supportPrimary)
         .controlSize(.large)
         .disabled(selectedAreas.isEmpty || isSearching)
     }
@@ -116,7 +122,7 @@ struct MentorshipFindMentorView: View {
                 description: Text("Try selecting different areas or check back later.")
             )
         } else {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
                 Text("Matched Mentors")
                     .font(.headline)
 
@@ -179,16 +185,16 @@ private struct AreaChip: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 4) {
+            HStack(spacing: SupportTheme.Spacing.xxs) {
                 Image(systemName: icon)
                     .font(.caption)
                 Text(title)
                     .font(.subheadline)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(isSelected ? Color.accentColor : Color.gray.opacity(0.15))
-            .foregroundStyle(isSelected ? .white : .primary)
+            .padding(.horizontal, SupportTheme.Spacing.s)
+            .padding(.vertical, SupportTheme.Spacing.xs)
+            .background(isSelected ? SupportTheme.accent : SupportTheme.textSecondary.opacity(0.15))
+            .foregroundStyle(isSelected ? SupportTheme.onAccent : SupportTheme.textPrimary)
             .clipShape(Capsule())
         }
         .buttonStyle(.plain)
@@ -201,19 +207,19 @@ private struct MentorCard: View {
     let onRequest: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             // Header
             HStack {
                 // Avatar placeholder
                 Circle()
-                    .fill(Color.accentColor.opacity(0.2))
+                    .fill(SupportTheme.accent.opacity(0.2))
                     .frame(width: 50, height: 50)
                     .overlay {
                         Image(systemName: "person.fill")
-                            .foregroundStyle(Color.accentColor)
+                            .foregroundStyle(SupportTheme.accent)
                     }
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     HStack {
                         Text(mentor.styleEnum.displayName)
                             .font(.subheadline.bold())
@@ -221,24 +227,24 @@ private struct MentorCard: View {
                         Spacer()
 
                         // Compatibility Score
-                        HStack(spacing: 4) {
+                        HStack(spacing: SupportTheme.Spacing.xxs) {
                             Image(systemName: "star.fill")
-                                .foregroundStyle(.yellow)
+                                .foregroundStyle(SupportTheme.Celebration.gold)
                             Text("\(mentor.compatibilityPercentage)%")
                                 .font(.subheadline.bold())
                         }
                     }
 
-                    HStack(spacing: 8) {
+                    HStack(spacing: SupportTheme.Spacing.xs) {
                         if let rating = mentor.avgRating {
                             Label(String(format: "%.1f", rating), systemImage: "star.fill")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                         }
 
                         Text("\(mentor.totalMentorships) mentorships")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                 }
             }
@@ -246,18 +252,18 @@ private struct MentorCard: View {
             // Match Reason
             Text(mentor.matchReason)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
 
             // Expertise Tags
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
+                HStack(spacing: SupportTheme.Spacing.xs) {
                     ForEach(mentor.expertiseAreas.prefix(4), id: \.self) { area in
                         Text(formatAreaName(area))
                             .font(.caption2)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Color.accentColor.opacity(0.1))
-                            .foregroundStyle(Color.accentColor)
+                            .padding(.horizontal, SupportTheme.Spacing.xs)
+                            .padding(.vertical, SupportTheme.Spacing.xxs)
+                            .background(SupportTheme.surface)
+                            .foregroundStyle(SupportTheme.accent)
                             .clipShape(Capsule())
                     }
                 }
@@ -267,18 +273,18 @@ private struct MentorCard: View {
             if let bio = mentor.bio, !bio.isEmpty {
                 Text(bio)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .lineLimit(2)
             }
 
             // Request Button
             Button("Request Mentorship", action: onRequest)
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.supportPrimary)
                 .controlSize(.small)
                 .frame(maxWidth: .infinity)
         }
         .padding()
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .background(SupportTheme.surface, in: RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
         .accessibilityElement(children: .contain)
     }
 
@@ -305,11 +311,11 @@ private struct RequestMentorshipSheet: View {
                 Section {
                     HStack {
                         Circle()
-                            .fill(Color.accentColor.opacity(0.2))
+                            .fill(SupportTheme.accent.opacity(0.2))
                             .frame(width: 40, height: 40)
                             .overlay {
                                 Image(systemName: "person.fill")
-                                    .foregroundStyle(Color.accentColor)
+                                    .foregroundStyle(SupportTheme.accent)
                             }
 
                         VStack(alignment: .leading) {
@@ -317,21 +323,25 @@ private struct RequestMentorshipSheet: View {
                                 .font(.subheadline.bold())
                             Text(mentor.matchReason)
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                         }
                     }
                 } header: {
                     Text("Mentor")
                 }
+                .listRowBackground(SupportTheme.surface)
 
                 Section {
                     TextEditor(text: $introMessage)
+                        .scrollContentBackground(.hidden)
+                        .supportField()
                         .frame(minHeight: 120)
                 } header: {
                     Text("Introduction Message")
                 } footer: {
                     Text("Write a brief message introducing yourself and what you're hoping to get from this mentorship. Minimum 20 characters.")
                 }
+                .listRowBackground(SupportTheme.surface)
 
                 Section {
                     Button {
@@ -349,7 +359,10 @@ private struct RequestMentorshipSheet: View {
                     }
                     .disabled(introMessage.count < 20 || isSubmitting)
                 }
+                .listRowBackground(SupportTheme.surface)
             }
+            .foregroundStyle(SupportTheme.textPrimary)
+            .supportScreen()
             .navigationTitle("Request Mentorship")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -359,11 +372,15 @@ private struct RequestMentorshipSheet: View {
                     }
                 }
             }
-            .alert("Error", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
-                Button("OK") { errorMessage = nil }
-            } message: {
-                if let error = errorMessage {
-                    Text(error)
+            .safeAreaInset(edge: .bottom) {
+                if let errorMessage {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
+                        Label(errorMessage, systemImage: "exclamationmark.triangle")
+                        Button("OK") { self.errorMessage = nil }
+                            .buttonStyle(.supportSecondary)
+                    }
+                    .supportCard()
+                    .padding(SupportTheme.Spacing.m)
                 }
             }
         }

@@ -33,26 +33,26 @@ struct MentorshipProfileView: View {
 
     var body: some View {
         ZStack {
-            Color(.systemBackground).ignoresSafeArea()
+            SupportTheme.canvas.ignoresSafeArea()
 
             if let profile = profileService.profile {
                 ScrollView {
-                    VStack(spacing: 24) {
+                    VStack(spacing: SupportTheme.Spacing.l) {
                         // Header
-                        VStack(alignment: .leading, spacing: 8) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                             Text("Mentorship Profile")
                                 .font(.title2)
                                 .fontWeight(.bold)
 
                             Text(profile.isMentorAvailable ? "Available as mentor" : "Seeking mentor")
                                 .font(.subheadline)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(SupportTheme.textSecondary)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal)
 
                         // Mentor Toggle
-                        VStack(alignment: .leading, spacing: 12) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                             Label("Become a Mentor", systemImage: "person.badge.plus")
                                 .font(.headline)
 
@@ -67,19 +67,17 @@ struct MentorshipProfileView: View {
                                     }
                                 )
                             )
-                            .tint(.blue)
+                            .tint(SupportTheme.accent)
                         }
-                        .padding()
-                        .background(Color(.secondarySystemBackground))
-                        .cornerRadius(12)
+                        .supportCard()
                         .padding(.horizontal)
 
                         if profile.isMentorAvailable {
                             // Mentor-specific sections
-                            VStack(alignment: .leading, spacing: 12) {
+                            VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                                 Label("Expertise Areas", systemImage: "star.fill")
                                     .font(.headline)
-                                    .foregroundColor(.blue)
+                                    .foregroundColor(SupportTheme.accent)
 
                                 MentorshipFlowLayout(
                                     items: allTopics,
@@ -103,12 +101,10 @@ struct MentorshipProfileView: View {
                                     )
                                 }
                             }
-                            .padding()
-                            .background(Color(.secondarySystemBackground))
-                            .cornerRadius(12)
+                            .supportCard()
                             .padding(.horizontal)
 
-                            VStack(alignment: .leading, spacing: 12) {
+                            VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                                 Label("Availability", systemImage: "calendar")
                                     .font(.headline)
 
@@ -125,11 +121,9 @@ struct MentorshipProfileView: View {
 
                                 Text("Hours per week you can mentor")
                                     .font(.caption)
-                                    .foregroundColor(.secondary)
+                                    .foregroundColor(SupportTheme.textSecondary)
                             }
-                            .padding()
-                            .background(Color(.secondarySystemBackground))
-                            .cornerRadius(12)
+                            .supportCard()
                             .padding(.horizontal)
                             .onChange(of: availabilityHours) {
                                 Task {
@@ -137,15 +131,17 @@ struct MentorshipProfileView: View {
                                 }
                             }
 
-                            VStack(alignment: .leading, spacing: 12) {
+                            VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                                 Label("About You", systemImage: "text.alignleft")
                                     .font(.headline)
 
                                 TextEditor(text: $bioText)
+                                    .scrollContentBackground(.hidden)
+                                    .supportField()
                                     .frame(height: 100)
-                                    .padding(8)
-                                    .background(Color(.tertiarySystemBackground))
-                                    .cornerRadius(8)
+                                    .padding(SupportTheme.Spacing.xs)
+                                    .background(SupportTheme.surface)
+                                    .cornerRadius(SupportTheme.controlRadius)
                                     .lineLimit(5)
                                     .onChange(of: bioText) {
                                         Task {
@@ -155,21 +151,19 @@ struct MentorshipProfileView: View {
 
                                 Text("\(bioText.count)/500")
                                     .font(.caption2)
-                                    .foregroundColor(.secondary)
+                                    .foregroundColor(SupportTheme.textSecondary)
                                     .frame(maxWidth: .infinity, alignment: .trailing)
                             }
-                            .padding()
-                            .background(Color(.secondarySystemBackground))
-                            .cornerRadius(12)
+                            .supportCard()
                             .padding(.horizontal)
                         }
 
                         // Seeking mentor section (always visible)
                         if !profile.isMentorAvailable || true {
-                            VStack(alignment: .leading, spacing: 12) {
+                            VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                                 Label("What You're Seeking", systemImage: "magnifyingglass")
                                     .font(.headline)
-                                    .foregroundColor(.green)
+                                    .foregroundColor(SupportTheme.accent)
 
                                 MentorshipFlowLayout(
                                     items: allTopics,
@@ -194,26 +188,22 @@ struct MentorshipProfileView: View {
                                     )
                                 }
                             }
-                            .padding()
-                            .background(Color(.secondarySystemBackground))
-                            .cornerRadius(12)
+                            .supportCard()
                             .padding(.horizontal)
                         }
 
                         // Verification Badge
                         if profile.isVerified {
-                            HStack(spacing: 8) {
+                            HStack(spacing: SupportTheme.Spacing.xs) {
                                 Image(systemName: "checkmark.seal.fill")
-                                    .foregroundColor(.green)
+                                    .foregroundColor(SupportTheme.accent)
 
                                 Text("Verified Mentor")
                                     .fontWeight(.semibold)
 
                                 Spacer()
                             }
-                            .padding()
-                            .background(Color.green.opacity(0.1))
-                            .cornerRadius(12)
+                            .supportCard()
                             .padding(.horizontal)
                         }
 
@@ -222,13 +212,15 @@ struct MentorshipProfileView: View {
                     .padding(.vertical)
                 }
             } else {
-                VStack(spacing: 16) {
+                VStack(spacing: SupportTheme.Spacing.m) {
                     ProgressView()
                     Text("Loading profile...")
-                        .foregroundColor(.secondary)
+                        .foregroundColor(SupportTheme.textSecondary)
                 }
             }
         }
+        .foregroundStyle(SupportTheme.textPrimary)
+        .supportScreen()
         .navigationTitle("Mentorship")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
@@ -258,27 +250,25 @@ struct TopicPill: View {
         Button(action: action) {
             Text(text)
                 .font(.callout)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
                 .background(
                     isSelected
-                        ? (isSecondary ? Color.green.opacity(0.2) : Color.blue.opacity(0.2))
-                        : Color(.quaternarySystemFill)
+                        ? (isSecondary ? SupportTheme.accent.opacity(0.2) : SupportTheme.accent.opacity(0.2))
+                        : SupportTheme.field
                 )
                 .foregroundColor(
                     isSelected
-                        ? (isSecondary ? .green : .blue)
-                        : .primary
+                        ? (isSecondary ? SupportTheme.accent : SupportTheme.accent)
+                        : SupportTheme.textPrimary
                 )
-                .cornerRadius(8)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 8)
+                    RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
                         .stroke(
-                            isSelected ? (isSecondary ? Color.green : Color.blue) : Color.clear,
+                            isSelected ? (isSecondary ? SupportTheme.accent : SupportTheme.accent) : Color.clear,
                             lineWidth: 1.5
                         )
                 )
         }
+        .buttonStyle(.supportSecondary)
     }
 }
 
@@ -290,7 +280,7 @@ struct MentorshipFlowLayout<Item: Hashable, Content: View>: View {
     @ViewBuilder let content: (Item, Bool) -> Content
 
     var body: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 100))], spacing: 8) {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 100))], spacing: SupportTheme.Spacing.xs) {
             ForEach(items, id: \.self) { item in
                 content(item, selectedItems.contains(item))
             }

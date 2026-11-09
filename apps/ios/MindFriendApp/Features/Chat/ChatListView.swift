@@ -44,22 +44,22 @@ struct ChatListView: View {
         NavigationStack {
             Group {
                 if isLoading {
-                    VStack(spacing: 16) {
+                    VStack(spacing: SupportTheme.Spacing.m) {
                         ProgressView()
                         Text("Loading conversations...")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                 } else if let error = loadError {
-                    VStack(spacing: 16) {
+                    VStack(spacing: SupportTheme.Spacing.m) {
                         Image(systemName: "exclamationmark.triangle")
                             .font(.largeTitle)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                         Text("Couldn't load conversations")
                             .font(.headline)
                         Text(error)
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal)
                         Button("Try Again") {
@@ -67,7 +67,7 @@ struct ChatListView: View {
                                 await loadConversations()
                             }
                         }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.supportPrimary)
                     }
                 } else if conversations.isEmpty {
                     EmptyConversationsView(showNewChat: $showNewChat)
@@ -79,9 +79,10 @@ struct ChatListView: View {
                             } label: {
                                 ConversationRow(conversation: conversation)
                             }
+                            .listRowBackground(SupportTheme.surface)
                         }
                         .onDelete(perform: deleteConversations)
-                        if let pageError { Text(pageError).font(.caption).foregroundStyle(.secondary) }
+                        if let pageError { Text(pageError).font(.caption).foregroundStyle(SupportTheme.textSecondary) }
                         if hasMore {
                             Button("Load older conversations") { Task { await loadConversations(more: true) } }
                                 .disabled(loadingMore)
@@ -89,9 +90,12 @@ struct ChatListView: View {
                         }
                         if loadingMore { ProgressView("Loading older conversations") }
                     }
+                    .listRowBackground(SupportTheme.surface)
                     .listStyle(.plain)
                 }
             }
+            .foregroundStyle(SupportTheme.textPrimary)
+            .supportScreen()
             .navigationTitle("Chat")
             .safeAreaInset(edge: .bottom) {
                 if let coordinator = container.supportSessionCoordinator {
@@ -104,14 +108,14 @@ struct ChatListView: View {
                         appState.showCrisisResources = true
                     } label: {
                         Image(systemName: "lifepreserver")
-                            .frame(minWidth: 44, minHeight: 44)
+                            .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                     }
                     .accessibilityLabel("Support and crisis resources")
                 }
 
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     Button { showChatTutorial = true } label: {
-                        Image(systemName: "questionmark.circle").frame(minWidth: 44, minHeight: 44)
+                        Image(systemName: "questionmark.circle").frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                     }
                     .accessibilityLabel("How Chat works")
                     Button {
@@ -122,7 +126,7 @@ struct ChatListView: View {
                             appState.showPaywall = true
                         }
                     } label: {
-                        Image(systemName: "mic.fill").frame(minWidth: 44, minHeight: 44)
+                        Image(systemName: "mic.fill").frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                     }
                     .accessibilityLabel("Voice mode")
                     .accessibilityHint(appState.entitlements.tier == .premium ? "Start a voice conversation" : "Premium feature - tap to upgrade")
@@ -131,7 +135,7 @@ struct ChatListView: View {
                         newChatRequestID = UUID()
                         showNewChat = true
                     } label: {
-                        Image(systemName: "square.and.pencil").frame(minWidth: 44, minHeight: 44)
+                        Image(systemName: "square.and.pencil").frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                     }
                     .accessibilityLabel("New conversation")
                 }
@@ -316,14 +320,17 @@ struct ChatListView: View {
 }
 
 struct ConversationRow: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let conversation: Conversation
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
+            (dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: SupportTheme.Spacing.xs))
+                : AnyLayout(HStackLayout(spacing: SupportTheme.Spacing.s))) {
                 Text(conversation.title ?? "New Conversation")
                     .font(.headline)
-                    .lineLimit(1)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 Spacer()
 
@@ -331,17 +338,17 @@ struct ConversationRow: View {
                     if conversation.dateIsKnown != false { Text(conversation.updatedAt, style: .relative) }
                     else { Text("Date not supplied") }
                 }.font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
 
             if let lastMessage = conversation.lastMessage {
                 Text(lastMessage.content)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .lineLimit(2)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, SupportTheme.Spacing.xxs)
     }
 }
 
@@ -353,14 +360,14 @@ struct EmptyConversationsView: View {
         GeometryReader { proxy in
             ScrollView {
                 content
-                    .padding(.vertical, 24)
+                    .padding(.vertical, SupportTheme.Spacing.l)
                     .frame(minHeight: proxy.size.height)
             }
         }
     }
 
     private var content: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: SupportTheme.Spacing.l) {
             Image(systemName: "bubble.left.and.bubble.right")
                 .font(.system(size: 60))
                 .foregroundStyle(SupportTheme.textSecondary)
@@ -368,6 +375,7 @@ struct EmptyConversationsView: View {
 
             Text("No conversations yet")
                 .font(.title2)
+                .accessibilityAddTraits(.isHeader)
                 .fontWeight(.semibold)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
@@ -386,13 +394,13 @@ struct EmptyConversationsView: View {
                     .foregroundStyle(SupportTheme.onAccent)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 24)
-                    .padding(.vertical, 12)
+                    .padding(.horizontal, SupportTheme.Spacing.l)
+                    .padding(.vertical, SupportTheme.Spacing.s)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.supportPrimary)
             .tint(SupportTheme.accent)
         }
-        .padding(.horizontal, 24)
+        .padding(.horizontal, SupportTheme.Spacing.l)
         .frame(maxWidth: .infinity)
     }
 }

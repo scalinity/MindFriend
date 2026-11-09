@@ -14,6 +14,8 @@ struct SharedExercisesView: View {
                 exerciseListView
             }
         }
+        .foregroundStyle(SupportTheme.textPrimary)
+        .supportScreen()
         .navigationTitle("Couples Exercises")
         .navigationBarTitleDisplayMode(.large)
         .onAppear {
@@ -42,18 +44,18 @@ struct SharedExercisesView: View {
     // MARK: - Empty State
 
     private var emptyStateView: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: SupportTheme.Spacing.m) {
             Image(systemName: "figure.2.arms.open")
                 .font(.system(size: 50))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
 
             Text("No exercises available")
                 .font(.headline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
 
             Text("Check back later for couples exercises you can do together")
                 .font(.subheadline)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .multilineTextAlignment(.center)
         }
         .padding()
@@ -72,6 +74,7 @@ struct SharedExercisesView: View {
                         }
                     }
                 }
+                .listRowBackground(SupportTheme.surface)
             }
         }
     }
@@ -89,46 +92,43 @@ private struct ExerciseRow: View {
 
     var body: some View {
         Button(action: onTap) {
-            HStack(spacing: 12) {
+            HStack(spacing: SupportTheme.Spacing.s) {
                 // Icon
                 Image(systemName: iconForType(exercise.type))
                     .font(.title2)
                     .foregroundStyle(.tint)
                     .frame(width: 44, height: 44)
-                    .background(Color.accentColor.opacity(0.1))
-                    .cornerRadius(10)
 
                 // Info
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     HStack {
                         Text(exercise.name)
                             .font(.subheadline)
                             .fontWeight(.medium)
-                            .foregroundStyle(.primary)
 
                         if exercise.requiresPremium {
                             Image(systemName: "lock.fill")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                         }
                     }
 
-                    HStack(spacing: 8) {
+                    HStack(spacing: SupportTheme.Spacing.xs) {
                         Label("\(exercise.durationMinutes) min", systemImage: "clock")
                         Label(exercise.difficulty.rawValue.capitalized, systemImage: "chart.bar")
                     }
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                 }
 
                 Spacer()
 
                 Image(systemName: "chevron.right")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
-            .padding(.vertical, 4)
         }
+        .buttonStyle(.supportSecondary)
         .buttonStyle(.plain)
     }
 
@@ -152,18 +152,18 @@ private struct ExerciseDetailSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.l) {
                     // Header
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                         Text(exercise.name)
                             .font(.title2)
                             .fontWeight(.bold)
 
                         Text(exercise.description)
                             .font(.body)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
 
-                        HStack(spacing: 16) {
+                        HStack(spacing: SupportTheme.Spacing.m) {
                             Label("\(exercise.durationMinutes) min", systemImage: "clock")
                             Label(exercise.difficulty.rawValue.capitalized, systemImage: "chart.bar")
                             if exercise.requiresBothPartners {
@@ -171,33 +171,33 @@ private struct ExerciseDetailSheet: View {
                             }
                         }
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                     }
 
                     // Instructions
                     if !exercise.instructions.steps.isEmpty {
-                        VStack(alignment: .leading, spacing: 12) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                             Text("Instructions")
                                 .font(.headline)
 
                             ForEach(exercise.instructions.steps.sorted(by: { $0.order < $1.order }), id: \.order) { step in
-                                HStack(alignment: .top, spacing: 12) {
+                                HStack(alignment: .top, spacing: SupportTheme.Spacing.s) {
                                     Text("\(step.order)")
                                         .font(.caption)
                                         .fontWeight(.bold)
-                                        .foregroundStyle(.white)
+                                        .foregroundStyle(SupportTheme.textPrimary)
                                         .frame(width: 24, height: 24)
-                                        .background(Color.accentColor)
-                                        .cornerRadius(12)
+                                        .background(SupportTheme.surface)
+                                        .cornerRadius(SupportTheme.controlRadius)
 
-                                    VStack(alignment: .leading, spacing: 4) {
+                                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                                         Text(step.title)
                                             .font(.subheadline)
                                             .fontWeight(.medium)
 
                                         Text(step.description)
                                             .font(.caption)
-                                            .foregroundStyle(.secondary)
+                                            .foregroundStyle(SupportTheme.textSecondary)
                                     }
                                 }
                             }
@@ -206,13 +206,13 @@ private struct ExerciseDetailSheet: View {
 
                     // Tips
                     if let tips = exercise.instructions.tips {
-                        VStack(alignment: .leading, spacing: 8) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                             Text("Tips")
                                 .font(.headline)
 
                             Text(tips)
                                 .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                         }
                     }
 
@@ -236,13 +236,10 @@ private struct ExerciseDetailSheet: View {
                     }
                     .font(.headline)
                     .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.accentColor)
-                    .foregroundStyle(.white)
-                    .cornerRadius(12)
                 }
+                .buttonStyle(.supportPrimary)
                 .padding()
-                .background(.ultraThinMaterial)
+                .background(SupportTheme.surface)
             }
         }
     }

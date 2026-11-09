@@ -21,8 +21,11 @@ struct JoinFamilySheet: View {
                     .textInputAutocapitalization(.characters)
 
                 TextField("Your Nickname (optional)", text: $nickname)
+
+                    .supportField()
                     .textContentType(.name)
             }
+            .listRowBackground(SupportTheme.surface)
 
             Section("Birth Date (optional)") {
                 Button(action: { showDatePicker.toggle() }) {
@@ -31,10 +34,10 @@ struct JoinFamilySheet: View {
                         Spacer()
                         if let birthDate = birthDate {
                             Text(birthDate.formatted(date: .abbreviated, time: .omitted))
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                         } else {
                             Text("Not set")
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(SupportTheme.textSecondary)
                         }
                     }
                 }
@@ -51,12 +54,14 @@ struct JoinFamilySheet: View {
                     .datePickerStyle(.graphical)
                 }
             }
+            .listRowBackground(SupportTheme.surface)
 
             Section("About Invite Codes") {
                 Text("Ask your family admin for the invite code to join their family group. Your age will help determine which content is appropriate for you.")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
+            .listRowBackground(SupportTheme.surface)
 
             Section {
                 if let error = error {
@@ -72,13 +77,17 @@ struct JoinFamilySheet: View {
                         Text("Join Family")
                     }
                 }
+                .buttonStyle(.supportPrimary)
                 .disabled(inviteCode.isEmpty || isLoading)
             }
+            .listRowBackground(SupportTheme.surface)
         }
         .dismissKeyboardOnSwipe()
         .onTapGesture {
             hideKeyboard()
         }
+        .foregroundStyle(SupportTheme.textPrimary)
+        .supportSheet()
         .navigationTitle("Join Family")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

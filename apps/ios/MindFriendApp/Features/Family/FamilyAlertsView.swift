@@ -5,6 +5,7 @@ struct FamilyAlertsView: View {
     @EnvironmentObject private var container: DependencyContainer
     @State private var alerts: [FamilyAlert] = []
     @State private var isLoading = false
+    @State private var loadError: String?
     let familyGroup: FamilyWellnessGroup
 
     var unreadAlerts: [FamilyAlert] {
@@ -18,25 +19,25 @@ struct FamilyAlertsView: View {
     var body: some View {
         ZStack {
             if alerts.isEmpty && !isLoading {
-                VStack(spacing: 16) {
+                VStack(spacing: SupportTheme.Spacing.m) {
                     Image(systemName: "bell.badge")
                         .font(.system(size: 40))
-                        .foregroundStyle(.gray)
+                        .foregroundStyle(SupportTheme.textSecondary)
                     Text("No alerts")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                     Text("All is well with your family!")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color(.systemBackground))
+                .background(SupportTheme.surface)
             } else {
                 ScrollView {
-                    VStack(spacing: 24) {
+                    VStack(spacing: SupportTheme.Spacing.l) {
                         // Unread Alerts
                         if !unreadAlerts.isEmpty {
-                            VStack(alignment: .leading, spacing: 12) {
+                            VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                                 Text("New Alerts")
                                     .font(.headline)
                                     .padding(.horizontal)
@@ -51,7 +52,7 @@ struct FamilyAlertsView: View {
 
                         // Read Alerts
                         if !readAlerts.isEmpty {
-                            VStack(alignment: .leading, spacing: 12) {
+                            VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                                 Text("History")
                                     .font(.headline)
                                     .padding(.horizontal)
@@ -70,6 +71,21 @@ struct FamilyAlertsView: View {
                 ProgressView()
             }
         }
+        .safeAreaInset(edge: .bottom) {
+            if let loadError {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
+                    Label("Family alerts unavailable", systemImage: "exclamationmark.triangle")
+                        .font(.headline).accessibilityAddTraits(.isHeader)
+                    Text(loadError)
+                    Button("Try Again") { Task { await loadAlerts() } }
+                        .buttonStyle(.supportSecondary)
+                }
+                .supportCard()
+                .padding(SupportTheme.Spacing.m)
+            }
+        }
+        .foregroundStyle(SupportTheme.textPrimary)
+        .supportScreen()
         .navigationTitle("Alerts")
         .task {
             await loadAlerts()
@@ -78,11 +94,13 @@ struct FamilyAlertsView: View {
 
     private func loadAlerts() async {
         isLoading = true
+        loadError = nil
         defer { isLoading = false }
 
         do {
             alerts = try await container.familyService.fetchFamilyAlerts()
         } catch {
+            loadError = error.localizedDescription
             Log.family.error("Failed to load alerts", error: error)
         }
     }
@@ -106,9 +124,9 @@ struct AlertCard: View {
     let onDismiss: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                     HStack {
                         Text(alert.title)
                             .font(.subheadline)
@@ -122,36 +140,38 @@ struct AlertCard: View {
 
                     Text(alert.message)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                         .lineLimit(3)
                 }
 
                 Button(action: onDismiss) {
                     Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
+                    .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                 }
+                .accessibilityLabel("Dismiss family alert")
             }
 
             // Conversation Starters
             if let starters = alert.conversationStarters, !starters.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                     Text("Suggested topics:")
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
 
                     ForEach(starters.prefix(2), id: \.self) { starter in
-                        HStack(spacing: 6) {
+                        HStack(spacing: SupportTheme.Spacing.xs) {
                             Image(systemName: "bubble.left.fill")
                                 .font(.caption2)
-                                .foregroundStyle(.blue)
+                                .foregroundStyle(SupportTheme.accent)
                             Text(starter)
                                 .font(.caption2)
                         }
                     }
                 }
-                .padding(8)
-                .background(.blue.opacity(0.05))
-                .cornerRadius(6)
+                .padding(SupportTheme.Spacing.xs)
+                .background(SupportTheme.surface)
+                .cornerRadius(SupportTheme.controlRadius)
             }
 
             // Action Button
@@ -159,17 +179,12 @@ struct AlertCard: View {
                 Button(action: {}) {
                     Text(actionLabel(actionType))
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
-                        .background(.blue.opacity(0.1))
-                        .foregroundStyle(.blue)
-                        .cornerRadius(6)
                         .font(.caption)
                 }
+                .buttonStyle(.supportSecondary)
             }
         }
-        .padding()
-        .background(.white)
-        .cornerRadius(12)
+        .supportCard()
         .padding(.horizontal)
         .opacity(alert.wasRead ? 0.7 : 1.0)
     }
@@ -184,8 +199,8 @@ struct AlertCard: View {
 
     private func severityColor(_ severity: FamilyAlertSeverity) -> Color {
         switch severity {
-        case .info: return .blue
-        case .attention: return .orange
+        case .info: return SupportTheme.accent
+        case .attention: return SupportTheme.accent
         case .concern: return .red
         }
     }

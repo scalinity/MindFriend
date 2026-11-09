@@ -16,13 +16,15 @@ struct RewriteOptionsView: View {
                 Divider()
 
                 ScrollView {
-                    VStack(spacing: 16) {
+                    VStack(spacing: SupportTheme.Spacing.m) {
                         originalMessageSection
                         rewriteOptionsSection
                     }
                     .padding()
                 }
             }
+            .foregroundStyle(SupportTheme.textPrimary)
+            .supportScreen()
             .navigationTitle("Rewrite Your Thought")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -34,23 +36,21 @@ struct RewriteOptionsView: View {
     }
 
     private var originalMessageSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             Text("Original")
                 .font(.caption)
-                .foregroundColor(.secondary)
+                .foregroundColor(SupportTheme.textSecondary)
 
             Text(originalMessage)
                 .font(.body)
-                .foregroundColor(.secondary)
-                .padding(12)
+                .foregroundColor(SupportTheme.textSecondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color(.systemGray6))
-                .cornerRadius(12)
         }
+        .supportCard()
     }
 
     private var rewriteOptionsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text(" alternatives")
                 .font(.headline)
 
@@ -88,35 +88,35 @@ struct RewriteOptionCard: View {
     let onApply: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             Button(action: onTap) {
-                HStack(alignment: .top, spacing: 12) {
+                HStack(alignment: .top, spacing: SupportTheme.Spacing.s) {
                     Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                        .foregroundColor(isSelected ? .blue : .gray)
+                        .foregroundColor(isSelected ? SupportTheme.accent : SupportTheme.textSecondary)
                         .font(.title2)
 
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                         Text(option.text)
                             .font(.body)
-                            .foregroundColor(.primary)
+                            .foregroundColor(SupportTheme.textPrimary)
                             .multilineTextAlignment(.leading)
 
                         if isExpanded {
                             Text(option.explanation)
                                 .font(.caption)
-                                .foregroundColor(.secondary)
-                                .padding(.top, 4)
+                                .foregroundColor(SupportTheme.textSecondary)
+                                .padding(.top, SupportTheme.Spacing.xxs)
                         }
                     }
 
                     Spacer()
                 }
-                .padding(12)
-                .background(isSelected ? Color.blue.opacity(0.1) : Color(.systemBackground))
-                .cornerRadius(12)
+                .padding(SupportTheme.Spacing.s)
+                .background(isSelected ? SupportTheme.accent.opacity(0.1) : SupportTheme.canvas)
+                .cornerRadius(SupportTheme.controlRadius)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(isSelected ? Color.blue : Color.gray.opacity(0.3), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
+                        .stroke(isSelected ? SupportTheme.accent : SupportTheme.border, lineWidth: 1)
                 )
             }
             .buttonStyle(PlainButtonStyle())
@@ -126,14 +126,11 @@ struct RewriteOptionCard: View {
                     Button(action: onApply) {
                         Text("Apply")
                             .font(.subheadline.weight(.semibold))
-                            .foregroundColor(.white)
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 10)
-                            .background(Color.blue)
-                            .cornerRadius(10)
                     }
+                    .buttonStyle(.supportPrimary)
                 }
-                .padding(.horizontal, 4)
+                .padding(.horizontal, SupportTheme.Spacing.xxs)
             }
         }
     }

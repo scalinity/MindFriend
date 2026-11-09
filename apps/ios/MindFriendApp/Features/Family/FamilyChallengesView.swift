@@ -5,47 +5,46 @@ struct FamilyChallengesView: View {
     @EnvironmentObject private var container: DependencyContainer
     @State private var challenges: [FamilyChallenge] = []
     @State private var isLoading = false
+    @State private var loadError: String?
     @State private var showCreateSheet = false
     let familyGroup: FamilyWellnessGroup
 
     var activeChallenges: [FamilyChallenge] {
-        challenges.filter { $0.status == .active }
+        challenges.filter { $0.status == .active && $0.challengeType != .streak }
     }
 
     var completedChallenges: [FamilyChallenge] {
-        challenges.filter { $0.status == .completed }
+        challenges.filter { $0.status == .completed && $0.challengeType != .streak }
     }
 
     var body: some View {
         ZStack {
             if challenges.isEmpty && !isLoading {
-                VStack(spacing: 16) {
+                VStack(spacing: SupportTheme.Spacing.m) {
                     Image(systemName: "target")
                         .font(.system(size: 40))
-                        .foregroundStyle(.gray)
+                        .foregroundStyle(SupportTheme.textSecondary)
                     Text("No challenges yet")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                     Button(action: { showCreateSheet = true }) {
                         Text("Create First Challenge")
                             .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(.blue)
-                            .foregroundStyle(.white)
-                            .cornerRadius(12)
                     }
+                    .buttonStyle(.supportSecondary)
                     .padding()
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color(.systemBackground))
+                .background(SupportTheme.surface)
             } else {
                 ScrollView {
-                    VStack(spacing: 24) {
+                    VStack(spacing: SupportTheme.Spacing.l) {
                         // Active Challenges
                         if !activeChallenges.isEmpty {
-                            VStack(alignment: .leading, spacing: 12) {
+                            VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                                 Text("Active Challenges")
                                     .font(.headline)
+                                    .accessibilityAddTraits(.isHeader)
                                     .padding(.horizontal)
 
                                 ForEach(activeChallenges, id: \.id) { challenge in
@@ -56,7 +55,7 @@ struct FamilyChallengesView: View {
 
                         // Completed Challenges
                         if !completedChallenges.isEmpty {
-                            VStack(alignment: .leading, spacing: 12) {
+                            VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                                 Text("Completed")
                                     .font(.headline)
                                     .padding(.horizontal)
@@ -75,12 +74,29 @@ struct FamilyChallengesView: View {
                 ProgressView()
             }
         }
+        .safeAreaInset(edge: .bottom) {
+            if let loadError {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
+                    Label("Challenges unavailable", systemImage: "exclamationmark.triangle")
+                        .font(.headline).accessibilityAddTraits(.isHeader)
+                    Text(loadError)
+                    Button("Try Again") { Task { await loadChallenges() } }
+                        .buttonStyle(.supportSecondary)
+                }
+                .supportCard()
+                .padding(SupportTheme.Spacing.m)
+            }
+        }
+        .foregroundStyle(SupportTheme.textPrimary)
+        .supportScreen()
         .navigationTitle("Challenges")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button(action: { showCreateSheet = true }) {
                     Image(systemName: "plus.circle")
+                    .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                 }
+                .accessibilityLabel("Create challenge")
             }
         }
         .sheet(isPresented: $showCreateSheet) {
@@ -96,11 +112,13 @@ struct FamilyChallengesView: View {
 
     private func loadChallenges() async {
         isLoading = true
+        loadError = nil
         defer { isLoading = false }
 
         do {
             challenges = try await container.familyService.fetchChallenges()
         } catch {
+            loadError = error.localizedDescription
             Log.family.error("Failed to load challenges", error: error)
         }
     }
@@ -112,9 +130,9 @@ struct ChallengeDetailCard: View {
     let challenge: FamilyChallenge
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             HStack {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     Text(challenge.title)
                         .font(.subheadline)
                         .fontWeight(.semibold)
@@ -122,27 +140,27 @@ struct ChallengeDetailCard: View {
                     if let description = challenge.description {
                         Text(description)
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                             .lineLimit(2)
                     }
                 }
 
                 Spacer()
 
-                VStack(alignment: .trailing, spacing: 2) {
+                VStack(alignment: .trailing, spacing: SupportTheme.Spacing.xxs) {
                     Text(challenge.challengeType.rawValue.capitalized)
                         .font(.caption)
                         .fontWeight(.semibold)
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(SupportTheme.accent)
                 }
             }
 
             // Progress Bar
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 HStack {
                     Text("Progress")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                     Spacer()
                     Text("\(challenge.currentProgress)/\(challenge.targetValue)")
                         .font(.caption2)
@@ -150,23 +168,21 @@ struct ChallengeDetailCard: View {
                 }
 
                 ProgressView(value: challenge.progressPercentage)
-                    .tint(.blue)
+                    .tint(SupportTheme.accent)
             }
 
             // Date Range
             if let endDate = challenge.endDate {
-                HStack(spacing: 8) {
+                HStack(spacing: SupportTheme.Spacing.xs) {
                     Image(systemName: "calendar")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                     Text(endDate.formatted(date: .abbreviated, time: .omitted))
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
             }
         }
-        .padding()
-        .background(.white)
-        .cornerRadius(12)
+        .supportCard()
         .padding(.horizontal)
     }
 }
@@ -189,22 +205,25 @@ struct CreateChallengeSheet: View {
             Section("Challenge Details") {
                 TextField("Title", text: $title)
                 TextField("Description (optional)", text: $description, axis: .vertical)
+                    .supportField()
                     .lineLimit(3...)
 
                 Picker("Type", selection: $selectedType) {
-                    Text("Streak").tag(FamilyChallengeType.streak)
                     Text("Cumulative").tag(FamilyChallengeType.cumulative)
                     Text("Event").tag(FamilyChallengeType.event)
                     Text("Custom").tag(FamilyChallengeType.custom)
                 }
             }
+            .listRowBackground(SupportTheme.surface)
 
             Section("Target") {
                 TextField("Target Value", text: $targetValue)
                     .keyboardType(.numberPad)
                 TextField("Duration (days)", text: $durationDays)
+                    .supportField()
                     .keyboardType(.numberPad)
             }
+            .listRowBackground(SupportTheme.surface)
 
             Section {
                 Button(action: createChallenge) {
@@ -216,7 +235,10 @@ struct CreateChallengeSheet: View {
                 }
                 .disabled(title.isEmpty || targetValue.isEmpty || isLoading)
             }
+            .listRowBackground(SupportTheme.surface)
         }
+        .foregroundStyle(SupportTheme.textPrimary)
+        .supportScreen()
         .navigationTitle("New Challenge")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

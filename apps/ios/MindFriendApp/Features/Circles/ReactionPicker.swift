@@ -10,7 +10,7 @@ struct ReactionDisplay: View {
     @State private var isLoading = false
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: SupportTheme.Spacing.xs) {
             // Existing reactions
             ForEach(reactions, id: \.emoji) { reaction in
                 ReactionBubble(
@@ -31,12 +31,12 @@ struct ReactionDisplay: View {
             } label: {
                 Image(systemName: "face.smiling")
                     .font(.callout)
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Color.secondary.opacity(0.1))
+                    .foregroundColor(SupportTheme.textSecondary)
                     .clipShape(Capsule())
+                .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
             }
+            .accessibilityLabel("Add a reaction")
+            .buttonStyle(.supportSecondary)
             .popover(isPresented: $showPicker) {
                 ReactionPickerPopover { emoji in
                     showPicker = false
@@ -135,16 +135,16 @@ private struct ReactionBubble: View {
 
     var body: some View {
         Button(action: onTap) {
-            HStack(spacing: 4) {
+            HStack(spacing: SupportTheme.Spacing.xxs) {
                 Text(reaction.emoji)
                     .font(.callout)
                 Text("\(reaction.count)")
                     .font(.caption)
-                    .foregroundColor(reaction.userReacted ? .accentColor : .secondary)
+                    .foregroundColor(reaction.userReacted ? SupportTheme.accent : SupportTheme.textSecondary)
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(reaction.userReacted ? Color.accentColor.opacity(0.15) : Color.secondary.opacity(0.1))
+            .padding(.horizontal, SupportTheme.Spacing.xs)
+            .padding(.vertical, SupportTheme.Spacing.xxs)
+            .background(reaction.userReacted ? SupportTheme.accent.opacity(0.15) : SupportTheme.textSecondary.opacity(0.1))
             .clipShape(Capsule())
         }
         .buttonStyle(.plain)
@@ -156,7 +156,7 @@ struct ReactionPickerPopover: View {
     let onSelect: (ReactionEmoji) -> Void
 
     var body: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: SupportTheme.Spacing.m) {
             ForEach(ReactionEmoji.allCases, id: \.self) { emoji in
                 Button {
                     onSelect(emoji)
@@ -177,17 +177,16 @@ struct InlineReactionPicker: View {
     let onSelect: (ReactionEmoji) -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: SupportTheme.Spacing.s) {
             ForEach(ReactionEmoji.allCases, id: \.self) { emoji in
                 Button {
                     onSelect(emoji)
                 } label: {
                     Text(emoji.rawValue)
                         .font(.title2)
-                        .padding(8)
-                        .background(Color.secondary.opacity(0.1))
                         .clipShape(Circle())
                 }
+                .buttonStyle(.supportSecondary)
                 .buttonStyle(.plain)
             }
         }
@@ -195,7 +194,7 @@ struct InlineReactionPicker: View {
 }
 
 #Preview {
-    VStack(spacing: 20) {
+    VStack(spacing: SupportTheme.Spacing.l) {
         ReactionDisplay(
             postId: "test-post",
             reactions: .constant([

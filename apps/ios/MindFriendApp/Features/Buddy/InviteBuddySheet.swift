@@ -16,34 +16,35 @@ struct InviteBuddySheet: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: SupportTheme.Spacing.l) {
                     // Icon
                     Image(systemName: "person.2.fill")
                         .font(.system(size: 60))
                         .foregroundStyle(.tint)
-                        .padding(.top, 24)
+                        .padding(.top, SupportTheme.Spacing.l)
                         .accessibilityHidden(true)
 
                     // Header
-                    VStack(spacing: 12) {
+                    VStack(spacing: SupportTheme.Spacing.s) {
                         Text("Invite a Wellness Buddy")
                             .font(.title2)
+                            .accessibilityAddTraits(.isHeader)
                             .fontWeight(.bold)
                             .multilineTextAlignment(.center)
 
-                        Text("Invite a friend to join your wellness journey. You'll be able to see each other's streaks and send encouragement!")
+                        Text("Invite a friend to share wellness activities and send each other encouragement.")
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
                             .multilineTextAlignment(.center)
                     }
-                    .padding(.horizontal, 24)
+                    .padding(.horizontal, SupportTheme.Spacing.l)
 
                     // Stats row
-                    HStack(spacing: 24) {
+                    HStack(spacing: SupportTheme.Spacing.l) {
                         BuddyStatBadge(value: "3x", label: "more likely\nto succeed")
                         BuddyStatBadge(value: "+100", label: "XP for\nboth of you")
                     }
-                    .padding(.vertical, 8)
+                    .padding(.vertical, SupportTheme.Spacing.xs)
 
                     // Method picker
                     Picker("Contact Method", selection: $contactMethod) {
@@ -51,64 +52,60 @@ struct InviteBuddySheet: View {
                         Text("Email").tag(BuddyRelationship.InviteMethod.email)
                     }
                     .pickerStyle(.segmented)
-                    .padding(.horizontal, 24)
+                    .padding(.horizontal, SupportTheme.Spacing.l)
 
                     // Contact input
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                         Text(contactMethod == .sms ? "Phone Number" : "Email Address")
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.textSecondary)
 
                         TextField(
                             contactMethod == .sms ? "Enter phone number" : "Enter email address",
                             text: $contact
                         )
+                        .supportField()
                         .textFieldStyle(.plain)
                         .keyboardType(contactMethod == .sms ? .phonePad : .emailAddress)
                         .textContentType(contactMethod == .sms ? .telephoneNumber : .emailAddress)
                         .autocapitalization(.none)
-                        .padding()
-                        .background(Color(.secondarySystemBackground))
-                        .cornerRadius(12)
                         .accessibilityLabel(contactMethod == .sms ? "Phone number input" : "Email address input")
                     }
-                    .padding(.horizontal, 24)
+                    .padding(.horizontal, SupportTheme.Spacing.l)
 
                     // Send button
                     Button(action: sendInvite) {
                         HStack {
                             if isSending {
                                 ProgressView()
-                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                    .padding(.trailing, 4)
+                                    .progressViewStyle(CircularProgressViewStyle(tint: SupportTheme.onAccent))
+                                    .padding(.trailing, SupportTheme.Spacing.xxs)
                             }
                             Text(isSending ? "Sending..." : "Send Invite")
                                 .font(.headline)
                         }
                         .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(canSend ? Color.accentColor : Color.secondary.opacity(0.3))
-                        .foregroundStyle(.white)
-                        .cornerRadius(12)
                     }
+                    .buttonStyle(.supportPrimary)
                     .disabled(!canSend)
-                    .padding(.horizontal, 24)
+                    .padding(.horizontal, SupportTheme.Spacing.l)
                     .accessibilityLabel("Send invite")
                     .accessibilityHint(canSend ? "Send an invite to your buddy" : "Enter a valid contact first")
 
                     // How it works section
-                    VStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
                         Text("How it works")
                             .font(.headline)
+                            .accessibilityAddTraits(.isHeader)
 
                         HowItWorksRow(number: "1", text: "Your friend receives your invitation")
                         HowItWorksRow(number: "2", text: "They download MindFriend and sign up")
                         HowItWorksRow(number: "3", text: "You become wellness buddies!")
                     }
-                    .padding(20)
-                    .background(Color(.secondarySystemBackground))
-                    .cornerRadius(16)
-                    .padding(.horizontal, 24)
+                    .padding(SupportTheme.Spacing.l)
+                    .background(SupportTheme.surface)
+                    .cornerRadius(SupportTheme.cardRadius)
+                    .padding(.horizontal, SupportTheme.Spacing.l)
 
                     Spacer(minLength: 32)
                 }
@@ -117,6 +114,8 @@ struct InviteBuddySheet: View {
             .onTapGesture {
                 hideKeyboard()
             }
+            .foregroundStyle(SupportTheme.textPrimary)
+            .supportSheet()
             .navigationTitle("Invite Buddy")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -196,7 +195,7 @@ private struct BuddyStatBadge: View {
     let label: String
 
     var body: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: SupportTheme.Spacing.xxs) {
             Text(value)
                 .font(.title2)
                 .fontWeight(.bold)
@@ -204,7 +203,7 @@ private struct BuddyStatBadge: View {
 
             Text(label)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .multilineTextAlignment(.center)
         }
     }
@@ -215,18 +214,18 @@ struct HowItWorksRow: View {
     let text: String
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: SupportTheme.Spacing.s) {
             Text(number)
                 .font(.caption)
                 .fontWeight(.bold)
-                .foregroundStyle(.white)
+                .foregroundStyle(SupportTheme.textPrimary)
                 .frame(width: 20, height: 20)
-                .background(Color.accentColor)
-                .cornerRadius(10)
+                .background(SupportTheme.surface)
+                .cornerRadius(SupportTheme.controlRadius)
 
             Text(text)
                 .font(.subheadline)
-                .foregroundStyle(.primary)
+                .foregroundStyle(SupportTheme.textPrimary)
 
             Spacer()
         }

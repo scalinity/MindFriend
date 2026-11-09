@@ -1,37 +1,40 @@
 import SwiftUI
 
 struct MoodActionCard: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let card: ActionCard
     let onMoodSelected: (String) -> Void
 
     private let moodEmojis = ["😊", "🙂", "😐", "😔", "😢"]
 
     var body: some View {
-        VStack(spacing: 12) {
-            HStack(spacing: 12) {
+        VStack(spacing: SupportTheme.Spacing.s) {
+            (dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: SupportTheme.Spacing.s))
+                : AnyLayout(HStackLayout(spacing: SupportTheme.Spacing.s))) {
                 ZStack {
                     Circle()
-                        .fill(Color.purple.opacity(0.1))
+                        .fill(SupportTheme.accent.opacity(0.1))
                         .frame(width: 48, height: 48)
                     Image(systemName: card.cardData.icon)
                         .font(.system(size: 20))
-                        .foregroundColor(.purple)
+                        .foregroundColor(SupportTheme.accent)
                 }
 
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     Text(card.cardData.title)
                         .font(.headline)
-                        .foregroundColor(.primary)
+                        .foregroundColor(SupportTheme.textPrimary)
 
                     Text(card.cardData.description)
                         .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(SupportTheme.textSecondary)
                 }
 
                 Spacer()
             }
 
-            HStack(spacing: 16) {
+            HStack(spacing: SupportTheme.Spacing.m) {
                 ForEach(moodEmojis, id: \.self) { emoji in
                     Button {
                         onMoodSelected(emoji)
@@ -40,15 +43,13 @@ struct MoodActionCard: View {
                             .font(.system(size: 28))
                     }
                     .frame(width: 44, height: 44)
-                    .background(Color(.systemGray6))
+                    .background(SupportTheme.surface)
                     .clipShape(Circle())
                 }
             }
         }
-        .padding(16)
-        .background(Color(.systemBackground))
-        .cornerRadius(16)
-        .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 2)
+        .supportCard()
+        .shadow(color: SupportTheme.canvas.opacity(0.08), radius: 8, x: 0, y: 2)
     }
 }
 

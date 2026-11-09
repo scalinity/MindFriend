@@ -51,9 +51,9 @@ struct EmotionBadge: View {
                     .font(.system(size: iconSize, weight: .medium))
                     .foregroundStyle(emotionColor)
             }
-            .scaleEffect(pulseScale)
+            .scaleEffect(reduceMotion ? 1 : (pulseScale))
             .opacity(isVisible ? 1 : 0)
-            .scaleEffect(isVisible ? 1 : 0.5)
+            .scaleEffect(reduceMotion ? 1 : (isVisible ? 1 : 0.5))
         }
         .buttonStyle(.plain)
         .frame(width: badgeSize + 16, height: badgeSize + 16)  // Touch target 64x64
@@ -81,7 +81,7 @@ struct EmotionBadge: View {
 
     /// Color for the emotion - uses shared helper
     private var emotionColor: Color {
-        emotion.color
+        SupportTheme.accent
     }
 
     /// Border width based on confidence level
@@ -101,7 +101,7 @@ struct EmotionBadge: View {
 
     private func animateIn() {
         isVisible = false
-        withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+        withAnimation(reduceMotion ? nil : .spring(response: 0.4, dampingFraction: 0.7)) {
             isVisible = true
         }
     }
@@ -113,10 +113,8 @@ struct EmotionBadge: View {
         pulseTask?.cancel()
 
         // Subtle pulse animation that repeats 3 times
-        withAnimation(
-            .easeInOut(duration: 1.0)
-            .repeatCount(3, autoreverses: true)
-        ) {
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 1.0)
+            .repeatCount(3, autoreverses: true)) {
             pulseScale = 1.08
         }
 
@@ -125,7 +123,7 @@ struct EmotionBadge: View {
             try? await Task.sleep(nanoseconds: 3_000_000_000)
             guard !Task.isCancelled else { return }
             await MainActor.run {
-                withAnimation(.easeOut(duration: 0.3)) {
+                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.3)) {
                     pulseScale = 1.0
                 }
             }
@@ -138,7 +136,7 @@ struct EmotionBadge: View {
             try? await Task.sleep(nanoseconds: UInt64(autoHideDuration * 1_000_000_000))
             guard !Task.isCancelled else { return }
             await MainActor.run {
-                withAnimation(.easeOut(duration: 0.3)) {
+                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.3)) {
                     isVisible = false
                 }
             }
@@ -155,24 +153,24 @@ struct CompactEmotionBadge: View {
     let confidence: Double
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: SupportTheme.Spacing.xxs) {
             Circle()
                 .fill(emotionColor)
                 .frame(width: 8, height: 8)
 
             Text(emotion.capitalized)
                 .font(.caption2.weight(.medium))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
+        .padding(.horizontal, SupportTheme.Spacing.xs)
+        .padding(.vertical, SupportTheme.Spacing.xxs)
         .background(emotionColor.opacity(0.1))
         .clipShape(Capsule())
     }
 
     /// Color for the emotion - uses shared helper
     private var emotionColor: Color {
-        EmotionSnapshot.color(for: emotion)
+        SupportTheme.accent
     }
 }
 
@@ -180,7 +178,7 @@ struct CompactEmotionBadge: View {
 
 #Preview("Emotion Badge - Happy") {
     ZStack {
-        Color.black.ignoresSafeArea()
+        SupportTheme.canvas.ignoresSafeArea()
 
         EmotionBadge(
             emotion: EmotionSnapshot(
@@ -195,7 +193,7 @@ struct CompactEmotionBadge: View {
 
 #Preview("Emotion Badge - Sad") {
     ZStack {
-        Color.black.ignoresSafeArea()
+        SupportTheme.canvas.ignoresSafeArea()
 
         EmotionBadge(
             emotion: EmotionSnapshot(
@@ -209,7 +207,7 @@ struct CompactEmotionBadge: View {
 }
 
 #Preview("Compact Badges") {
-    HStack(spacing: 8) {
+    HStack(spacing: SupportTheme.Spacing.xs) {
         CompactEmotionBadge(emotion: "happy", confidence: 0.8)
         CompactEmotionBadge(emotion: "sad", confidence: 0.65)
         CompactEmotionBadge(emotion: "calm", confidence: 0.9)

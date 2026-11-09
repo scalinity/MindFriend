@@ -9,6 +9,7 @@ import SwiftUI
 
 /// Step 1: Introduce the Circles concept
 struct CirclesConceptStep: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let onNext: () -> Void
     let onSkip: () -> Void
 
@@ -17,18 +18,18 @@ struct CirclesConceptStep: View {
     var body: some View {
         TutorialStepView(
             icon: "person.2.fill",
-            iconColor: .pink,
+            iconColor: SupportTheme.accent,
             headline: "What Are Circles?",
             subheadline: "Small accountability groups (2-6 people) who support each other's wellness journey.",
             primaryAction: onNext,
             skipAction: onSkip
         ) {
-            VStack(spacing: 16) {
+            VStack(spacing: SupportTheme.Spacing.m) {
                 // Circle visualization
                 ZStack {
                     // Background circle
                     Circle()
-                        .stroke(Color.pink.opacity(0.2), lineWidth: 3)
+                        .stroke(SupportTheme.accent.opacity(0.2), lineWidth: 3)
                         .frame(width: 150, height: 150)
 
                     // Members
@@ -43,12 +44,12 @@ struct CirclesConceptStep: View {
                             .overlay(
                                 Image(systemName: "person.fill")
                                     .font(.caption)
-                                    .foregroundStyle(.white)
+                                    .foregroundStyle(SupportTheme.onAccent)
                             )
                             .offset(x: x, y: y)
-                            .scaleEffect(showMembers ? 1 : 0)
-                            .animation(
-                                .spring(response: 0.4, dampingFraction: 0.6)
+                            .scaleEffect(reduceMotion ? 1 : (showMembers ? 1 : 0))
+                            .opacity(showMembers ? 1 : 0)
+                            .animation(reduceMotion ? .easeInOut(duration: 0.2) : .spring(response: 0.4, dampingFraction: 0.6)
                                     .delay(0.3 + Double(i) * 0.1),
                                 value: showMembers
                             )
@@ -57,21 +58,21 @@ struct CirclesConceptStep: View {
                 .frame(height: 170)
 
                 // Benefits
-                VStack(alignment: .leading, spacing: 8) {
-                    CircleBenefitRow(icon: "heart.fill", color: .pink, text: "Share daily check-ins")
-                    CircleBenefitRow(icon: "hands.sparkles.fill", color: .purple, text: "Give and receive encouragement")
-                    CircleBenefitRow(icon: "checkmark.circle.fill", color: .green, text: "Stay accountable together")
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
+                    CircleBenefitRow(icon: "heart.fill", color: SupportTheme.accent, text: "Share daily check-ins")
+                    CircleBenefitRow(icon: "hands.sparkles.fill", color: SupportTheme.accent, text: "Give and receive encouragement")
+                    CircleBenefitRow(icon: "checkmark.circle.fill", color: SupportTheme.accent, text: "Stay accountable together")
                 }
-                .padding(12)
-                .background(Color(.secondarySystemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .padding(.horizontal, 20)
+                .padding(SupportTheme.Spacing.s)
+                .background(SupportTheme.surface)
+                .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
+                .padding(.horizontal, SupportTheme.Spacing.l)
             }
             .onAppear { showMembers = true }
         }
     }
 
-    private let memberColors: [Color] = [.pink, .purple, .blue, .orange, .green]
+    private let memberColors: [Color] = [SupportTheme.accent, SupportTheme.accent, SupportTheme.accent, SupportTheme.accent, SupportTheme.accent]
 }
 
 private struct CircleBenefitRow: View {
@@ -80,13 +81,13 @@ private struct CircleBenefitRow: View {
     let text: String
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: SupportTheme.Spacing.s) {
             Image(systemName: icon)
                 .foregroundStyle(color)
                 .frame(width: 20)
             Text(text)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(SupportTheme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }

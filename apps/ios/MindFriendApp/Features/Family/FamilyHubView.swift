@@ -55,6 +55,8 @@ struct FamilyHubView: View {
                 emptyStateContent
             }
         }
+        .foregroundStyle(SupportTheme.textPrimary)
+        .supportScreen()
         .navigationTitle("Family Wellness")
         .task {
             await viewModel.loadData(
@@ -74,17 +76,17 @@ struct FamilyHubView: View {
 
     private var overviewTabContent: some View {
         ScrollView {
-            VStack(spacing: 16) {
+            VStack(spacing: SupportTheme.Spacing.m) {
                 if let family = viewModel.familyGroup {
                     // Family Card
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                         HStack {
-                            VStack(alignment: .leading, spacing: 4) {
+                            VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                                 Text(family.name)
                                     .font(.headline)
                                 Text("\(viewModel.familyMembers.count) members")
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(SupportTheme.textSecondary)
                             }
                             Spacer()
                             if let avatar = family.avatarUrl {
@@ -105,7 +107,7 @@ struct FamilyHubView: View {
                             HStack {
                                 Text("Invite Code:")
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(SupportTheme.textSecondary)
                                 Text(inviteCode)
                                     .font(.caption.monospaced())
                                     .fontWeight(.semibold)
@@ -113,86 +115,75 @@ struct FamilyHubView: View {
                                 Button(action: { UIPasteboard.general.string = inviteCode }) {
                                     Image(systemName: "doc.on.doc")
                                         .font(.caption)
+                                    .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                                 }
+                                .accessibilityLabel("Copy family invite code")
                             }
-                            .padding(8)
-                            .background(.gray.opacity(0.1))
-                            .cornerRadius(6)
+                            .padding(SupportTheme.Spacing.xs)
+                            .background(SupportTheme.surface)
+                            .cornerRadius(SupportTheme.controlRadius)
                         }
                     }
-                    .padding()
-                    .background(.white)
-                    .cornerRadius(12)
+                    .supportCard()
                     .shadow(radius: 1)
 
                     // Active Challenges
                     if !viewModel.activeChallenges.isEmpty {
-                        VStack(alignment: .leading, spacing: 12) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                             Text("Active Challenges")
                                 .font(.headline)
-                            ForEach(viewModel.activeChallenges.prefix(3), id: \.id) { challenge in
+                                .accessibilityAddTraits(.isHeader)
+                            ForEach(viewModel.activeChallenges.filter { $0.challengeType != .streak }.prefix(3), id: \.id) { challenge in
                                 ChallengeProgressCard(challenge: challenge)
                             }
                         }
-                        .padding()
-                        .background(.white)
-                        .cornerRadius(12)
+                        .supportCard()
                         .shadow(radius: 1)
                     }
 
                     // Recent Together Sessions
                     if !viewModel.recentSessions.isEmpty {
-                        VStack(alignment: .leading, spacing: 12) {
+                        VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                             Text("Recent Activities")
                                 .font(.headline)
                             ForEach(viewModel.recentSessions.prefix(2), id: \.id) { session in
                                 HStack {
-                                    VStack(alignment: .leading, spacing: 4) {
+                                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                                         Text(session.title)
                                             .font(.subheadline)
                                             .fontWeight(.semibold)
                                         Text(session.status.rawValue.capitalized)
                                             .font(.caption)
-                                            .foregroundStyle(.secondary)
+                                            .foregroundStyle(SupportTheme.textSecondary)
                                     }
                                     Spacer()
                                     Image(systemName: "chevron.right")
-                                        .foregroundStyle(.secondary)
+                                        .foregroundStyle(SupportTheme.textSecondary)
                                 }
-                                .padding()
-                                .background(.gray.opacity(0.05))
-                                .cornerRadius(8)
+                                .supportCard()
                             }
                         }
-                        .padding()
-                        .background(.white)
-                        .cornerRadius(12)
+                        .supportCard()
                         .shadow(radius: 1)
                     }
 
                     // Quick Actions
-                    VStack(spacing: 12) {
+                    VStack(spacing: SupportTheme.Spacing.s) {
                         Button(action: {
                             // Start Together Session
                         }) {
                             Label("Start Activity", systemImage: "play.circle.fill")
                                 .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(.blue)
-                                .foregroundStyle(.white)
-                                .cornerRadius(12)
                         }
+                        .buttonStyle(.supportSecondary)
 
                         Button(action: {
                             // Create Challenge
                         }) {
                             Label("New Challenge", systemImage: "plus.circle.fill")
                                 .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(.green)
-                                .foregroundStyle(.white)
-                                .cornerRadius(12)
                         }
+                        .buttonStyle(.supportSecondary)
                     }
                     .padding()
                 }
@@ -204,41 +195,38 @@ struct FamilyHubView: View {
     // MARK: - Empty State
 
     private var emptyStateContent: some View {
-        VStack(spacing: 24) {
-            Image(systemName: "person.2.circle")
-                .font(.system(size: 48))
-                .foregroundStyle(.blue)
+        ScrollView {
+            VStack(spacing: SupportTheme.Spacing.l) {
+                Image(systemName: "person.2.circle")
+                    .font(.system(size: 48))
+                    .foregroundStyle(SupportTheme.accent)
 
-            Text("No Family Group")
-                .font(.headline)
+                Text("No Family Group")
+                    .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
 
-            Text("Connect with family members for shared wellness activities")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+                Text("Connect with family members for shared wellness activities")
+                    .font(.subheadline)
+                    .foregroundStyle(SupportTheme.textSecondary)
+                    .multilineTextAlignment(.center)
 
-            VStack(spacing: 12) {
-                Button(action: { showCreateFamilySheet = true }) {
-                    Text("Create Family")
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(.blue)
-                        .foregroundStyle(.white)
-                        .cornerRadius(12)
+                VStack(spacing: SupportTheme.Spacing.s) {
+                    Button(action: { showCreateFamilySheet = true }) {
+                        Text("Create Family")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.supportPrimary)
+
+                    Button(action: { showJoinFamilySheet = true }) {
+                        Text("Join Family")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.supportSecondary)
                 }
+                .padding(.horizontal)
 
-                Button(action: { showJoinFamilySheet = true }) {
-                    Text("Join Family")
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(.green)
-                        .foregroundStyle(.white)
-                        .cornerRadius(12)
-                }
+                Spacer()
             }
-            .padding(.horizontal)
-
-            Spacer()
         }
         .padding()
         .sheet(isPresented: $showCreateFamilySheet, onDismiss: {
@@ -270,16 +258,16 @@ struct ChallengeProgressCard: View {
     let challenge: FamilyChallenge
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
             Text(challenge.title)
                 .font(.subheadline)
                 .fontWeight(.semibold)
 
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: SupportTheme.Spacing.s) {
+                VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     Text("Progress")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SupportTheme.textSecondary)
                     ProgressView(value: challenge.progressPercentage)
                 }
 
@@ -290,9 +278,7 @@ struct ChallengeProgressCard: View {
                 }
             }
         }
-        .padding()
-        .background(.gray.opacity(0.05))
-        .cornerRadius(8)
+        .supportCard()
     }
 }
 
