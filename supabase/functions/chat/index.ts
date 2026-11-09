@@ -477,10 +477,8 @@ async function handleChat(req: Request, execution: ChatExecution, onDelta?: (tex
     }
 
     // PRIVACY FIX #005: Schema uses TEXT ('standard' | 'enhanced'), not boolean
-    const privacyMode = (userSettings?.privacy_mode || "standard") as
-      | "standard"
-      | "enhanced";
-    const privacyModeEnabled = privacyMode === "enhanced";
+    // Unknown/missing settings cannot opt someone into saved personal context.
+    const privacyModeEnabled = userSettings.privacy_mode !== "standard";
 
     // PRIVACY FIX #005: Normalize schema values (friendly|professional) to code values (supportive|direct)
     const aiToneRaw = (userSettings?.ai_tone || "friendly") as string;
@@ -844,35 +842,37 @@ async function handleChat(req: Request, execution: ChatExecution, onDelta?: (tex
 
     // Fetch re-engagement context (for returning users after absence)
     let reengagementContext = "";
-    const { data: profileExtended } = await supabaseAdmin
-      .from("profiles")
-      .select("last_absence_days")
-      .eq("id", user.id)
-      .single();
+    if (!privacyModeEnabled) {
+      const { data: profileExtended } = await supabaseAdmin
+        .from("profiles")
+        .select("last_absence_days")
+        .eq("id", user.id)
+        .single();
 
-    if (
-      profileExtended?.last_absence_days &&
-      profileExtended.last_absence_days >= 3
-    ) {
-      const days = profileExtended.last_absence_days;
-      reengagementContext = "\n\n## Important context - Returning user:\n";
-      reengagementContext += `The user is returning after ${days} days away. `;
+      if (
+        profileExtended?.last_absence_days &&
+        profileExtended.last_absence_days >= 3
+      ) {
+        const days = profileExtended.last_absence_days;
+        reengagementContext = "\n\n## Important context - Returning user:\n";
+        reengagementContext += `The user is returning after ${days} days away. `;
 
-      if (days >= 30) {
+        if (days >= 30) {
+          reengagementContext +=
+            "This is a significant return after a long hiatus. Be very welcoming and supportive. Help them ease back in without any pressure. ";
+        } else if (days >= 14) {
+          reengagementContext +=
+            "They've been away for a while. Be especially warm and supportive. Don't ask why they were away - focus on being glad they're back. ";
+        } else if (days >= 7) {
+          reengagementContext +=
+            "They've been away for about a week. Acknowledge their return positively and gently check in on how they're doing. ";
+        } else {
+          reengagementContext +=
+            "They took a brief break. Welcome them back warmly but don't make a big deal of it. ";
+        }
         reengagementContext +=
-          "This is a significant return after a long hiatus. Be very welcoming and supportive. Help them ease back in without any pressure. ";
-      } else if (days >= 14) {
-        reengagementContext +=
-          "They've been away for a while. Be especially warm and supportive. Don't ask why they were away - focus on being glad they're back. ";
-      } else if (days >= 7) {
-        reengagementContext +=
-          "They've been away for about a week. Acknowledge their return positively and gently check in on how they're doing. ";
-      } else {
-        reengagementContext +=
-          "They took a brief break. Welcome them back warmly but don't make a big deal of it. ";
+          "Do not mention specific day counts. Focus on the present moment and supporting their wellness journey.";
       }
-      reengagementContext +=
-        "Do not mention specific day counts. Focus on the present moment and supporting their wellness journey.";
     }
 
     // Build AI tone instruction based on user preference
@@ -1256,7 +1256,7 @@ async function handleChat(req: Request, execution: ChatExecution, onDelta?: (tex
         quotaUsed: quotaUsed,
         quotaLimit: quotaLimit,
         conversationTitle: conversationTitle,
-        memoryUsed: memoryIdsUsed.length > 0,
+        memoryUsed: memoryContext.length > 0 || companionMemoryContext.length > 0,
         memoryIdsUsed: memoryIdsUsed,
         coachData: coachData,
       }),
