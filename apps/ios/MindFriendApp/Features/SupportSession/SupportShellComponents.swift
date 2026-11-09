@@ -395,7 +395,7 @@ enum SupportDestination: String, Codable, CaseIterable, Hashable, Identifiable {
     /// Found by source inspection of each view's root `body` (InsightLabView and LiveSessionsView do not).
     var ownsNavigationStack: Bool {
         switch self {
-        case .microMoments, .sleepTracking, .programs, .therapeuticPrograms, .questArcs, .wellbeingDebt,
+        case .microMoments, .sleep, .sleepTracking, .programs, .therapeuticPrograms, .questArcs, .wellbeingDebt,
              .forYou, .therapists, .circles, .outcomes, .dailyQuest, .stories, .journey, .healthSettings,
              .wellnessAgent, .safetyPlan:
             return true
