@@ -125,3 +125,49 @@ final class CrashReportingEnvironmentTests: XCTestCase {
         )
     }
 }
+
+final class TestRunDetectorTests: XCTestCase {
+    func testUnitTestHostIsATestRun() {
+        XCTAssertTrue(TestRunDetector.resolve(
+            isDebugBuild: true,
+            environment: ["XCTestConfigurationFilePath": "/tmp/synthetic.xctestconfiguration"],
+            arguments: []
+        ))
+        XCTAssertTrue(TestRunDetector.resolve(
+            isDebugBuild: true,
+            environment: ["XCTestBundlePath": "/tmp/MindFriendAppTests.xctest"],
+            arguments: []
+        ))
+    }
+
+    func testUITestFixtureLaunchIsATestRun() {
+        for argument in ["--auth-ui-test", "--subscription-ui-test", "--sleep-ui-test", "--debt-calendar-ui-test", "--support-session-ui-test"] {
+            XCTAssertTrue(
+                TestRunDetector.resolve(isDebugBuild: true, environment: [:], arguments: ["MindFriendApp", argument]),
+                argument
+            )
+        }
+    }
+
+    func testNormalLaunchIsNotATestRun() {
+        XCTAssertFalse(TestRunDetector.resolve(
+            isDebugBuild: true,
+            environment: ["HOME": "/tmp"],
+            arguments: ["MindFriendApp", "--sleep-auto-sync"]
+        ))
+    }
+
+    func testReleaseBuildIsNeverATestRun() {
+        XCTAssertFalse(TestRunDetector.resolve(
+            isDebugBuild: false,
+            environment: ["XCTestConfigurationFilePath": "/tmp/synthetic.xctestconfiguration"],
+            arguments: ["--auth-ui-test"]
+        ))
+    }
+
+    /// The process running this test is the unit-test host, so Sentry must be off.
+    func testSentryIsOffWhileHostingUnitTests() {
+        XCTAssertTrue(TestRunDetector.isTestRun)
+        XCTAssertFalse(CrashReporter.shared.isEnabled)
+    }
+}
