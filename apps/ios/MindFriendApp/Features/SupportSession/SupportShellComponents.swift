@@ -802,12 +802,19 @@ struct SupportPrimaryButtonStyle: ButtonStyle {
 /// Secondary actions: field fill, a 3:1 boundary and accent text.
 struct SupportSecondaryButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
+    /// Narrower for a row of several short choices, so their labels keep whole words.
+    let horizontalPadding: CGFloat
+
+    init(horizontalPadding: CGFloat = SupportTheme.Spacing.m) {
+        self.horizontalPadding = horizontalPadding
+    }
+
     func makeBody(configuration: ButtonStyleConfiguration) -> some View {
         configuration.label
             .font(.body.weight(.medium))
             .multilineTextAlignment(.center)
             .foregroundStyle(SupportTheme.accent)
-            .padding(.horizontal, SupportTheme.Spacing.m)
+            .padding(.horizontal, horizontalPadding)
             .padding(.vertical, SupportTheme.Spacing.s)
             .frame(maxWidth: .infinity, minHeight: SupportTheme.minimumTarget)
             .background(SupportTheme.field, in: RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
@@ -916,8 +923,23 @@ struct SupportRowLabel: View {
             Image(systemName: icon)
                 .foregroundStyle(SupportTheme.accent)
         }
+        .labelStyle(SupportRowLabelStyle())
         .frame(minHeight: SupportTheme.minimumTarget, alignment: .leading)
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// A fixed icon column, scaled with Dynamic Type, beside the title and subtitle. In a List the automatic
+/// label style flows each title text under the icon at accessibility sizes, which indented a subtitle's
+/// first line and wrapped the rest back to the row's edge.
+private struct SupportRowLabelStyle: LabelStyle {
+    @ScaledMetric(relativeTo: .body) private var iconWidth: CGFloat = 28
+
+    func makeBody(configuration: LabelStyleConfiguration) -> some View {
+        HStack(spacing: SupportTheme.Spacing.s) {
+            configuration.icon.frame(width: iconWidth)
+            configuration.title
+        }
     }
 }
 

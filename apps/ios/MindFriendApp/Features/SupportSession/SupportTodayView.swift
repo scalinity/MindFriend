@@ -112,7 +112,8 @@ struct SupportTodayView: View {
     private var quickWaysIn: some View {
         VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("Quick ways in").font(.title2.weight(.semibold)).accessibilityAddTraits(.isHeader)
-            let layout = typeSize.isAccessibilitySize
+            // Three across leaves too little width from xxLarge up: "1-minute breathing" starts to hyphenate.
+            let layout = typeSize >= .xxLarge
                 ? AnyLayout(VStackLayout(spacing: SupportTheme.Spacing.s))
                 : AnyLayout(HStackLayout(alignment: .top, spacing: SupportTheme.Spacing.xs))
             layout {
@@ -138,7 +139,8 @@ struct SupportTodayView: View {
 
     private func quickLabel(_ title: String, icon: String) -> some View {
         VStack(spacing: SupportTheme.Spacing.xs) {
-            Image(systemName: icon).font(.title2).accessibilityHidden(true)
+            // Symbol weight matches the medium-weight label beside it.
+            Image(systemName: icon).font(.title2.weight(.medium)).accessibilityHidden(true)
             Text(title).fixedSize(horizontal: false, vertical: true)
         }
         // Equal-height tiles: each fills the row, which takes the tallest tile's height.

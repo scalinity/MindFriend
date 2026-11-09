@@ -230,7 +230,8 @@ struct MoodCheckInView: View {
                             .font(.caption).accessibilityHidden(true)
                     }
                 }
-                .buttonStyle(.supportSecondary)
+                // Five across on a phone: the default 16-point inset leaves too little room for "Great".
+                .buttonStyle(SupportSecondaryButtonStyle(horizontalPadding: SupportTheme.Spacing.xs))
                 .accessibilityLabel("How are you feeling?, \(moodLabels[index])")
                 .accessibilityValue("\(index + 1) of 5")
                 .accessibilityAddTraits(Int(moodScore) == index + 1 ? .isSelected : [])

@@ -15,6 +15,7 @@ struct PrivacyBanner: View {
                 PrivacyPoint(icon: "trash.fill", text: "Delete your account and data permanently")
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
         .background(SupportTheme.surface)
         .cornerRadius(SupportTheme.controlRadius)
