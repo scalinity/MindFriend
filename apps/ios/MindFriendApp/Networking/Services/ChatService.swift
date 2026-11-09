@@ -77,7 +77,8 @@ final class ChatService: ObservableObject {
             memoryUsed: response.memoryUsed,
             memoryIdsUsed: response.memoryIdsUsed,
             coachData: response.coachData,
-            support: response.support
+            support: response.support,
+            quotaDay: response.quotaDay
         )
     }
 

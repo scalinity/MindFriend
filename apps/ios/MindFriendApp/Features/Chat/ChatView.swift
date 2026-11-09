@@ -588,7 +588,8 @@ struct ChatView: View {
 
                 // Update quota tracking from server (authoritative source)
                 if appState.entitlements.tier != .premium, let serverUsed = response.quotaUsed, let quotaOwner {
-                    appState.recordChatQuota(ownerID: quotaOwner, used: serverUsed, limit: response.quotaLimit)
+                    appState.recordChatQuota(ownerID: quotaOwner, used: serverUsed, limit: response.quotaLimit,
+                                             countedOn: response.quotaDay)
                 }
 
                 // Record first chat message for progressive disclosure activation
@@ -626,7 +627,10 @@ struct ChatView: View {
                 guard !Task.isCancelled, isVisible, viewGeneration == generation else { return }
                 let failure = error as? ChatRequestFailure ?? ChatRequestFailure(kind: .unconfirmed)
                 sendFailure = failure
-                if let quotaOwner { appState.recordChatQuota(ownerID: quotaOwner, used: failure.quotaUsed, limit: failure.quotaLimit) }
+                if let quotaOwner {
+                    appState.recordChatQuota(ownerID: quotaOwner, used: failure.quotaUsed, limit: failure.quotaLimit,
+                                             countedOn: failure.quotaDay)
+                }
                 if failure.messageSaved == false {
                     messages.removeAll { $0.id.lowercased() == tempMessageId }
                     if inputText.isEmpty { inputText = content }

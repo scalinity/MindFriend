@@ -689,6 +689,16 @@ struct EntitlementSnapshot: Equatable {
     static func nextServerReset(after date: Date) -> Date {
         serverDay(containing: date).addingTimeInterval(86_400)
     }
+    /// The server reports the day it counted a message in as a UTC `yyyy-MM-dd` date.
+    static func serverDay(reported day: String?) -> Date? {
+        guard let day, day.count == 10 else { return nil }
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "UTC")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.date(from: day)
+    }
 
     /// Usage recorded on an earlier server day no longer counts against today.
     var currentUsage: Int? {
@@ -714,7 +724,9 @@ struct EntitlementSnapshot: Equatable {
         // retrying an older receipt never resets already acknowledged usage.
         let previousBoundary = quotaPeriodStartedAt ?? (self.usage == nil ? .distantPast : (self.verifiedAt ?? .distantFuture))
         let newPeriod = period.map { $0 > previousBoundary } ?? false
-        if let usage, usage >= 0 {
+        // Usage counted on an earlier day says nothing about the current one.
+        let earlierPeriod = period.map { $0 < (quotaPeriodStartedAt ?? .distantPast) } ?? false
+        if let usage, usage >= 0, !earlierPeriod {
             self.usage = newPeriod ? usage : max(self.usage ?? 0, usage)
         }
         if let quota, quota == -1 || (quota >= 0 && quota != 9999) { self.quota = quota }
@@ -1890,6 +1902,7 @@ struct SendMessageResponse: Codable {
     let memoryIdsUsed: [String]?  // IDs of memories that were used
     let coachData: CoachData?
     var support: SupportChatMetadata? = nil
+    var quotaDay: String? = nil  // Server's UTC day the message was counted in
 }
 
 // MARK: - Circle
