@@ -7,6 +7,7 @@ import {
 import { Buffer } from "node:buffer";
 import { VALID_PRODUCT_IDS } from "../_shared/billing-types.ts";
 import { APPLE_ROOT_CERTIFICATES } from "./apple-roots.ts";
+import { X509Certificate } from "node:crypto";
 
 const BUNDLE_ID = "com.mindfriend.app";
 const APP_APPLE_ID = 6758198271;
@@ -39,6 +40,7 @@ export class TransactionVerificationError extends Error {
     message: string,
     public readonly revokedTransaction?: { transactionId: string; originalTransactionId: string },
     public readonly verifiers?: VerifierFailure[],
+    public readonly chain?: ChainSummary,
   ) {
     super(message);
     this.name = "TransactionVerificationError";
@@ -53,6 +55,35 @@ export type VerifierFailure = {
   at?: string;
   cause?: string;
 };
+
+// The certificates a rejected JWS carried, read from its unverified header for the
+// log only. Public certificate fields; never the signed transaction or its claims.
+export type ChainSummary = {
+  length: number;
+  leafSerial?: string;
+  leafSubject?: string;
+  leafValidTo?: string;
+};
+
+function describeChain(signedTransaction: string): ChainSummary | undefined {
+  try {
+    const header = JSON.parse(
+      Buffer.from(signedTransaction.split(".")[0], "base64url").toString(),
+    );
+    const chain: unknown[] = Array.isArray(header?.x5c) ? header.x5c : [];
+    const leaf = typeof chain[0] === "string"
+      ? new X509Certificate(Buffer.from(chain[0], "base64"))
+      : undefined;
+    return {
+      length: chain.length,
+      leafSerial: leaf?.serialNumber,
+      leafSubject: leaf?.subject?.replace(/\n/g, ", "),
+      leafValidTo: leaf?.validTo,
+    };
+  } catch {
+    return undefined;
+  }
+}
 
 function sourceLine(error: unknown) {
   return (error as Error | undefined)?.stack?.split("\n").slice(1)
@@ -113,6 +144,7 @@ export async function verifyAppleTransaction(
         : "Invalid transaction signature",
       undefined,
       failures,
+      describeChain(signedTransaction),
     );
   }
 

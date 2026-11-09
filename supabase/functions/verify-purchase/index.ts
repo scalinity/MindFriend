@@ -113,6 +113,7 @@ Deno.serve(async (req) => {
       log.warn("Transaction verification rejected", {
         code: error.code,
         verifiers: error.verifiers,
+        chain: error.chain,
       });
       return new Response(
         JSON.stringify({

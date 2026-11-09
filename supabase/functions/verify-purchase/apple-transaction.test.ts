@@ -7,6 +7,7 @@ import {
   Environment,
 } from "npm:@apple/app-store-server-library@3.1.0";
 import { callerId, database } from "./test-supabase.ts";
+import { X509Certificate } from "./edge-crypto.ts";
 import {
   ocspServer,
   expiredChain,
@@ -150,6 +151,37 @@ Deno.test("Apple verifier and verify-purchase handler with synthetic signatures 
       );
       assert.match(entry.context.verifiers[0].at, /apple-verifier\.js:\d+/);
       for (const part of signed.split(".")) assert.ok(!lines.join("\n").includes(part));
+    });
+
+    await t.step("a value that is not an Error is logged with the step that threw it and the chain", async () => {
+      database.reset();
+      // Some dependencies throw bare strings, which Apple's catch-all used to discard.
+      // The expired chain has never verified, so no cached key skips the signature check.
+      const signed = expiredChain.sign(testTransaction());
+      const originalVerify = X509Certificate.prototype.verify;
+      X509Certificate.prototype.verify = () => { throw "synthetic non-Error"; };
+      const lines: string[] = [];
+      const originalLog = console.log;
+      console.log = (line: string) => lines.push(line);
+      try {
+        const response = await request(signed);
+        assert.equal(response.status, 400);
+        assert.equal((await response.json()).code, "JWS_VERIFICATION_FAILED");
+      } finally {
+        console.log = originalLog;
+        X509Certificate.prototype.verify = originalVerify;
+      }
+      const entry = lines.map((line) => JSON.parse(line))
+        .find((logged) => logged.message === "Transaction verification rejected");
+      for (const verifier of entry.context.verifiers) {
+        assert.equal(verifier.status, 1);
+        assert.match(verifier.cause, /non-Error thrown at intermediate signature: synthetic non-Error/);
+      }
+      assert.equal(entry.context.chain.length, 3);
+      assert.match(entry.context.chain.leafSerial, /^[0-9A-F]+$/);
+      assert.equal(typeof entry.context.chain.leafValidTo, "string");
+      for (const part of signed.split(".")) assert.ok(!lines.join("\n").includes(part));
+      assert.deepEqual(database.writes, []);
     });
 
     await t.step("rejects tampered leaf and intermediate certificate signatures", async () => {
