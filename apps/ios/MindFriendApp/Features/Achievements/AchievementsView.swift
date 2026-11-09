@@ -225,15 +225,24 @@ struct BadgeCollectionView: View {
 
     @State private var selectedCategory: BadgeCategory? = nil
 
+    // Streak badges stay on the server but are not shown, so chips, grid and counts all use this set.
+    private func visible(_ badges: [AchievementBadge]) -> [AchievementBadge] {
+        badges.filter { $0.category != .streaks }
+    }
+
+    private func visible(_ progress: [UserBadgeProgress]) -> [UserBadgeProgress] {
+        progress.filter { $0.badge.category != .streaks }
+    }
+
     private var categories: [BadgeCategory] {
-        Array(Set(achievementService.badges.map { $0.category })).sorted { $0.displayName < $1.displayName }
+        Array(Set(visible(achievementService.badges).map { $0.category })).sorted { $0.displayName < $1.displayName }
     }
 
     private var displayedBadges: [AchievementBadge] {
         if let category = selectedCategory {
-            return achievementService.badgesInCategory(category).filter { $0.category != .streaks }
+            return visible(achievementService.badgesInCategory(category))
         }
-        return achievementService.badges.filter { $0.category != .streaks }
+        return visible(achievementService.badges)
     }
 
     var body: some View {
@@ -261,18 +270,18 @@ struct BadgeCollectionView: View {
             // Stats Summary
             HStack(spacing: SupportTheme.Spacing.l) {
                 BadgeStatView(
-                    count: achievementService.earnedBadges.count,
-                    total: achievementService.badges.count,
+                    count: visible(achievementService.earnedBadges).count,
+                    total: visible(achievementService.badges).count,
                     label: "Earned"
                 )
 
                 BadgeStatView(
-                    count: achievementService.inProgressBadges.count,
+                    count: visible(achievementService.inProgressBadges).count,
                     label: "In Progress"
                 )
 
                 BadgeStatView(
-                    count: achievementService.favoriteBadges.count,
+                    count: visible(achievementService.favoriteBadges).count,
                     label: "Favorites"
                 )
             }

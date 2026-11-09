@@ -62,9 +62,9 @@ struct YearlyHeatMapCard: View {
             // Legend
             HStack(spacing: SupportTheme.Spacing.m) {
                 Spacer()
-                HeatMapLegendItem(color: SupportTheme.accent.opacity(0.8), label: "Great")
-                HeatMapLegendItem(color: SupportTheme.Celebration.gold.opacity(0.8), label: "Good")
-                HeatMapLegendItem(color: SupportTheme.accent.opacity(0.8), label: "Low")
+                HeatMapLegendItem(color: SupportTheme.accent.opacity(0.85), label: "Great")
+                HeatMapLegendItem(color: SupportTheme.accent.opacity(0.4), label: "Good")
+                HeatMapLegendItem(color: SupportTheme.Celebration.gold.opacity(0.85), label: "Low")
                 HeatMapLegendItem(color: SupportTheme.field, label: "No data")
                 Spacer()
             }
@@ -156,9 +156,9 @@ private struct MonthMiniHeatMap: View {
 
     private func moodColor(for score: Int) -> Color {
         switch score {
-        case 1...2: return SupportTheme.accent.opacity(0.8)
-        case 3: return SupportTheme.Celebration.gold.opacity(0.8)
-        case 4...5: return SupportTheme.accent.opacity(0.8)
+        case 1...2: return SupportTheme.Celebration.gold.opacity(0.85)
+        case 3: return SupportTheme.accent.opacity(0.4)
+        case 4...5: return SupportTheme.accent.opacity(0.85)
         default: return SupportTheme.field
         }
     }
@@ -287,8 +287,8 @@ private struct MonthDetailView: View {
 
     private func moodColor(for score: Int) -> Color {
         switch score {
-        case 1...2: return SupportTheme.accent
-        case 3: return SupportTheme.Celebration.gold
+        case 1...2: return SupportTheme.Celebration.gold
+        case 3: return SupportTheme.accent.opacity(0.6)
         case 4...5: return SupportTheme.accent
         default: return SupportTheme.textSecondary
         }
@@ -319,9 +319,9 @@ private struct DayCell: View {
         }
 
         switch mood {
-        case 1...2: return SupportTheme.accent.opacity(0.8)
-        case 3: return SupportTheme.Celebration.gold.opacity(0.8)
-        case 4...5: return SupportTheme.accent.opacity(0.8)
+        case 1...2: return SupportTheme.Celebration.gold.opacity(0.85)
+        case 3: return SupportTheme.accent.opacity(0.4)
+        case 4...5: return SupportTheme.accent.opacity(0.85)
         default: return SupportTheme.field
         }
     }
