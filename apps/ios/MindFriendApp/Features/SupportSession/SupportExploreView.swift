@@ -114,20 +114,17 @@ struct SupportExploreView: View {
 
     private var categorySection: some View {
         Section("Browse by category") {
-            Group {
-                if dynamicTypeSize.isAccessibilitySize {
-                    VStack(spacing: SupportTheme.Spacing.s) {
-                        ForEach(Self.exploreSections, id: \.self) { categoryTile($0) }
-                    }
-                } else {
-                    // A two-by-two grid: tiles in a row share its height, and titles wrap instead of clipping.
-                    Grid(horizontalSpacing: SupportTheme.Spacing.s, verticalSpacing: SupportTheme.Spacing.s) {
-                        ForEach(0..<(Self.exploreSections.count + 1) / 2, id: \.self) { row in
-                            GridRow {
-                                ForEach(Self.exploreSections[(row * 2)..<min(row * 2 + 2, Self.exploreSections.count)], id: \.self) {
-                                    categoryTile($0)
-                                }
-                            }
+            // A two-by-two grid: tiles in a row share its height, and titles wrap instead of clipping.
+            // At accessibility sizes the same tiles stack; AnyLayout keeps their identity across the change.
+            let layout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(spacing: SupportTheme.Spacing.s))
+                : AnyLayout(GridLayout(horizontalSpacing: SupportTheme.Spacing.s, verticalSpacing: SupportTheme.Spacing.s))
+            layout {
+                ForEach(0..<(Self.exploreSections.count + 1) / 2, id: \.self) { row in
+                    // Outside a grid layout a GridRow acts as a group, so the stack lists the tiles one by one.
+                    GridRow {
+                        ForEach(Self.exploreSections[(row * 2)..<min(row * 2 + 2, Self.exploreSections.count)], id: \.self) {
+                            categoryTile($0)
                         }
                     }
                 }
