@@ -1174,3 +1174,7 @@ CREATE TRIGGER guard_mentorship_message_client_update
 -- 11. Definer functions whose fixed search_path never reached production; the bodies already match.
 ALTER FUNCTION public.delete_old_nervous_system_data() SET search_path = public, pg_temp;
 ALTER FUNCTION public.update_intervention_efficacy() SET search_path = public, pg_temp;
+-- pgcrypto lives in the extensions schema; resolve it the same way whichever role calls these.
+ALTER FUNCTION public.encrypt_message_content(text) SET search_path = public, extensions, pg_temp;
+ALTER FUNCTION public.decrypt_message_content(bytea, text) SET search_path = public, extensions, pg_temp;
+ALTER FUNCTION public.decrypt_messages_batch(uuid[]) SET search_path = public, extensions, pg_temp;

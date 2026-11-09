@@ -15,7 +15,7 @@ INSERT INTO auth.users (id, email, encrypted_password, email_confirmed_at, creat
 VALUES (
   '00000000-0000-0000-0000-000000000001'::uuid,
   'test1@example.com',
-  crypt('password', gen_salt('bf')),
+  'synthetic-not-a-password',
   NOW(),
   NOW(),
   NOW()
@@ -42,19 +42,13 @@ INSERT INTO auth.users (id, email, encrypted_password, email_confirmed_at, creat
 VALUES (
   '00000000-0000-0000-0000-000000000003'::uuid,
   'test3@example.com',
-  crypt('password', gen_salt('bf')),
+  'synthetic-not-a-password',
   NOW(),
   NOW(),
   NOW()
 );
 
-INSERT INTO profiles (id, username, created_at, updated_at)
-VALUES (
-  '00000000-0000-0000-0000-000000000003'::uuid,
-  'test3',
-  NOW(),
-  NOW()
-);
+INSERT INTO profiles (id) VALUES ('00000000-0000-0000-0000-000000000003'::uuid) ON CONFLICT (id) DO NOTHING;
 
 -- Set auth context
 SET request.jwt.claim.sub = '00000000-0000-0000-0000-000000000003';
@@ -90,18 +84,12 @@ INSERT INTO auth.users (id, email, encrypted_password, email_confirmed_at, creat
 VALUES (
   '00000000-0000-0000-0000-000000000004'::uuid,
   'test4@example.com',
-  crypt('password', gen_salt('bf')),
+  'synthetic-not-a-password',
   NOW(),
   NOW()
 );
 
-INSERT INTO profiles (id, username, created_at, updated_at)
-VALUES (
-  '00000000-0000-0000-0000-000000000004'::uuid,
-  'test4',
-  NOW(),
-  NOW()
-);
+INSERT INTO profiles (id) VALUES ('00000000-0000-0000-0000-000000000004'::uuid) ON CONFLICT (id) DO NOTHING;
 
 -- Insert low-confidence pattern (should be filtered)
 INSERT INTO user_patterns (
@@ -155,18 +143,12 @@ INSERT INTO auth.users (id, email, encrypted_password, email_confirmed_at, creat
 VALUES (
   '00000000-0000-0000-0000-000000000005'::uuid,
   'test5@example.com',
-  crypt('password', gen_salt('bf')),
+  'synthetic-not-a-password',
   NOW(),
   NOW()
 );
 
-INSERT INTO profiles (id, username, created_at, updated_at)
-VALUES (
-  '00000000-0000-0000-0000-000000000005'::uuid,
-  'test5',
-  NOW(),
-  NOW()
-);
+INSERT INTO profiles (id) VALUES ('00000000-0000-0000-0000-000000000005'::uuid) ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO user_patterns (
   id, user_id, pattern_type, pattern_key, pattern_data,
@@ -214,18 +196,12 @@ INSERT INTO auth.users (id, email, encrypted_password, email_confirmed_at, creat
 VALUES (
   '00000000-0000-0000-0000-000000000006'::uuid,
   'test6@example.com',
-  crypt('password', gen_salt('bf')),
+  'synthetic-not-a-password',
   NOW(),
   NOW()
 );
 
-INSERT INTO profiles (id, username, created_at, updated_at)
-VALUES (
-  '00000000-0000-0000-0000-000000000006'::uuid,
-  'test6',
-  NOW(),
-  NOW()
-);
+INSERT INTO profiles (id) VALUES ('00000000-0000-0000-0000-000000000006'::uuid) ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO user_patterns (
   user_id, pattern_type, pattern_key, pattern_data,
@@ -279,18 +255,12 @@ INSERT INTO auth.users (id, email, encrypted_password, email_confirmed_at, creat
 VALUES (
   '00000000-0000-0000-0000-000000000007'::uuid,
   'test7@example.com',
-  crypt('password', gen_salt('bf')),
+  'synthetic-not-a-password',
   NOW(),
   NOW()
 );
 
-INSERT INTO profiles (id, username, created_at, updated_at)
-VALUES (
-  '00000000-0000-0000-0000-000000000007'::uuid,
-  'test7',
-  NOW(),
-  NOW()
-);
+INSERT INTO profiles (id) VALUES ('00000000-0000-0000-0000-000000000007'::uuid) ON CONFLICT (id) DO NOTHING;
 
 -- Set auth context
 SET request.jwt.claim.sub = '00000000-0000-0000-0000-000000000007';
@@ -329,18 +299,12 @@ INSERT INTO auth.users (id, email, encrypted_password, email_confirmed_at, creat
 VALUES (
   '00000000-0000-0000-0000-000000000008'::uuid,
   'test8@example.com',
-  crypt('password', gen_salt('bf')),
+  'synthetic-not-a-password',
   NOW(),
   NOW()
 );
 
-INSERT INTO profiles (id, username, created_at, updated_at)
-VALUES (
-  '00000000-0000-0000-0000-000000000008'::uuid,
-  'test8',
-  NOW(),
-  NOW()
-);
+INSERT INTO profiles (id) VALUES ('00000000-0000-0000-0000-000000000008'::uuid) ON CONFLICT (id) DO NOTHING;
 
 -- Insert inactive pattern (should be filtered)
 INSERT INTO user_patterns (

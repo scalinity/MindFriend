@@ -8,6 +8,7 @@ ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS email_confirmed_at timestamptz;
 CREATE TABLE auth.identities (
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+ provider_id text NOT NULL,
  provider text NOT NULL,
  identity_data jsonb NOT NULL
 );
