@@ -626,53 +626,39 @@ struct QuestCompletionCelebration: View {
     let onDismiss: () -> Void
 
     var body: some View {
-        VStack(spacing: 24) {
-            Spacer()
-
-            Image(systemName: "party.popper.fill")
-                .font(.system(size: 80))
-                .foregroundStyle(.yellow)
-
-            Text("Quest Complete!")
-                .font(.largeTitle)
-                .fontWeight(.bold)
-
-            VStack(spacing: 8) {
-                HStack {
-                    Image(systemName: "flame.fill")
-                        .foregroundStyle(.orange)
-                    Text("\(result.streakDays) day streak!")
-                        .font(.title2)
-                }
-
+        ZStack {
+            SupportTheme.canvas.ignoresSafeArea()
+            CelebrationParticles().ignoresSafeArea()
+            VStack(spacing: SupportTheme.Spacing.l) {
+                Spacer()
+                CelebrationEmblem(.symbol("checkmark.seal.fill"), tint: SupportTheme.Celebration.gold, diameter: 112)
+                Text("Quest complete")
+                    .font(.largeTitle.bold())
+                    .foregroundStyle(SupportTheme.textPrimary)
+                    .accessibilityAddTraits(.isHeader)
+                    .celebrationReveal(delay: 0.2)
                 if !result.badgesEarned.isEmpty {
-                    Text("New badges earned:")
-                        .font(.headline)
-                        .padding(.top)
-
-                    ForEach(result.badgesEarned) { badge in
-                        HStack {
-                            Image(systemName: badge.icon)
-                                .foregroundStyle(.yellow)
-                            Text(badge.title)
+                    VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
+                        Text("New badges").font(.headline).foregroundStyle(SupportTheme.textPrimary)
+                        ForEach(result.badgesEarned) { badge in
+                            Label(badge.title, systemImage: badge.icon)
+                                .foregroundStyle(SupportTheme.textPrimary)
                         }
                     }
+                    .supportCard()
+                    .padding(.horizontal, SupportTheme.Spacing.l)
+                    .celebrationReveal(delay: 0.3)
                 }
+                Spacer()
+                Button("Continue", action: onDismiss)
+                    .buttonStyle(.supportPrimary)
+                    .padding(.horizontal, SupportTheme.Spacing.l)
+                    .padding(.bottom, SupportTheme.Spacing.l)
+                    .celebrationReveal(delay: 0.4)
             }
-
-            Spacer()
-
-            Button(action: onDismiss) {
-                Text("Continue")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.accentColor)
-                    .foregroundStyle(.white)
-                    .cornerRadius(12)
-            }
-            .padding()
+            .frame(maxWidth: SupportTheme.readableWidth)
         }
+        .onAppear { AccessibilityNotification.Announcement(String(localized: "Quest complete")).post() }
     }
 }
 

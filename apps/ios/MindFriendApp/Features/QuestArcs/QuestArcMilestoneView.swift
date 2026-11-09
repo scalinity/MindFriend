@@ -16,6 +16,7 @@ struct QuestArcMilestoneView: View {
     let onShare: () -> Void
 
     @State private var showConfetti = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var starScale: CGFloat = 0.5
     @State private var starRotation: Double = -30
 
@@ -113,15 +114,20 @@ struct QuestArcMilestoneView: View {
 
             // Confetti overlay
             if showConfetti {
-                QuestArcConfettiView()
+                CelebrationParticles()
                     .ignoresSafeArea()
                     .allowsHitTesting(false)
             }
         }
         .onAppear {
-            withAnimation(.spring(response: 0.6, dampingFraction: 0.6)) {
+            if reduceMotion {
                 starScale = 1.0
                 starRotation = 0
+            } else {
+                withAnimation(.spring(response: 0.6, dampingFraction: 0.6)) {
+                    starScale = 1.0
+                    starRotation = 0
+                }
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                 showConfetti = true
@@ -146,76 +152,6 @@ struct QuestArcMilestoneView: View {
     }
 }
 
-// MARK: - Confetti View
-
-private struct QuestArcConfettiView: View {
-    @State private var particles: [QuestArcConfettiParticle] = []
-
-    var body: some View {
-        TimelineView(.animation) { timeline in
-            Canvas { context, size in
-                for particle in particles {
-                    let age = timeline.date.timeIntervalSince(particle.createdAt)
-                    let progress = min(age / particle.lifetime, 1.0)
-
-                    if progress < 1.0 {
-                        let x = particle.startX + particle.velocityX * age
-                        let y = particle.startY + particle.velocityY * age + 200 * age * age
-                        let rotation = particle.rotation + particle.rotationSpeed * age
-                        let opacity = 1.0 - progress
-
-                        var contextCopy = context
-                        contextCopy.opacity = opacity
-                        contextCopy.translateBy(x: x, y: y)
-                        contextCopy.rotate(by: .degrees(rotation))
-
-                        let rect = CGRect(x: -4, y: -4, width: 8, height: 8)
-                        contextCopy.fill(
-                            Path(ellipseIn: rect),
-                            with: .color(particle.color)
-                        )
-                    }
-                }
-            }
-        }
-        .onAppear {
-            generateParticles()
-        }
-    }
-
-    private func generateParticles() {
-        let colors: [Color] = [.yellow, .orange, .red, .pink, .purple, .blue, .green]
-        var newParticles: [QuestArcConfettiParticle] = []
-
-        for _ in 0..<50 {
-            newParticles.append(QuestArcConfettiParticle(
-                startX: CGFloat.random(in: 50...350),
-                startY: CGFloat.random(in: -50...0),
-                velocityX: CGFloat.random(in: -50...50),
-                velocityY: CGFloat.random(in: 50...150),
-                rotation: Double.random(in: 0...360),
-                rotationSpeed: Double.random(in: -180...180),
-                color: colors.randomElement()!,
-                lifetime: Double.random(in: 2...4),
-                createdAt: Date()
-            ))
-        }
-
-        particles = newParticles
-    }
-}
-
-private struct QuestArcConfettiParticle {
-    let startX: CGFloat
-    let startY: CGFloat
-    let velocityX: CGFloat
-    let velocityY: CGFloat
-    let rotation: Double
-    let rotationSpeed: Double
-    let color: Color
-    let lifetime: Double
-    let createdAt: Date
-}
 
 // MARK: - Arc Completion View
 
@@ -228,6 +164,7 @@ struct QuestArcCompletionView: View {
 
     @State private var trophyScale: CGFloat = 0.5
     @State private var showConfetti = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack {
@@ -328,13 +265,13 @@ struct QuestArcCompletionView: View {
             }
 
             if showConfetti {
-                QuestArcConfettiView()
+                CelebrationParticles()
                     .ignoresSafeArea()
                     .allowsHitTesting(false)
             }
         }
         .onAppear {
-            withAnimation(.spring(response: 0.8, dampingFraction: 0.5)) {
+            withAnimation(reduceMotion ? nil : .spring(response: 0.8, dampingFraction: 0.5)) {
                 trophyScale = 1.0
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {

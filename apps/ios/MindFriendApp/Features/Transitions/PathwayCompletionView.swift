@@ -20,7 +20,7 @@ struct PathwayCompletionView: View {
 
             // Confetti overlay
             if showConfetti {
-                ConfettiView(colors: [.blue, .green, .yellow, .orange, .red])
+                ConfettiView()
                     .ignoresSafeArea()
             }
 

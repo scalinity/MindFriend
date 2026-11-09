@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Full-screen celebration modal shown when user hits a milestone
+/// Full-screen celebration for a server milestone (level, badge, quest, exercise, program).
 struct CelebrationView: View {
     @EnvironmentObject var container: DependencyContainer
     @Environment(\.dismiss) private var dismiss
@@ -8,153 +8,70 @@ struct CelebrationView: View {
     let celebration: CelebrationEvent
     var onDismiss: (() -> Void)?
 
-    @State private var showContent = false
     @State private var isSharing = false
     @State private var showShareSheet = false
     @State private var hasSharedToCircle = false
 
     var body: some View {
         ZStack {
-            // Background gradient
-            LinearGradient(
-                colors: celebration.celebrationType.confettiColors + [.black.opacity(0.3)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .opacity(0.4)
-            .ignoresSafeArea()
+            SupportTheme.canvas.ignoresSafeArea()
+            CelebrationParticles().ignoresSafeArea()
 
-            // Dark overlay for readability
-            Color.black.opacity(0.5)
-                .ignoresSafeArea()
-
-            // Confetti particles
-            ConfettiView(colors: celebration.celebrationType.confettiColors)
-
-            // Main content
-            VStack(spacing: 32) {
+            VStack(spacing: SupportTheme.Spacing.l) {
                 Spacer()
-
-                // Celebration icon
-                ZStack {
-                    // Glowing background
-                    Circle()
-                        .fill(
-                            RadialGradient(
-                                colors: celebration.celebrationType.confettiColors,
-                                center: .center,
-                                startRadius: 0,
-                                endRadius: 80
-                            )
-                        )
-                        .frame(width: 140, height: 140)
-                        .blur(radius: 20)
-                        .opacity(showContent ? 0.6 : 0)
-
-                    // Icon container
-                    Circle()
-                        .fill(
-                            LinearGradient(
-                                colors: celebration.celebrationType.confettiColors,
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .frame(width: 120, height: 120)
-                        .shadow(color: celebration.celebrationType.confettiColors.first?.opacity(0.5) ?? .clear, radius: 20)
-
-                    Image(systemName: celebration.displayIconName)
-                        .font(.system(size: 60))
-                        .foregroundStyle(.white)
-                }
-                .scaleEffect(showContent ? 1 : 0.3)
-                .animation(.spring(response: 0.6, dampingFraction: 0.6), value: showContent)
-
-                // Title and subtitle
-                VStack(spacing: 12) {
+                CelebrationEmblem(.symbol(celebration.displayIconName), tint: SupportTheme.Celebration.gold, diameter: 112)
+                VStack(spacing: SupportTheme.Spacing.s) {
                     Text(celebration.title)
                         .font(.largeTitle.bold())
-                        .foregroundStyle(.white)
-                        .multilineTextAlignment(.center)
-                        .opacity(showContent ? 1 : 0)
-                        .offset(y: showContent ? 0 : 20)
-                        .animation(.easeOut(duration: 0.4).delay(0.2), value: showContent)
-
+                        .foregroundStyle(SupportTheme.textPrimary)
+                        .accessibilityAddTraits(.isHeader)
                     Text(celebration.subtitle)
                         .font(.body)
-                        .foregroundStyle(.white.opacity(0.8))
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 32)
-                        .opacity(showContent ? 1 : 0)
-                        .offset(y: showContent ? 0 : 20)
-                        .animation(.easeOut(duration: 0.4).delay(0.3), value: showContent)
+                        .foregroundStyle(SupportTheme.textSecondary)
                 }
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, SupportTheme.Spacing.xl)
+                .celebrationReveal(delay: 0.2)
 
                 Spacer()
 
-                // Action buttons
-                VStack(spacing: 16) {
-                    // Share to Circle button
+                VStack(spacing: SupportTheme.Spacing.s) {
+                    Button("Continue") { dismissCelebration() }
+                        .buttonStyle(.supportPrimary)
                     Button {
                         Task { await shareToCircle() }
                     } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: "person.2.fill")
-                            Text(hasSharedToCircle ? "Shared to Circle" : "Share with Circle")
-                        }
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(hasSharedToCircle ? Color.green : Color.accentColor)
-                        .foregroundStyle(.white)
-                        .cornerRadius(14)
+                        Label(hasSharedToCircle ? "Shared with your circle" : "Share with your circle",
+                              systemImage: hasSharedToCircle ? "checkmark" : "person.2")
                     }
+                    .buttonStyle(.supportSecondary)
                     .disabled(hasSharedToCircle || isSharing || celebration.sharedToCircle)
-
-                    // External share button
                     Button {
                         showShareSheet = true
                     } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: "square.and.arrow.up")
-                            Text("Share Externally")
-                        }
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.white.opacity(0.9))
+                        Label("Share elsewhere", systemImage: "square.and.arrow.up")
                     }
-
-                    // Continue button
-                    Button {
-                        dismissCelebration()
-                    } label: {
-                        Text("Continue")
-                            .font(.subheadline)
-                            .foregroundStyle(.white.opacity(0.6))
-                    }
-                    .padding(.top, 8)
+                    .font(.subheadline)
+                    .frame(minHeight: SupportTheme.minimumTarget)
                 }
-                .padding(.horizontal, 24)
-                .padding(.bottom, 40)
-                .opacity(showContent ? 1 : 0)
-                .offset(y: showContent ? 0 : 30)
-                .animation(.easeOut(duration: 0.4).delay(0.4), value: showContent)
+                .padding(.horizontal, SupportTheme.Spacing.l)
+                .padding(.bottom, SupportTheme.Spacing.l)
+                .celebrationReveal(delay: 0.35)
             }
+            .frame(maxWidth: SupportTheme.readableWidth)
         }
+        .tint(SupportTheme.accent)
         .onAppear {
             triggerHaptic()
-            withAnimation {
-                showContent = true
-            }
             hasSharedToCircle = celebration.sharedToCircle
             markAsShown()
+            AccessibilityNotification.Announcement("\(celebration.title). \(celebration.subtitle)").post()
         }
         .sheet(isPresented: $showShareSheet) {
             ShareCardSheet(celebration: celebration) {
                 markAsSharedExternally()
             }
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Celebration: \(celebration.title). \(celebration.subtitle)")
         .accessibilityAddTraits(.isModal)
     }
 
@@ -198,102 +115,256 @@ struct CelebrationView: View {
             "type": celebration.celebrationType.rawValue,
             "shared_to_circle": hasSharedToCircle
         ])
-        withAnimation(.easeIn(duration: 0.2)) {
-            showContent = false
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-            onDismiss?()
-            dismiss()
-        }
+        onDismiss?()
+        dismiss()
     }
 }
 
-// MARK: - Confetti View
+// MARK: - Celebration kit
 
-/// Animated confetti particles for celebration
-struct ConfettiView: View {
-    let colors: [Color]
+/// One vocabulary for every reward moment: a soft glow, an emblem that settles into place and
+/// slow particles in theme hues. Under Reduce Motion each piece cross-fades instead.
+enum CelebrationMark {
+    case symbol(String)
+    case text(String)
+}
 
-    @State private var particles: [ConfettiParticle] = []
-    @State private var animationPhase = false
+struct CelebrationEmblem: View {
+    let mark: CelebrationMark
+    var tint: Color = SupportTheme.Celebration.accent
+    var diameter: CGFloat = 96
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var shown = false
+
+    init(_ mark: CelebrationMark, tint: Color = SupportTheme.Celebration.accent, diameter: CGFloat = 96) {
+        self.mark = mark
+        self.tint = tint
+        self.diameter = diameter
+    }
+
+    private struct Phase {
+        var scale = 0.6
+        var opacity = 0.0
+    }
 
     var body: some View {
-        GeometryReader { geo in
-            ZStack {
-                ForEach(particles) { particle in
-                    ConfettiShape(type: particle.shape)
-                        .fill(particle.color)
-                        .frame(width: particle.size, height: particle.size * 0.6)
-                        .rotationEffect(.degrees(particle.rotation + (animationPhase ? particle.rotationSpeed : 0)))
-                        .position(
-                            x: particle.x + (animationPhase ? particle.driftX : 0),
-                            y: animationPhase ? geo.size.height + 50 : particle.y
-                        )
-                        .opacity(animationPhase ? 0 : 1)
+        ZStack {
+            Circle().fill(SupportTheme.elevated)
+            Circle().strokeBorder(tint.opacity(0.7), lineWidth: 2)
+            switch mark {
+            case .symbol(let name):
+                Image(systemName: name)
+                    .font(.system(size: diameter * 0.42, weight: .semibold))
+                    .symbolEffect(.bounce, options: .nonRepeating, value: reduceMotion ? false : shown)
+            case .text(let value):
+                Text(value)
+                    .font(.system(size: diameter * 0.4, weight: .bold, design: .rounded))
+                    .minimumScaleFactor(0.5)
+            }
+        }
+        .foregroundStyle(tint)
+        .frame(width: diameter, height: diameter)
+        .background {
+            Circle()
+                .fill(RadialGradient(colors: [SupportTheme.Celebration.glow, SupportTheme.Celebration.glow.opacity(0)],
+                                     center: .center, startRadius: diameter * 0.35, endRadius: diameter * 1.15))
+                .frame(width: diameter * 2.3, height: diameter * 2.3)
+        }
+        .keyframeAnimator(initialValue: Phase(), trigger: shown) { content, phase in
+            content
+                .scaleEffect(reduceMotion ? 1 : phase.scale)
+                .opacity(phase.opacity)
+        } keyframes: { _ in
+            KeyframeTrack(\.scale) {
+                SpringKeyframe(1.08, duration: 0.35, spring: .bouncy)
+                SpringKeyframe(1.0, duration: 0.3, spring: .smooth)
+            }
+            KeyframeTrack(\.opacity) {
+                LinearKeyframe(1, duration: 0.3)
+            }
+        }
+        .onAppear { shown = true }
+        .accessibilityHidden(true)
+    }
+}
+
+/// Slow particles drifting out from the upper centre, drawn in one Canvas in theme hues.
+/// Nothing is drawn under Reduce Motion.
+struct CelebrationParticles: View {
+    var count = 36
+    var duration = 2.4
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var startedAt = Date()
+    @State private var seeds: [Seed] = []
+    @State private var finished = false
+
+    private struct Seed {
+        let angle: Double
+        let distance: Double
+        let size: Double
+        let hue: Int
+        let delay: Double
+        let rounded: Bool
+    }
+
+    var body: some View {
+        if !reduceMotion && !finished {
+            TimelineView(.animation) { timeline in
+                Canvas { context, size in
+                    let elapsed = timeline.date.timeIntervalSince(startedAt)
+                    let centre = CGPoint(x: size.width / 2, y: size.height * 0.38)
+                    let palette = [SupportTheme.Celebration.accent, SupportTheme.Celebration.gold, SupportTheme.Celebration.glow]
+                    for seed in seeds {
+                        let t = (elapsed - seed.delay) / duration
+                        guard t > 0, t < 1 else { continue }
+                        let eased = 1 - pow(1 - t, 3)
+                        let x = centre.x + cos(seed.angle) * seed.distance * eased
+                        let y = centre.y + sin(seed.angle) * seed.distance * eased + 60 * t * t
+                        let rect = CGRect(x: x - seed.size / 2, y: y - seed.size / 2, width: seed.size, height: seed.size)
+                        var layer = context
+                        layer.opacity = 1 - t
+                        let shape = seed.rounded ? Path(roundedRect: rect, cornerRadius: seed.size / 3) : Path(ellipseIn: rect)
+                        layer.fill(shape, with: .color(palette[seed.hue]))
+                    }
                 }
             }
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+            .task {
+                startedAt = Date()
+                seeds = (0..<count).map { _ in
+                    Seed(angle: .random(in: 0...(2 * .pi)), distance: .random(in: 90...260),
+                         size: .random(in: 4...9), hue: .random(in: 0...2), delay: .random(in: 0...0.5),
+                         rounded: .random())
+                }
+                try? await Task.sleep(for: .seconds(duration + 0.6))
+                finished = true
+            }
+        }
+    }
+}
+
+/// Earlier callers pass their own colours; particles now always use the theme hues.
+struct ConfettiView: View {
+    var colors: [Color] = []
+    var body: some View { CelebrationParticles() }
+}
+
+/// Content that rises gently into place after the emblem; under Reduce Motion it only fades in.
+private struct CelebrationReveal: ViewModifier {
+    let delay: Double
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var shown = false
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(shown ? 1 : 0)
+            .offset(y: shown || reduceMotion ? 0 : 16)
             .onAppear {
-                createParticles(in: geo.size)
-                withAnimation(.easeOut(duration: 3.5)) {
-                    animationPhase = true
+                withAnimation(reduceMotion ? .easeInOut(duration: 0.3) : .spring(duration: 0.6, bounce: 0.2).delay(delay)) {
+                    shown = true
                 }
             }
+    }
+}
+
+extension View {
+    func celebrationReveal(delay: Double = 0) -> some View {
+        modifier(CelebrationReveal(delay: delay))
+    }
+}
+
+// MARK: - Completion moments (session saves)
+
+/// A brief check and accent bloom after a durable save: an activity finished, a reflection
+/// or check-in saved, a step done, a session closed. It never blocks touches.
+struct CompletionMomentView: View {
+    let moment: CompletionMoment
+    let onFinish: () -> Void
+
+    var body: some View {
+        VStack(spacing: SupportTheme.Spacing.s) {
+            CelebrationEmblem(.symbol("checkmark"), diameter: moment.soft ? 52 : 72)
+            Text(moment.title)
+                .font(.headline)
+                .foregroundStyle(SupportTheme.textPrimary)
+                .multilineTextAlignment(.center)
         }
+        .padding(.horizontal, SupportTheme.Spacing.xl)
+        .padding(.vertical, SupportTheme.Spacing.l)
+        .background(SupportTheme.elevated, in: RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
+        .shadow(color: .black.opacity(0.18), radius: 24, y: 8)
         .allowsHitTesting(false)
-    }
-
-    private func createParticles(in size: CGSize) {
-        particles = (0..<80).map { _ in
-            ConfettiParticle(
-                x: CGFloat.random(in: 0...size.width),
-                y: CGFloat.random(in: -100...size.height * 0.3),
-                size: CGFloat.random(in: 8...16),
-                color: colors.randomElement() ?? .accentColor,
-                rotation: Double.random(in: 0...360),
-                rotationSpeed: Double.random(in: 180...720),
-                driftX: CGFloat.random(in: -100...100),
-                shape: ConfettiParticle.ParticleShape.allCases.randomElement() ?? .rectangle
-            )
+        .accessibilityHidden(true)
+        .task {
+            try? await Task.sleep(for: .seconds(moment.soft ? 1.2 : 1.7))
+            onFinish()
         }
     }
 }
 
-struct ConfettiParticle: Identifiable {
-    let id = UUID()
-    let x: CGFloat
-    let y: CGFloat
-    let size: CGFloat
-    let color: Color
-    let rotation: Double
-    let rotationSpeed: Double
-    let driftX: CGFloat
-    let shape: ParticleShape
+private struct CompletionMomentModifier: ViewModifier {
+    @EnvironmentObject private var appState: AppState
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    enum ParticleShape: CaseIterable {
-        case rectangle
-        case circle
-        case triangle
+    func body(content: Content) -> some View {
+        content
+            .overlay {
+                if let moment = appState.completionMoment {
+                    CompletionMomentView(moment: moment) {
+                        if appState.completionMoment?.id == moment.id { appState.completionMoment = nil }
+                    }
+                    .id(moment.id)
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.92)))
+                }
+            }
+            .animation(.easeInOut(duration: 0.24), value: appState.completionMoment)
     }
 }
 
-struct ConfettiShape: Shape {
-    let type: ConfettiParticle.ParticleShape
+/// Simple celebrations requested through `AppState.showCelebration(title:subtitle:icon:)`.
+private struct SimpleCelebrationModifier: ViewModifier {
+    @EnvironmentObject private var appState: AppState
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    func path(in rect: CGRect) -> Path {
-        switch type {
-        case .rectangle:
-            return Rectangle().path(in: rect)
-        case .circle:
-            return Circle().path(in: rect)
-        case .triangle:
-            var path = Path()
-            path.move(to: CGPoint(x: rect.midX, y: rect.minY))
-            path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
-            path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
-            path.closeSubpath()
-            return path
-        }
+    func body(content: Content) -> some View {
+        content
+            .overlay(alignment: .top) {
+                if appState.showSimpleCelebration {
+                    HStack(spacing: SupportTheme.Spacing.s) {
+                        CelebrationEmblem(.symbol(appState.celebrationIcon.isEmpty ? "sparkles" : appState.celebrationIcon),
+                                          tint: SupportTheme.Celebration.gold, diameter: 44)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(appState.celebrationTitle).font(.headline).foregroundStyle(SupportTheme.textPrimary)
+                            if !appState.celebrationSubtitle.isEmpty {
+                                Text(appState.celebrationSubtitle).font(.subheadline).foregroundStyle(SupportTheme.textSecondary)
+                            }
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .padding(SupportTheme.Spacing.m)
+                    .background(SupportTheme.elevated, in: RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
+                    .shadow(color: .black.opacity(0.15), radius: 18, y: 6)
+                    .padding(.horizontal, SupportTheme.Spacing.m)
+                    .frame(maxWidth: SupportTheme.readableWidth)
+                    .accessibilityElement(children: .combine)
+                    .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
+                    .task {
+                        AccessibilityNotification.Announcement("\(appState.celebrationTitle). \(appState.celebrationSubtitle)").post()
+                        try? await Task.sleep(for: .seconds(2.4))
+                        appState.showSimpleCelebration = false
+                    }
+                }
+            }
+            .animation(.easeInOut(duration: 0.24), value: appState.showSimpleCelebration)
     }
+}
+
+extension View {
+    /// Shows completion moments; mounted at the shell and inside full-screen activity covers.
+    func completionMoments() -> some View { modifier(CompletionMomentModifier()) }
+    /// Shows `AppState.showCelebration` requests as a calm card at the top of the screen.
+    func simpleCelebrations() -> some View { modifier(SimpleCelebrationModifier()) }
 }
 
 // MARK: - Celebration View Modifier
@@ -336,12 +407,12 @@ extension View {
 
 // MARK: - Preview
 
-#Preview("Streak Milestone") {
+#Preview("Quest Milestone") {
     CelebrationView(
         celebration: CelebrationEvent(
             id: UUID(),
             userId: UUID(),
-            celebrationType: .streakMilestone,
+            celebrationType: .questMilestone,
             value: 30,
             badgeId: nil,
             shownAt: nil,

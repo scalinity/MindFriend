@@ -186,13 +186,26 @@ final class AppState: ObservableObject {
         self.showSimpleCelebration = true
     }
 
+    // MARK: - Completion moments
+
+    @Published var completionMoment: CompletionMoment?
+
+    /// One calm acknowledgement after a durable save. Standard moments add the spec's single
+    /// soft confirmation haptic; soft moments (a mood check-in) have none.
+    func celebrateCompletion(_ title: String, soft: Bool = false) {
+        completionMoment = CompletionMoment(title: title, soft: soft)
+        if !soft { UINotificationFeedbackGenerator().notificationOccurred(.success) }
+        AccessibilityNotification.Announcement(title).post()
+    }
+
     // MARK: - Celebration Methods
 
     private let maxPendingCelebrations = 10
 
     func addCelebrations(_ celebrations: [CelebrationEvent]) {
-        // Filter out any that were already shown (have shownAt)
-        let newCelebrations = celebrations.filter { $0.shownAt == nil }
+        // Filter out any that were already shown (have shownAt). Streak milestones stay on the
+        // server but are not shown.
+        let newCelebrations = celebrations.filter { $0.shownAt == nil && $0.celebrationType != .streakMilestone }
         // Limit queue size to prevent memory issues or overwhelming UX
         let spaceAvailable = maxPendingCelebrations - pendingCelebrations.count
         let toAdd = Array(newCelebrations.prefix(max(0, spaceAvailable)))
@@ -210,6 +223,12 @@ final class AppState: ObservableObject {
         guard let owner = authenticatedAccountID, container.supabaseAuthService.currentUser?.id == owner else { return }
         await CompanionSyncCoordinator.shared.refresh()
     }
+}
+
+struct CompletionMoment: Identifiable, Equatable {
+    let id = UUID()
+    let title: String
+    let soft: Bool
 }
 
 // MARK: - Main Tab

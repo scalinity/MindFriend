@@ -3353,8 +3353,9 @@ enum TimeOfDay: String, Codable, CaseIterable {
     case night
 
     /// Returns the current time of day based on system time
-    static var current: TimeOfDay {
-        let hour = Calendar.current.component(.hour, from: Date())
+    static var current: TimeOfDay { at(hour: Calendar.current.component(.hour, from: Date())) }
+
+    static func at(hour: Int) -> TimeOfDay {
         switch hour {
         case 5..<12: return .morning
         case 12..<17: return .afternoon

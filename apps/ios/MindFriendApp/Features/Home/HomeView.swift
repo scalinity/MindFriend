@@ -521,8 +521,6 @@ struct HomeView: View {
                 }
             }
         }
-        // XP gain toast overlay
-        .xpGainToast()
     } // End of body
 
     // MARK: - Recovery Mode Exit
