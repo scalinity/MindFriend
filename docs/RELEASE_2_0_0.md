@@ -465,6 +465,25 @@ Walkthrough 1 (`artifacts/ui-pass/walkthrough-1.md`, 2.0.0 build at that time, d
 - Development export (`ExportDevelopment.plist`, debugging method, automatic signing): `** EXPORT SUCCEEDED **`, `MindFriend.ipa` 28 MB (`artifacts/release-2.0.0/device/export/`).
 - Installed on the owner's iPhone 16 Pro Max (`00008140-000214C41A01801C`) as an upgrade at 12:34 PM EST: 1.0.6 (202611090048) → 2.0.0 (202611091157), with the app's data kept (`before-install.txt`, `after-install.txt`).
 
+## Device round on 202611091157 (#98)
+The owner tested build 202611091157 on the iPhone after the Phase 8 install. PR #98 fixes what that test found, one commit per item, and merged at 3:25 PM EST (`4b8d342`) after CI passed on `af4d105` (iOS, SQL and Deno jobs).
+
+| Found on the device | Cause | Fix |
+|---|---|---|
+| Chat would not send | Chat started its activity with the Today origin. Ending it offered "Done for now", which closes a session with no draft and no unfinished work: `activity_stopped` at 1:42:01 PM EST, `session_closed` at 1:42:02. The Send tap at 1:42:05 made no request (Sentry replay). | `SupportEntryOrigin.chatDraft`; `SupportSessionCoordinator.leaveActivity(_:)` keeps a Chat session open and keeps "Done for now" for Today, Explore and onboarding. |
+| "Context" took the conversation title's space | A text toolbar button | The `brain.head.profile` symbol, labelled "Context" for VoiceOver |
+| "Voice isn't available for this conversation right now" | The same closed session: voice accepted only open sessions | From the new-chat screen, voice continues a closed session in a new linked session with a conversation of its own. On a closed conversation, voice stays unavailable: a conversation belongs to one session (`support_do_create`, `support_work_sessions_conversation_uidx`, and SUPPORT_SESSION_SPEC's "Continue as a new session"). |
+| Voice close button under the Dynamic Island, controls too high, uneven spacing | `.ignoresSafeArea()` on the whole screen; full-width button style | Only the background ignores the safe area; compact controls, close on the left, captions and voice on the right |
+| Microphone prompt only after closing voice | Permission was requested at Start voice | The mic button asks when access is undecided; the microphone stays off until Start voice |
+| Today's quick tiles wrapped mid-word, "Check in" sat at the top | Fixed three columns | Three across only while every word fits at the current text size, otherwise stacked; centred content |
+| Activity response field hidden behind the keyboard toolbar | The floating toolbar reserves no space | A bottom inset while typing, and the field scrolls into view |
+| Locking the phone during an activity returned to Today | Backgrounding paused and dismissed the activity | The activity stays open; locking saves the step and stops the practice clock. If the app ends, Today offers to continue (SUPPORT_SESSION_SPEC §7.2). |
+
+- Codex reviewed each push. Its findings changed the voice continuation (the first version reused the closed conversation, which the server rejects) and the practice clock: it stops before the background save rather than after, and saves that finish in the background no longer restart it.
+- Tests: `testLeavingAnActivityStartedFromChatKeepsTheConversationSessionOpen` and `testVoiceOnAClosedConversationIsUnavailable` failed before their fixes and pass after; `SupportSessionCoordinatorTests` and `SupportSessionCloudServiceTests` pass 93/93. The two clock changes have no automated test, because the timing lives in the view's scene-phase handling.
+- Apple Health: the owner could not leave Apple's "Health Access" sheet after turning on all seven topics. Sentry replay `21652133` shows the sheet opening at 96.6 s and no request or navigation for the rest of the session (about 160 s), and no `healthkit_connections` row was written, so `requestAuthorization` never returned. On iOS 27 the sheet has no buttons at the top (owner's screenshot, 3:29 PM EST); whether Allow sits below the topic list is not yet confirmed on the device.
+- Restore Purchases was not tested on 2.0.0 and was dropped from the checks: the owner's account is premium, and `SubscriptionView` shows Restore Purchases only without an active subscription. The restore path was last verified at 8:00 AM EST on 1.0.6 against `verify-purchase` v37 (Production changes, above).
+
 ## What's New in 2.0.0 (App Store text)
 MindFriend 2.0 is calmer and more personal, built around four places: Today, Chat, Explore and You.
 
