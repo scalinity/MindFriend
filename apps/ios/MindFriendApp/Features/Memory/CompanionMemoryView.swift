@@ -275,7 +275,7 @@ private struct EmptyMemoryView: View {
                 Button("Add Your First Memory") {
                     onAddTapped()
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.supportPrimary)
             }
         }
         .padding()

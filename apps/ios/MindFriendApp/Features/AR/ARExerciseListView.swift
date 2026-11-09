@@ -125,7 +125,7 @@ public struct ARExerciseListView: View {
                     await loadExercises()
                 }
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.supportPrimary)
             .accessibilityHint("Retry loading AR exercises")
         }
         .padding()

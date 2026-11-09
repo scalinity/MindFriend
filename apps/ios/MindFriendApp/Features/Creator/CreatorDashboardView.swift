@@ -248,6 +248,8 @@ struct EarningsView: View {
                                 // Handle payout request
                             }
                             .buttonStyle(.borderedProminent)
+                            .tint(SupportTheme.accent)
+                            .foregroundStyle(SupportTheme.onAccent)
                         }
                     }
                 }
@@ -361,7 +363,7 @@ struct CreatorOnboardingView: View {
                         .frame(maxWidth: .infinity)
                         .padding()
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.supportPrimary)
                 .padding(.horizontal)
 
                 Text("Application review takes 7 business days")

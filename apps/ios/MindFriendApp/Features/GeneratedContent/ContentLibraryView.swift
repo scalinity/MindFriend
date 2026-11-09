@@ -89,7 +89,7 @@ struct ContentLibraryView: View {
             } label: {
                 Text("Create Content")
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.supportPrimary)
         }
     }
 

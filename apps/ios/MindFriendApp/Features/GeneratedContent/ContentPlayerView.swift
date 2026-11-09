@@ -560,7 +560,7 @@ private struct FlagContentSheet: View {
             Button("Done") {
                 dismiss()
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.supportPrimary)
         }
     }
 

@@ -53,6 +53,8 @@ struct BoardView: View {
                 showingCompose = true
             }
             .buttonStyle(.borderedProminent)
+            .tint(SupportTheme.accent)
+            .foregroundStyle(SupportTheme.onAccent)
             .padding(.bottom, 32)
         }
     }

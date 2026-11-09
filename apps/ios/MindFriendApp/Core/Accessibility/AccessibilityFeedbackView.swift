@@ -90,7 +90,7 @@ struct AccessibilityFeedbackView: View {
                         Text("Submit Feedback")
                             .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.supportPrimary)
                     .disabled(!isFormValid)
                 }
             }

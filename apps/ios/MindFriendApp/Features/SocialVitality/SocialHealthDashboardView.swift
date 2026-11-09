@@ -278,7 +278,7 @@ struct SocialHealthDashboardView: View {
                     try? await engine.fetchDashboard()
                 }
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.supportPrimary)
         }
         .padding()
     }

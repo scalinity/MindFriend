@@ -40,9 +40,9 @@ struct OnboardingFlow: View {
                         Text("What would be useful right now?").font(.largeTitle.bold())
                         Text("We can talk it through or try one small thing. You can explore at your own pace.")
                         Button("Talk about something") { completeOnboarding(destination: .chat) }
-                            .buttonStyle(.borderedProminent)
+                            .buttonStyle(.supportPrimary)
                         Button("Try a short practice") { completeOnboarding(destination: .home, practice: true) }
-                            .buttonStyle(.bordered)
+                            .buttonStyle(.supportSecondary)
                         Button("Explore first") { completeOnboarding(destination: SupportShellTab.explore.mainTab) }
                             .buttonStyle(.bordered)
                         Button("Review consent") { showWelcome = false }
@@ -65,7 +65,7 @@ struct OnboardingFlow: View {
                             Text("MindFriend is available from age 13. You can still open support and crisis resources below.")
                         }
                         Button("Continue") { showWelcome = true }
-                            .buttonStyle(.borderedProminent)
+                            .buttonStyle(.supportPrimary)
                             .disabled(!consent.isEligible(currentYear: currentYear))
                     }
                     }

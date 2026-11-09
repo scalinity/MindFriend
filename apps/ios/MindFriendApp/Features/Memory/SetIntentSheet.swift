@@ -113,7 +113,7 @@ struct SetIntentSheet: View {
                                 .frame(maxWidth: .infinity)
                         }
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.supportPrimary)
                     .controlSize(.large)
                     .disabled(!isValid || isSaving)
 

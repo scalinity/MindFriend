@@ -133,6 +133,8 @@ private struct ActionPlanProgressRow: View {
             if item.status == .pending {
                 Button("Complete") { onComplete() }
                     .buttonStyle(.borderedProminent)
+                    .tint(SupportTheme.accent)
+                    .foregroundStyle(SupportTheme.onAccent)
                 Button("Skip") { onSkip() }
                     .buttonStyle(.bordered)
             } else {

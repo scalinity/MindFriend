@@ -286,7 +286,7 @@ struct InterventionRatingView: View {
                     Button("Submit") {
                         onSubmit(rating, feedback.isEmpty ? nil : feedback)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.supportPrimary)
                 }
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
