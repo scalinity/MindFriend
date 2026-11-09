@@ -176,4 +176,4 @@ The support-session branch (PR #62) reverts none of these fixes; it keeps the qu
   - `sleep_recorded_periods.sql`: missing synthetic user; RLS assertion.
   - Apple identities: CI fixture now has the real `provider_id NOT NULL`.
 
-Pending plan (49, filename order): `20261106000000` reconcile, then the 35 `20261106*` app-repair migrations and 13 support migrations through `20261107185417_reconcile_companion_canonical_actions.sql`.
+Pending plan (50, filename order): `20261106000000` reconcile, then the 35 `20261106*` app-repair migrations and 13 support migrations through `20261107185417_reconcile_companion_canonical_actions.sql`, then `20261108230000_schedule_memory_candidate_expiry.sql` (daily SQL job that blanks unsaved memory suggestions after their 7-day window). The dry run after adding it: 50 of  50.
