@@ -9,6 +9,7 @@ struct SupportTodayView: View {
     @State private var closeCandidate: SupportSession?
     @State private var simplerView = false
     @State private var isEditingPins = false
+    @State private var quickWidth: CGFloat = 0
     @Environment(\.dynamicTypeSize) private var typeSize
 
     private var resumable: SupportSession? { coordinator.unfinishedSessions.first }
@@ -32,6 +33,7 @@ struct SupportTodayView: View {
                         }.frame(minHeight: SupportTheme.minimumTarget)
                     } else {
                         quickWaysIn
+                            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { quickWidth = $0 }
                         progressCard
                         if !pins.pins.isEmpty { pinnedSection }
                     }
@@ -109,23 +111,40 @@ struct SupportTodayView: View {
         }
     }
 
+    private static let quickTitles = [
+        String(localized: "Check in"), String(localized: "1-minute breathing"), String(localized: "Untangle a thought"),
+    ]
+
+    /// Three across only while every word of every label fits on one line of its tile; a word that does not
+    /// fit is split mid-word ("breath- / ing"). Depends on text size, screen width and Display Zoom alike.
+    private var quickTilesFitAcross: Bool {
+        guard quickWidth > 0 else { return typeSize < .xxLarge }
+        let body = UIFont.preferredFont(forTextStyle: .body,
+            compatibleWith: UITraitCollection(preferredContentSizeCategory: UIContentSizeCategory(typeSize)))
+        let font = UIFont.systemFont(ofSize: body.pointSize, weight: .medium)
+        let widestWord = Self.quickTitles.flatMap { $0.split(separator: " ") }
+            .map { (String($0) as NSString).size(withAttributes: [.font: font]).width }.max() ?? 0
+        // Tiles share the width less two gaps; .supportSecondary insets each label by 16 points a side.
+        let labelWidth = (quickWidth - 2 * SupportTheme.Spacing.xs) / 3 - 2 * SupportTheme.Spacing.m
+        return widestWord <= labelWidth
+    }
+
     private var quickWaysIn: some View {
         VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Text("Quick ways in").font(.title2.weight(.semibold)).accessibilityAddTraits(.isHeader)
-            // Three across leaves too little width from xxLarge up: "1-minute breathing" starts to hyphenate.
-            let layout = typeSize >= .xxLarge
-                ? AnyLayout(VStackLayout(spacing: SupportTheme.Spacing.s))
-                : AnyLayout(HStackLayout(alignment: .top, spacing: SupportTheme.Spacing.xs))
+            let layout = quickTilesFitAcross
+                ? AnyLayout(HStackLayout(alignment: .top, spacing: SupportTheme.Spacing.xs))
+                : AnyLayout(VStackLayout(spacing: SupportTheme.Spacing.s))
             layout {
                 NavigationLink { MoodCheckInView().environment(\.supportRootEmbedded, true) } label: {
-                    quickLabel("Check in", icon: "face.smiling")
+                    quickLabel(Self.quickTitles[0], icon: "face.smiling")
                 }
                 .accessibilityLabel("Check in with yourself")
                 NavigationLink { SupportDestinationView(destination: .quickBreathing) } label: {
-                    quickLabel("1-minute breathing", icon: "wind")
+                    quickLabel(Self.quickTitles[1], icon: "wind")
                 }
                 SupportActivityChoiceButton(template: .untangleThoughtV1, origin: .today,
-                    title: "Untangle a thought", icon: "text.bubble")
+                    title: Self.quickTitles[2], icon: "text.bubble")
             }
             .buttonStyle(.supportSecondary)
             .fixedSize(horizontal: false, vertical: true)
@@ -143,8 +162,8 @@ struct SupportTodayView: View {
             Image(systemName: icon).font(.title2.weight(.medium)).accessibilityHidden(true)
             Text(title).fixedSize(horizontal: false, vertical: true)
         }
-        // Equal-height tiles: each fills the row, which takes the tallest tile's height.
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        // Equal-height tiles: each fills the row, which takes the tallest tile's height, with its content centred.
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var progressCard: some View {

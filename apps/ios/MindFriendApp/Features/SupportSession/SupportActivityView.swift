@@ -408,10 +408,10 @@ struct SupportActivityChoiceButton: View {
         Button { start(previous: nil) } label: {
             if let icon {
                 VStack(spacing: SupportTheme.Spacing.xs) {
-                    Image(systemName: icon).font(.title2).accessibilityHidden(true)
+                    Image(systemName: icon).font(.title2.weight(.medium)).accessibilityHidden(true)
                     Text(title ?? template.title).fixedSize(horizontal: false, vertical: true)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 Text(title ?? template.title)
             }
