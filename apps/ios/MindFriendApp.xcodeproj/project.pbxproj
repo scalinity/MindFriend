@@ -8032,7 +8032,7 @@
 				INFOPLIST_FILE = MindFriendWatch/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = MindFriend;
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "MindFriend reads your heart rate during breathing exercises to provide real-time biofeedback and personalized guidance.";
-				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "MindFriend records breathing exercise sessions as workouts to track your practice history.";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "During breathing exercises, MindFriend starts a workout session so it can read your heart rate live. It does not save workouts to Health.";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "$(inherited)";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.mindfriend.app;
 				INFOPLIST_KEY_WKRunsIndependently = NO;
@@ -8207,7 +8207,7 @@
 				INFOPLIST_FILE = MindFriendWatch/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = MindFriend;
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "MindFriend reads your heart rate during breathing exercises to provide real-time biofeedback and personalized guidance.";
-				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "MindFriend records breathing exercise sessions as workouts to track your practice history.";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "During breathing exercises, MindFriend starts a workout session so it can read your heart rate live. It does not save workouts to Health.";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "$(inherited)";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.mindfriend.app;
 				INFOPLIST_KEY_WKRunsIndependently = NO;

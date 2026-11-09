@@ -59,9 +59,9 @@
 	<key>NSFaceIDUsageDescription</key>
 	<string>MindFriend uses Face ID to securely unlock your private journal and mood data.</string>
 	<key>NSHealthShareUsageDescription</key>
-	<string>MindFriend analyzes your sleep data to provide personalized recommendations and track your sleep quality over time.</string>
+	<string>MindFriend reads sleep, heart rate, heart rate variability, resting heart rate, breathing rate, steps, distance, active energy, exercise and mindful minutes, and workouts to show your sleep and wellness trends and to time suggestions well.</string>
 	<key>NSHealthUpdateUsageDescription</key>
-	<string>MindFriend writes your logged sleep sessions to the Health app to keep your sleep data synchronized.</string>
+	<string>During heart-rate biofeedback, MindFriend starts a workout session so it can read your heart rate live. It does not save workouts or other data to Health.</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright 2024 MindFriend. All rights reserved.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
