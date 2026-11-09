@@ -61,7 +61,7 @@ struct TutorialStepView<Content: View>: View {
 
                 Text(subheadline)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .multilineTextAlignment(.center)
                     .lineLimit(nil)
                     .fixedSize(horizontal: false, vertical: true)
@@ -76,22 +76,16 @@ struct TutorialStepView<Content: View>: View {
 
             // Actions
             VStack(spacing: 10) {
-                Button(action: primaryAction) {
-                    Text(primaryLabel)
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(Color.accentColor)
-                        .foregroundStyle(.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                }
-                .accessibilityHint("Proceed to the next step")
+                Button(primaryLabel, action: primaryAction)
+                    .buttonStyle(.supportPrimary)
+                    .accessibilityHint("Proceed to the next step")
 
                 if let skipAction = skipAction {
                     Button(action: skipAction) {
                         Text("Skip tutorial")
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(SupportTheme.accent)
+                            .frame(minHeight: SupportTheme.minimumTarget)
                     }
                     .accessibilityHint("Skip the remaining tutorial steps")
                 }
