@@ -393,7 +393,7 @@ This is out of scope for 1.0.6. The fix needs a Vault secret, and re-enabling th
 
 ## Phase 7: Version 2.0.0
 - The release was prepared as 1.0.6 (PR #74, closed; preserved at tag `archive/release/1.0.6`). The Today / Chat / Explore / You shell changes the app's navigation and look enough to warrant a major version, so it ships as 2.0.0 (PR #75).
-- `MARKETING_VERSION` 1.0.5 → 2.0.0 and `CURRENT_PROJECT_VERSION` BUILD_NUMBER (America/New_York `yyyyMMddHHmm`), in the app target's Debug and Release configurations of `project.pbxproj`.
+- `MARKETING_VERSION` 1.0.5 → 2.0.0 and `CURRENT_PROJECT_VERSION` 202611091157 (America/New_York `yyyyMMddHHmm`; PR #75, merged 9 November 2026, 12:28 PM EST), in the app target's Debug and Release configurations of `project.pbxproj`.
 - No client or server code compares version numbers. The version is only displayed (Profile, You) and attached to analytics, crash reports and data exports, so the major version changes no behavior.
 
 ## 2.0.0 fix and UI pass (9 November 2026)
@@ -422,6 +422,7 @@ Walkthrough 1 (`artifacts/ui-pass/walkthrough-1.md`, 2.0.0 build at that time, d
 | 4 | You, settings, help, achievements, certificates and the paywall | #93 |
 | Sweep | Primary buttons outside the lanes, the home tutorial, and selected chips in lane 3's files | #94, #95 |
 | Follow-ups | Row subtitles at accessibility sizes, whole-word mood choices, Today tiles at large text, symbol weights, the privacy banner | #96 |
+| Icon columns | 70 SF Symbol columns widen with Dynamic Type instead of overlapping their labels | #97 |
 
 ### Second walkthrough and accessibility audit
 - Walkthrough 2 (combined build, dark at the default text size, 95 captures; `artifacts/ui-pass/walk5-dark-large/`) found 9 defects, all fixed:
@@ -434,6 +435,7 @@ Walkthrough 1 (`artifacts/ui-pass/walkthrough-1.md`, 2.0.0 build at that time, d
   - The privacy banner hugged its text (#96).
   - At accessibility sizes every row subtitle started mid-row: the list's label style indents each title text under the icon (#96).
   - Today's quick tiles hyphenated their labels at xxLarge and xxxLarge (#96).
+- The light accessibility3 walkthrough (`artifacts/ui-pass/walk6-light-a11y3/`) found one more: on Appearance the theme symbols ran into their labels. Seventy rows pinned an SF Symbol to `.frame(width: N)`; they now use `minWidth` (#97). With the simulator's own text size at accessibility3, every session flow (activities, reflection, pause and close alerts, mood check-in, chat) scales and stays usable (`artifacts/ui-pass/flows-system-ax3.xcresult`).
 - Every destination at all 12 text sizes, light and dark, iPhone 17 Pro and iPad Pro 11-inch: no clipping or overlap (`artifacts/ui-pass/sizes-light/`, `sizes-dark/`, `ipad-sizes.xcresult`).
 - Full accessibility audit (`testEveryDestinationPassesTheFullAccessibilityAudit`), iPhone 17 Pro:
   - Today: no findings, light and dark (before: contrast on the "1-minute breathing" tile, fixed by matching the symbol weight to the label).
@@ -454,6 +456,14 @@ Walkthrough 1 (`artifacts/ui-pass/walkthrough-1.md`, 2.0.0 build at that time, d
 - Production has no `community_wisdom` table (Sentry MINDFRIEND-1N). Peer support's wisdom section loads empty; the other sections are unaffected.
 - 62 unit tests in 16 classes outside CI's list fail on `main` before and after this pass (`artifacts/ui-pass/main-baseline-failures.txt`), for example `PromoCodeFieldTests`, which reads `@State` from an `XCTestCase`.
 - The failing cron jobs (Phase 6) are unchanged.
+
+## Phase 8: Release archive and Sentry symbols
+- Archived from `main` at `b106c39` (after #75 and #97), 9 November 2026, 12:28:59–12:33:01 PM EST: `xcodebuild archive -scheme MindFriendApp -configuration Release -destination generic/platform=iOS`. Result: `** ARCHIVE SUCCEEDED **` (`artifacts/release-2.0.0/archive.log`).
+- Archive: `~/Library/Developer/Xcode/Archives/2026-11-09/MindFriend 2.0.0 (202611091157).xcarchive`, left in Xcode Organizer (312 MB). Info.plist: `com.mindfriend.app`, 2.0.0, 202611091157. The superseded `MindFriend 1.0.6 (202611090048).xcarchive` was moved to the Trash.
+- Sentry, from the "[Sentry] Upload Debug Symbols" build phase: "Found 12 debug information files", "Uploaded 8 missing debug information files", then "Sentry debug-symbol upload completed." The phase runs before Xcode generates the app's dSYM, so it uploads the executables' symbol tables (MindFriendApp `2a9efd54-10ba-36e1-bfa0-6fb0442891e3`, the watch app, complications, widgets, Sentry).
+- The archive's dSYMs were then uploaded with the same `sentry-cli debug-files upload --type dsym --no-sources --wait-for 60`: "Uploaded 5 missing debug information files", including the MindFriendApp debug companion with the same UUID (`artifacts/release-2.0.0/sentry-dsym-upload.log`). A later release should give the build phase the dSYM as an input file, so the dSYMs are uploaded in one pass.
+- Development export (`ExportDevelopment.plist`, debugging method, automatic signing): `** EXPORT SUCCEEDED **`, `MindFriend.ipa` 28 MB (`artifacts/release-2.0.0/device/export/`).
+- Installed on the owner's iPhone 16 Pro Max (`00008140-000214C41A01801C`) as an upgrade at 12:34 PM EST: 1.0.6 (202611090048) → 2.0.0 (202611091157), with the app's data kept (`before-install.txt`, `after-install.txt`).
 
 ## What's New in 2.0.0 (App Store text)
 MindFriend 2.0 is calmer and more personal, built around four places: Today, Chat, Explore and You.
