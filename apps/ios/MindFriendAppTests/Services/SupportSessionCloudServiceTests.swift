@@ -333,6 +333,21 @@ final class SupportSessionCloudServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testVoiceOnAClosedSessionContinuesItsConversationInALinkedSession() async throws {
+        let (_, coordinator, sync, access, _) = try await voiceAccessRig()
+        let closedID = try XCTUnwrap(access.selectedSessionID)
+        let conversation = try XCTUnwrap(coordinator.journal.sessions[closedID]?.conversationID)
+        try await coordinator.close(closedID)
+        let binding = try await access.prepare()
+        XCTAssertNotEqual(binding.supportSessionUUID, closedID)
+        XCTAssertEqual(binding.conversationUUID, conversation)
+        XCTAssertEqual(coordinator.journal.sessions[binding.supportSessionUUID]?.status, .open)
+        XCTAssertEqual(coordinator.journal.sessions[binding.supportSessionUUID]?.previousSessionID, closedID)
+        XCTAssertEqual(coordinator.journal.sessions[closedID]?.status, .closed)
+        await sync.invalidate().value; await coordinator.invalidate().value
+    }
+
+    @MainActor
     func testVoiceReadinessAndPrivacyFailureNeverAttachAnEmptyConversation() async throws {
         var created = [UUID]()
         let (rig, coordinator, sync, access, _) = try await voiceAccessRig(attached: false, create: { created.append($0) })

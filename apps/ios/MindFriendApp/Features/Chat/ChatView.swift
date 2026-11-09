@@ -1,3 +1,4 @@
+import AVFAudio
 import SwiftUI
 import Combine
 import OSLog
@@ -262,9 +263,15 @@ struct ChatView: View {
                 }
                 Button {
                     if appState.entitlements.tier == .premium {
-                        voiceAccess = SessionVoiceAccess(container: container, appState: appState,
-                            sessionID: resolvedSessionID, conversationID: UUID(uuidString: conversation.id))
-                        showVoiceMode = true
+                        Task { @MainActor in
+                            // The system prompt comes with this tap; the microphone stays off until Start voice.
+                            if AVAudioApplication.shared.recordPermission == .undetermined {
+                                _ = await AVAudioApplication.requestRecordPermission()
+                            }
+                            voiceAccess = SessionVoiceAccess(container: container, appState: appState,
+                                sessionID: resolvedSessionID, conversationID: UUID(uuidString: conversation.id))
+                            showVoiceMode = true
+                        }
                     } else {
                         appState.showPaywall = true
                     }

@@ -74,7 +74,6 @@ struct VoiceChatView: View {
 
                 VStack(spacing: 0) {
                     topBar
-                        .padding(.top, geometry.safeAreaInsets.top > 0 ? 0 : 16)
 
                     switch mode {
                     case .unavailable:
@@ -106,7 +105,8 @@ struct VoiceChatView: View {
                 }
             }
         }
-        .ignoresSafeArea()
+        // Only the background (backgroundGradient) extends under the status bar and Dynamic Island;
+        // the controls stay inside the safe area.
         .supportScreen()
         .sheet(isPresented: $showSettings) {
             VoiceSettingsView(voiceService: voiceService)
@@ -206,9 +206,9 @@ struct VoiceChatView: View {
                 Image(systemName: "xmark")
                     .font(.system(size: 18, weight: .medium))
                     .frame(width: 44, height: 44)
-                    .clipShape(Circle())
+                    .voiceBarControl()
             }
-            .buttonStyle(.supportSecondary)
+            .buttonStyle(.plain)
             .accessibilityLabel("Close voice")
 
             Spacer()
@@ -221,9 +221,9 @@ struct VoiceChatView: View {
                         .font(.system(size: 18, weight: .medium))
                         .foregroundStyle(stateMachine.captionsEnabled ? SupportTheme.textPrimary : SupportTheme.textPrimary.opacity(0.7))
                         .frame(width: 44, height: 44)
-                        .clipShape(Circle())
+                        .voiceBarControl()
                 }
-                .buttonStyle(.supportSecondary)
+                .buttonStyle(.plain)
                 .accessibilityLabel(stateMachine.captionsEnabled ? "Hide captions" : "Show captions")
 
                 Button {
@@ -236,15 +236,16 @@ struct VoiceChatView: View {
                         Text(voiceService.currentVoice.displayName)
                             .font(.subheadline.weight(.medium))
                     }
+                    .padding(.horizontal, SupportTheme.Spacing.m)
                     .frame(minHeight: SupportTheme.minimumTarget)
-                    .clipShape(Capsule())
+                    .voiceBarControl()
                 }
-                .buttonStyle(.supportSecondary)
+                .buttonStyle(.plain)
                 .accessibilityLabel("Voice: \(voiceService.currentVoice.displayName). Tap to change.")
             }
         }
         .padding(.horizontal, SupportTheme.Spacing.l)
-        .padding(.top, SupportTheme.Spacing.l)
+        .padding(.top, SupportTheme.Spacing.s)
     }
 
     // MARK: - Modes
@@ -775,6 +776,18 @@ struct VoiceStartPanel: View {
         }
         .padding(.horizontal, SupportTheme.Spacing.l)
         .frame(maxWidth: SupportTheme.readableWidth)
+    }
+}
+
+/// The voice screen's top controls: compact field-coloured shapes sized to their content, not the
+/// full-width secondary button style.
+private extension View {
+    func voiceBarControl() -> some View {
+        self
+            .foregroundStyle(SupportTheme.accent)
+            .background(SupportTheme.field, in: Capsule())
+            .overlay(Capsule().strokeBorder(SupportTheme.border, lineWidth: 1))
+            .contentShape(Capsule())
     }
 }
 

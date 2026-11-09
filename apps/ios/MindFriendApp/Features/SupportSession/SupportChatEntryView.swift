@@ -1,3 +1,4 @@
+import AVFAudio
 import SwiftUI
 import Combine
 
@@ -60,8 +61,14 @@ struct SupportChatEntryView: View {
                             .accessibilityLabel("Context")
                         Button {
                             guard appState.entitlements.tier == .premium else { appState.showPaywall = true; return }
-                            voiceAccess = SessionVoiceAccess(container: container, appState: appState, sessionID: sessionID)
-                            showVoice = true
+                            Task { @MainActor in
+                                // The system prompt comes with this tap; the microphone stays off until Start voice.
+                                if AVAudioApplication.shared.recordPermission == .undetermined {
+                                    _ = await AVAudioApplication.requestRecordPermission()
+                                }
+                                voiceAccess = SessionVoiceAccess(container: container, appState: appState, sessionID: sessionID)
+                                showVoice = true
+                            }
                         } label: {
                             Image(systemName: "mic.fill").frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                         }.accessibilityLabel("Voice mode")
