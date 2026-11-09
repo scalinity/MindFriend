@@ -576,7 +576,7 @@ struct ThoughtRecordView: View {
                     HStack {
                         if viewModel.isSaving {
                             ProgressView()
-                                .tint(SupportTheme.accent)
+                                .tint(SupportTheme.onAccent)
                         } else {
                             Text(viewModel.currentPhase == .reframe ? "Save & Continue" : "Next")
                             Image(systemName: "chevron.right")
@@ -585,7 +585,7 @@ struct ThoughtRecordView: View {
                     .frame(maxWidth: .infinity)
                     .padding(SupportTheme.Spacing.m)
                     .background(viewModel.canProceed ? SupportTheme.accent : SupportTheme.separator)
-                    .foregroundStyle(SupportTheme.textPrimary)
+                    .foregroundStyle(viewModel.canProceed ? SupportTheme.onAccent : SupportTheme.textPrimary)
                     .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
                 }
                 .disabled(!viewModel.canProceed || viewModel.isSaving)

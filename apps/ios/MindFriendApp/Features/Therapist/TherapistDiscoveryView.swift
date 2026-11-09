@@ -390,6 +390,8 @@ final class TherapistDiscoveryViewModel: ObservableObject {
 
             therapists = result.therapists
             hasMore = result.hasMore
+            // A successful reload (filters or pull to refresh) replaces an earlier failure.
+            showError = false
         } catch {
             guard !Task.isCancelled else { return }
             errorMessage = error.localizedDescription

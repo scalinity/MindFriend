@@ -42,7 +42,7 @@ struct QuickCheckInSheet: View {
                         .frame(maxWidth: .infinity)
                         .padding(SupportTheme.Spacing.m)
                         .background(canSave ? SupportTheme.accent : SupportTheme.textSecondary)
-                        .foregroundStyle(SupportTheme.textPrimary)
+                        .foregroundStyle(canSave ? SupportTheme.onAccent : SupportTheme.textPrimary)
                         .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
                 }
                 .disabled(!canSave)

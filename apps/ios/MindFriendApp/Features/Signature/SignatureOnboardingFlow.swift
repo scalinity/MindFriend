@@ -424,7 +424,7 @@ struct SignatureOnboardingFlow: View {
                 .frame(maxWidth: .infinity)
                 .padding(SupportTheme.Spacing.m)
                 .background(canProceed ? SupportTheme.accent : SupportTheme.textSecondary)
-                .foregroundStyle(SupportTheme.textPrimary)
+                .foregroundStyle(canProceed ? SupportTheme.onAccent : SupportTheme.textPrimary)
                 .cornerRadius(SupportTheme.controlRadius)
             }
             .disabled(!canProceed || isCreating)

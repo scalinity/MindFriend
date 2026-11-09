@@ -227,7 +227,7 @@ struct ArtGeneratorView: View {
                 .frame(maxWidth: .infinity)
                 .padding(SupportTheme.Spacing.m)
                 .background(prompt.isEmpty || isGenerating ? SupportTheme.textSecondary : SupportTheme.accent)
-                .foregroundStyle(SupportTheme.textPrimary)
+                .foregroundStyle(prompt.isEmpty || isGenerating ? SupportTheme.textPrimary : SupportTheme.onAccent)
                 .cornerRadius(SupportTheme.controlRadius)
             }
             .disabled(prompt.isEmpty || isGenerating)

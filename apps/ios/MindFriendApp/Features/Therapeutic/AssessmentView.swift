@@ -188,7 +188,7 @@ struct AssessmentView: View {
                     .frame(maxWidth: .infinity)
                     .padding(SupportTheme.Spacing.m)
                     .background(viewModel.canProceed ? SupportTheme.accent : SupportTheme.separator)
-                    .foregroundStyle(SupportTheme.textPrimary)
+                    .foregroundStyle(viewModel.canProceed ? SupportTheme.onAccent : SupportTheme.textPrimary)
                     .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
                 }
                 .disabled(!viewModel.canProceed)
@@ -215,7 +215,7 @@ struct AssessmentView: View {
                     .frame(maxWidth: .infinity)
                     .padding(SupportTheme.Spacing.m)
                     .background(viewModel.isComplete ? SupportTheme.accent : SupportTheme.separator)
-                    .foregroundStyle(SupportTheme.textPrimary)
+                    .foregroundStyle(viewModel.isComplete ? SupportTheme.onAccent : SupportTheme.textPrimary)
                     .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
                 }
                 .disabled(!viewModel.isComplete || viewModel.isSubmitting)

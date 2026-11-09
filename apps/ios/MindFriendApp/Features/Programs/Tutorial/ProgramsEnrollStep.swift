@@ -63,7 +63,7 @@ struct ProgramsEnrollStep: View {
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, SupportTheme.Spacing.xs)
                             .background(showEnroll ? SupportTheme.accent : SupportTheme.accent)
-                            .foregroundStyle(SupportTheme.textPrimary)
+                            .foregroundStyle(SupportTheme.onAccent)
                             .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
                     }
                     .disabled(true)

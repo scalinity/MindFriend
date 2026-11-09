@@ -437,7 +437,7 @@ struct TherapeuticProgramDetailSheet: View {
                     .frame(maxWidth: .infinity)
                     .padding(SupportTheme.Spacing.m)
                     .background(canEnroll ? SupportTheme.accent : SupportTheme.separator)
-                    .foregroundStyle(SupportTheme.textPrimary)
+                    .foregroundStyle(canEnroll ? SupportTheme.onAccent : SupportTheme.textPrimary)
                     .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
             }
             .disabled(!canEnroll)
