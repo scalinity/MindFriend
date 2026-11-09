@@ -37,7 +37,7 @@ GRANT EXECUTE ON FUNCTION auth.uid() TO anon, authenticated, service_role;
 -- Synthetic shapes. Secret / unrelated-user columns are present so exclusion is observable.
 -- ---------------------------------------------------------------------------
 CREATE TABLE public.profiles(id uuid PRIMARY KEY, handle text, display_name text, email text, avatar_url text,
-  timezone text, created_at timestamptz DEFAULT now(), subscription_tier text DEFAULT 'free', daily_ai_quota integer DEFAULT 5,
+  timezone text, created_at timestamptz DEFAULT now(), subscription_tier text DEFAULT 'free', daily_ai_quota integer DEFAULT 30,
   referral_code text, push_token text, referred_by uuid);
 CREATE TABLE public.user_settings(id uuid PRIMARY KEY, user_id uuid NOT NULL, ai_tone text DEFAULT 'friendly', show_presence boolean DEFAULT true);
 CREATE TABLE public.moods(id uuid PRIMARY KEY, user_id uuid NOT NULL, local_date date NOT NULL DEFAULT current_date, mood_score integer NOT NULL DEFAULT 5, note text);

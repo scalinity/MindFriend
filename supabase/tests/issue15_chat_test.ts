@@ -269,8 +269,8 @@ Deno.test("issue 15: offline admission, durable explicit retry and legacy chat c
         if (allowed) s.quotaUsed++;
         const quota = {
           allowed,
-          quota_used: allowed ? s.quotaUsed : 5,
-          quota_limit: s.invalidNegativeQuota || body.p_is_premium ? -1 : 5,
+          quota_used: allowed ? s.quotaUsed : 30,
+          quota_limit: s.invalidNegativeQuota || body.p_is_premium ? -1 : 30,
           was_reset: false,
         };
         return Response.json(s.quotaArray ? [quota] : quota);
@@ -526,7 +526,7 @@ Deno.test("issue 15: offline admission, durable explicit retry and legacy chat c
       s = state();
       s.staleProfilePremium = true;
       const data = await result(await chat());
-      equal(data.quotaLimit, 5);
+      equal(data.quotaLimit, 30);
       assert(s.calls.includes("refresh_user_entitlement"));
     });
     await t.step("entitlement lookup failure stops provider work", async () => {
@@ -599,8 +599,8 @@ Deno.test("issue 15: offline admission, durable explicit retry and legacy chat c
         );
         equal([data.error, data.quotaUsed, data.quotaLimit], [
           "AI_QUOTA_EXCEEDED",
-          5,
-          5,
+          30,
+          30,
         ]);
         assert(!/midnight|UTC|Premium|unlimited|tomorrow/i.test(data.message));
         equal([s.userInserts, s.providerCalls, s.quotaCalls], [0, 0, 1]);
@@ -1161,7 +1161,7 @@ Deno.test("issue 15: offline admission, durable explicit retry and legacy chat c
         equal(final.data.message, final.data.assistantMessage);
         equal(final.data.userMessage.id, requestId);
         equal(final.data.userMessageId, requestId);
-        equal([final.data.quotaUsed, final.data.quotaLimit], [1, 5]);
+        equal([final.data.quotaUsed, final.data.quotaLimit], [1, 30]);
         equal(receipt().response, final.data);
         equal(s.providerCalls, 1);
       },
