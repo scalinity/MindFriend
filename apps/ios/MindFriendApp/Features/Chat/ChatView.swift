@@ -287,7 +287,7 @@ struct ChatView: View {
         .sheet(isPresented: $showSupportContext) {
             if let id = resolvedSessionID { SupportContextView(sessionID: id, receipt: latestSupport?.contextReceipt) }
         }
-        .confirmationDialog("Remove this local voice turn?", isPresented: Binding(get: { removingVoiceEvent != nil }, set: { if !$0 { removingVoiceEvent = nil } })) {
+        .alert("Remove this local voice turn?", isPresented: Binding(get: { removingVoiceEvent != nil }, set: { if !$0 { removingVoiceEvent = nil } })) {
             if let event = removingVoiceEvent {
                 Button("Remove local copy", role: .destructive) {
                     removingVoiceEvent = nil
@@ -301,10 +301,11 @@ struct ChatView: View {
             }
             Button("Cancel", role: .cancel) { removingVoiceEvent = nil }
         } message: { Text("Copy anything you want to keep before removing this device’s copy. An upload already in progress may still save an account copy.") }
-        .confirmationDialog("Choose an option", isPresented: $showManualChoices, titleVisibility: .visible) {
+        .alert("Choose an option", isPresented: $showManualChoices) {
             ForEach(SupportActivityTemplateKey.allCases, id: \.self) { template in
                 Button(template.title) { startManual(template) }
             }
+            Button("Cancel", role: .cancel) {}
         }
         .onChange(of: inputText) { _, value in
             if !value.isEmpty || !isSending, let id = resolvedSessionID {
