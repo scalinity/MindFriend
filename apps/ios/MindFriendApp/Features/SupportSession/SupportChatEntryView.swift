@@ -44,12 +44,12 @@ struct SupportChatEntryView: View {
                         }.padding(SupportTheme.Spacing.l).frame(maxWidth: SupportTheme.readableWidth, alignment: .leading)
                     }
                     if appState.isOutOfFreeMessages {
-                        QuotaWarningBanner(remaining: 0, resetsAt: EntitlementSnapshot.nextServerReset(after: Date())) {
+                        QuotaWarningBanner(remaining: 0, resetsAt: EntitlementSnapshot.nextServerReset(after: Date()),
+                                           onCrisisResources: { appState.showCrisisResources = true }) {
                             appState.showPaywall = true
                         }
                     }
-                    ChatInputBar(text: $text, isSending: sending, isOutOfMessages: appState.isOutOfFreeMessages,
-                                 onSend: { send(sessionID: sessionID) })
+                    ChatInputBar(text: $text, isSending: sending, onSend: { send(sessionID: sessionID) })
                 }
                 .foregroundStyle(SupportTheme.textPrimary)
                 .supportScreen()

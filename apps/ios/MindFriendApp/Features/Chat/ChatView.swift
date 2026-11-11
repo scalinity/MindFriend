@@ -220,7 +220,8 @@ struct ChatView: View {
             // The server's count decides both whether the banner shows and what it says.
             if sendFailure == nil, appState.entitlements.tier != .premium,
                let remaining = appState.entitlementSnapshot?.remaining, remaining <= quotaWarningThreshold {
-                QuotaWarningBanner(remaining: remaining, resetsAt: EntitlementSnapshot.nextServerReset(after: Date())) {
+                QuotaWarningBanner(remaining: remaining, resetsAt: EntitlementSnapshot.nextServerReset(after: Date()),
+                                   onCrisisResources: { appState.showCrisisResources = true }) {
                     appState.showPaywall = true
                 }
             }
@@ -241,7 +242,6 @@ struct ChatView: View {
             ChatInputBar(
                 text: $inputText,
                 isSending: isSending,
-                isOutOfMessages: appState.isOutOfFreeMessages,
                 onSend: sendMessage
             )
             .focused($isInputFocused)
@@ -837,12 +837,16 @@ struct TypingIndicator: View {
 struct ChatInputBar: View {
     @Binding var text: String
     let isSending: Bool
-    var isOutOfMessages = false
     let onSend: () -> Void
 
-    private var canSend: Bool {
-        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isSending && !isOutOfMessages
+    /// The free quota never disables sending: the server checks every message for crisis
+    /// language before it counts the quota, so an out-of-messages user still gets the safety
+    /// response. An ordinary message past the limit comes back as the quota failure.
+    static func canSend(_ text: String, isSending: Bool) -> Bool {
+        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isSending
     }
+
+    private var canSend: Bool { Self.canSend(text, isSending: isSending) }
 
     var body: some View {
         HStack(spacing: SupportTheme.Spacing.s) {
@@ -866,7 +870,7 @@ struct ChatInputBar: View {
             }
             .disabled(!canSend)
             .accessibilityLabel("Send message")
-            .accessibilityHint(isOutOfMessages ? "You're out of messages for today" : canSend ? "Sends your message" : "Type a message first")
+            .accessibilityHint(canSend ? "Sends your message" : "Type a message first")
         }
         .padding(.horizontal)
         .padding(.vertical, SupportTheme.Spacing.xs)
@@ -877,9 +881,25 @@ struct ChatInputBar: View {
 struct QuotaWarningBanner: View {
     let remaining: Int
     let resetsAt: Date
+    var onCrisisResources: (() -> Void)?
     let onTap: () -> Void
 
     var body: some View {
+        VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
+            upgradeButton
+            // Help never depends on the quota: the crisis resources stay one tap away.
+            if remaining == 0, let onCrisisResources {
+                Button(action: onCrisisResources) {
+                    Label("Support and crisis resources", systemImage: "lifepreserver")
+                        .font(.caption)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.supportSecondary)
+            }
+        }
+    }
+
+    private var upgradeButton: some View {
         Button(action: onTap) {
             HStack {
                 Image(systemName: "exclamationmark.triangle.fill")

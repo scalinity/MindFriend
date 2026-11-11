@@ -304,6 +304,19 @@ final class DeepLinkNavigationTests: XCTestCase {
         XCTAssertFalse(state.isOutOfFreeMessages)
     }
 
+    /// Spec AC-23: crisis access never depends on the AI quota. The server checks crisis
+    /// language before it counts the quota, so the client still sends at 0 remaining.
+    func testSendingStaysAvailableWhenTheFreeQuotaIsSpent() {
+        let state = AppState()
+        let user = profile(tier: "free")
+        state.setAuthenticated(user: user)
+        state.recordChatQuota(ownerID: user.id, used: 30, limit: 30, countedOn: serverDay(offset: 0))
+        XCTAssertTrue(state.isOutOfFreeMessages)
+        XCTAssertTrue(ChatInputBar.canSend("I don't want to be here anymore", isSending: false))
+        XCTAssertFalse(ChatInputBar.canSend("   ", isSending: false))
+        XCTAssertFalse(ChatInputBar.canSend("hello", isSending: true))
+    }
+
     func testFailureWithoutUsageKeepsTheQuotaPeriod() {
         let state = AppState()
         let user = profile(tier: "free")
