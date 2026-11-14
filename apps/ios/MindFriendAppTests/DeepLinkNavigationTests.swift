@@ -392,6 +392,23 @@ final class DeepLinkNavigationTests: XCTestCase {
         XCTAssertTrue(state.pendingCelebrations.isEmpty)
     }
 
+    func testOnlyRecentUnseenCelebrationsAreQueuedOnce() {
+        let state = AppState()
+        let user = profile(tier: "free")
+        state.setAuthenticated(user: user)
+        let now = Date()
+        func event(id: UUID = UUID(), age: TimeInterval) -> CelebrationEvent {
+            CelebrationEvent(id: id, userId: user.id, celebrationType: .levelUp, value: 2, badgeId: nil,
+                             shownAt: nil, sharedToCircle: false, sharedExternally: false,
+                             circlePostId: nil, createdAt: now.addingTimeInterval(-age))
+        }
+        let recent = event(age: 60)
+        // A backlog row from before 2.0 and the same event reported by the shell and a trigger.
+        state.addCelebrations([event(age: 30 * 24 * 60 * 60), recent, recent], now: now)
+        state.addCelebrations([recent], now: now)
+        XCTAssertEqual(state.pendingCelebrations.map(\.id), [recent.id])
+    }
+
     func testServerQuotaDayResetsAtUTCMidnight() throws {
         let formatter = ISO8601DateFormatter()
         let evening = try XCTUnwrap(formatter.date(from: "2026-11-09T18:30:00-05:00"))

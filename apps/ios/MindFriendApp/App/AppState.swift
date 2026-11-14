@@ -211,13 +211,20 @@ final class AppState: ObservableObject {
     // MARK: - Celebration Methods
 
     private let maxPendingCelebrations = 10
+    /// Milestones older than this are history, not a moment: they are never presented.
+    static let celebrationFreshness: TimeInterval = 48 * 60 * 60
 
-    func addCelebrations(_ celebrations: [CelebrationEvent]) {
-        // Filter out any that were already shown (have shownAt). Streak milestones stay on the
-        // server but are not shown. A response requested by an earlier account is dropped.
+    func addCelebrations(_ celebrations: [CelebrationEvent], now: Date = Date()) {
+        // Filter out any that were already shown (have shownAt) or are no longer recent.
+        // Streak milestones stay on the server but are not shown. A response requested by an
+        // earlier account is dropped. The shell and an in-place trigger can report the same
+        // event, so each id is queued once.
         guard let owner = currentUser?.id else { return }
+        var queued = Set(pendingCelebrations.map(\.id))
         let newCelebrations = celebrations.filter {
             $0.userId == owner && $0.shownAt == nil && $0.celebrationType != .streakMilestone
+                && now.timeIntervalSince($0.createdAt) < Self.celebrationFreshness
+                && queued.insert($0.id).inserted
         }
         // Limit queue size to prevent memory issues or overwhelming UX
         let spaceAvailable = maxPendingCelebrations - pendingCelebrations.count
