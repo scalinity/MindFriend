@@ -10,6 +10,8 @@ struct CopingKitDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var showingCompletion = false
 
+    private var palette: AreaPalette { SupportTheme.Area.copingKits.palette }
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
@@ -61,7 +63,7 @@ struct CopingKitDetailView: View {
                             }
                         } label: {
                             Image(systemName: userState.pinned ? "pin.fill" : "pin")
-                                .foregroundStyle(userState.pinned ? .pink : SupportTheme.textSecondary)
+                                .foregroundStyle(userState.pinned ? palette.ink : SupportTheme.textSecondary)
                                 .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                                 .accessibilityLabel(userState.pinned ? "Unpin" : "Pin")
                         }
@@ -107,7 +109,7 @@ struct CopingKitDetailView: View {
                     .frame(height: 4)
 
                 Rectangle()
-                    .fill(SupportTheme.accent)
+                    .fill(palette.ink)
                     .frame(width: geometry.size.width * viewModel.progressPercentage, height: 4)
             }
         }
@@ -123,12 +125,12 @@ struct CopingKitDetailView: View {
             // Kit icon
             ZStack {
                 Circle()
-                    .fill(SupportTheme.accent.opacity(0.15))
+                    .fill(palette.tint)
                     .frame(width: 80, height: 80)
 
                 Image(systemName: kit.contextIcon)
                     .font(.system(.largeTitle))
-                    .foregroundStyle(SupportTheme.accent)
+                    .foregroundStyle(palette.ink)
             }
 
             // Kit info
@@ -158,8 +160,9 @@ struct CopingKitDetailView: View {
                         Text("\(index + 1)")
                             .font(.caption)
                             .fontWeight(.bold)
+                            .foregroundStyle(palette.ink)
                             .frame(width: 24, height: 24)
-                            .background(SupportTheme.surface)
+                            .background(palette.tint)
                             .clipShape(Circle())
 
                         VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
@@ -216,7 +219,7 @@ struct CopingKitDetailView: View {
                     .fontWeight(.semibold)
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.supportPrimary)
+            .buttonStyle(CopingKitButtonStyle())
             .disabled(viewModel.isCompleting)
         }
         .padding(SupportTheme.Spacing.m)
@@ -233,6 +236,28 @@ struct CopingKitDetailView: View {
         } else {
             return "Continue"
         }
+    }
+}
+
+// MARK: - Coping kit button
+
+/// The primary action of a coping kit: the kit's pink with the accent button's text color, so the
+/// label keeps its contrast in both appearances. At least 48pt tall, grows with the text.
+struct CopingKitButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: ButtonStyleConfiguration) -> some View {
+        configuration.label
+            .font(.body.weight(.semibold))
+            .multilineTextAlignment(.center)
+            .foregroundStyle(SupportTheme.onAccent)
+            .padding(.horizontal, SupportTheme.Spacing.m)
+            .padding(.vertical, SupportTheme.Spacing.s)
+            .frame(maxWidth: .infinity, minHeight: SupportTheme.primaryButtonHeight)
+            .background(SupportTheme.Area.copingKits.palette.ink,
+                        in: RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
+            .opacity(isEnabled ? (configuration.isPressed ? 0.85 : 1) : 0.45)
+            .contentShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
     }
 }
 

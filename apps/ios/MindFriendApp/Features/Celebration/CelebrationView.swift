@@ -14,13 +14,15 @@ struct CelebrationView: View {
     @State private var hasSharedToCircle = false
 
     var body: some View {
+        let style = celebration.celebrationType.heroStyle
         ZStack {
-            SupportTheme.canvas.ignoresSafeArea()
-            CelebrationParticles().ignoresSafeArea()
+            CelebrationBackdrop(palette: style.palette)
+            CelebrationParticles(palette: style.particles).ignoresSafeArea()
 
             ScrollView {
                 VStack(spacing: SupportTheme.Spacing.l) {
-                    CelebrationEmblem(.symbol(celebration.supportIcon), tint: SupportTheme.Celebration.gold, diameter: 112)
+                    CelebrationEmblem(.symbol(celebration.supportIcon), tint: style.palette.ink, diameter: 112,
+                                      fill: style.gradient)
                     VStack(spacing: SupportTheme.Spacing.s) {
                         Text(celebration.supportTitle)
                             .font(.largeTitle.bold())
@@ -36,7 +38,7 @@ struct CelebrationView: View {
 
                     VStack(spacing: SupportTheme.Spacing.s) {
                         Button("Continue") { dismissCelebration() }
-                            .buttonStyle(.supportPrimary)
+                            .buttonStyle(CelebrationButtonStyle(gradient: style.gradient))
                         Button {
                             Task { await shareToCircle() }
                         } label: {
@@ -160,6 +162,46 @@ extension CelebrationEvent {
     }
 }
 
+/// The color 1.0.5 gave each kind of milestone, taken through the area and hero tokens.
+struct CelebrationHeroStyle {
+    /// Vivid background of the emblem and the Continue button; carries `SupportTheme.onHero`.
+    let gradient: LinearGradient
+    /// Calm backdrop and symbol color on the canvas.
+    let palette: AreaPalette
+    /// Colors of the drifting particles, readable on the canvas in both appearances.
+    let particles: [Color]
+}
+
+extension CelebrationType {
+    var heroStyle: CelebrationHeroStyle {
+        typealias Area = SupportTheme.Area
+        let gold = SupportTheme.Celebration.gold
+        switch self {
+        case .streakMilestone:
+            return CelebrationHeroStyle(gradient: SupportTheme.Hero.streak, palette: Area.quests.palette,
+                                        particles: [Area.quests.palette.ink, gold, Area.quests.palette.deep])
+        case .levelUp:
+            return CelebrationHeroStyle(gradient: SupportTheme.Hero.levelUp, palette: Area.journal.palette,
+                                        particles: [Area.journal.palette.ink, Area.voice.palette.ink, Area.people.palette.ink])
+        case .badgeUnlock:
+            return CelebrationHeroStyle(gradient: SupportTheme.Hero.badge, palette: Area.insights.palette,
+                                        particles: [Area.insights.palette.ink, gold, Area.voice.palette.ink])
+        case .questMilestone:
+            return CelebrationHeroStyle(gradient: SupportTheme.Hero.gradient(Area.voice.palette.deep, Area.exercises.palette.deep),
+                                        palette: Area.voice.palette,
+                                        particles: [Area.voice.palette.ink, Area.exercises.palette.ink, SupportTheme.Celebration.glow])
+        case .exerciseMilestone:
+            return CelebrationHeroStyle(gradient: SupportTheme.Hero.gradient(Area.insights.palette.deep, Area.exercises.palette.deep),
+                                        palette: Area.exercises.palette,
+                                        particles: [Area.insights.palette.ink, Area.sensory.palette.ink, Area.exercises.palette.ink])
+        case .programComplete:
+            return CelebrationHeroStyle(gradient: SupportTheme.Hero.gradient(Area.journal.palette.deep, Area.people.palette.deep),
+                                        palette: Area.journal.palette,
+                                        particles: [Area.journal.palette.ink, Area.people.palette.ink, gold])
+        }
+    }
+}
+
 // MARK: - Celebration kit
 
 /// One vocabulary for every reward moment: a soft glow, an emblem that settles into place and
@@ -173,23 +215,34 @@ struct CelebrationEmblem: View {
     let mark: CelebrationMark
     var tint: Color = SupportTheme.Celebration.accent
     var diameter: CGFloat = 96
+    /// A hero gradient fills the emblem and the symbol turns `onHero`; `tint` then colors only the glow.
+    var fill: LinearGradient?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @State private var shown = false
 
-    init(_ mark: CelebrationMark, tint: Color = SupportTheme.Celebration.accent, diameter: CGFloat = 96, animated: Bool = true) {
+    init(_ mark: CelebrationMark, tint: Color = SupportTheme.Celebration.accent, diameter: CGFloat = 96, animated: Bool = true,
+         fill: LinearGradient? = nil) {
         self.mark = mark
         self.tint = tint
         self.diameter = diameter
         self.animated = animated
+        self.fill = fill
     }
 
     var animated = true
 
     var body: some View {
         ZStack {
-            Circle().fill(SupportTheme.elevated)
-            Circle().strokeBorder(tint, lineWidth: 2)
-                .padding(SupportTheme.Spacing.xxs)
+            if let fill {
+                Circle().fill(fill)
+                Circle().strokeBorder(SupportTheme.onHero, lineWidth: 2)
+                    .padding(SupportTheme.Spacing.xxs)
+            } else {
+                Circle().fill(SupportTheme.elevated)
+                Circle().strokeBorder(tint, lineWidth: 2)
+                    .padding(SupportTheme.Spacing.xxs)
+            }
             switch mark {
             case .symbol(let name):
                 Image(systemName: name)
@@ -200,13 +253,15 @@ struct CelebrationEmblem: View {
                     .minimumScaleFactor(0.5)
             }
         }
-        .foregroundStyle(tint)
+        .foregroundStyle(fill == nil ? tint : SupportTheme.onHero)
         .frame(width: diameter, height: diameter)
         .background {
-            Circle().fill(SupportTheme.Celebration.glow.opacity(0.18))
-                .padding(-SupportTheme.Spacing.s)
-            Circle().strokeBorder(SupportTheme.Celebration.glow.opacity(0.3), lineWidth: 1)
-                .padding(-SupportTheme.Spacing.l)
+            if !reduceTransparency {
+                Circle().fill((fill == nil ? SupportTheme.Celebration.glow : tint).opacity(0.18))
+                    .padding(-SupportTheme.Spacing.s)
+                Circle().strokeBorder((fill == nil ? SupportTheme.Celebration.glow : tint).opacity(0.3), lineWidth: 1)
+                    .padding(-SupportTheme.Spacing.l)
+            }
         }
         .padding(SupportTheme.Spacing.l)
         .scaleEffect(reduceMotion || !animated || shown ? 1 : 0.85)
@@ -222,6 +277,8 @@ struct CelebrationEmblem: View {
 struct CelebrationParticles: View {
     var count = 36
     var duration = 2.4
+    /// Up to three colors; empty keeps the theme hues.
+    var palette: [Color] = []
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var startedAt = Date()
     @State private var seeds: [Seed] = []
@@ -242,7 +299,9 @@ struct CelebrationParticles: View {
                 Canvas { context, size in
                     let elapsed = timeline.date.timeIntervalSince(startedAt)
                     let centre = CGPoint(x: size.width / 2, y: size.height * 0.38)
-                    let palette = [SupportTheme.Celebration.accent, SupportTheme.Celebration.gold, SupportTheme.Celebration.glow]
+                    let palette = self.palette.isEmpty
+                        ? [SupportTheme.Celebration.accent, SupportTheme.Celebration.gold, SupportTheme.Celebration.glow]
+                        : self.palette
                     for seed in seeds {
                         let t = (elapsed - seed.delay) / duration
                         guard t > 0, t < 1 else { continue }
@@ -253,7 +312,7 @@ struct CelebrationParticles: View {
                         var layer = context
                         layer.opacity = 1 - t
                         let shape = seed.rounded ? Path(roundedRect: rect, cornerRadius: seed.size / 3) : Path(ellipseIn: rect)
-                        layer.fill(shape, with: .color(palette[seed.hue]))
+                        layer.fill(shape, with: .color(palette[seed.hue % palette.count]))
                     }
                 }
             }
@@ -277,6 +336,58 @@ struct CelebrationParticles: View {
 struct ConfettiView: View {
     var colors: [Color] = []
     var body: some View { CelebrationParticles() }
+}
+
+/// Calm backdrop of a celebration: the canvas with a soft wash of the milestone's color at the top.
+/// It sits behind primary and secondary text. Opaque stops, so Reduce Transparency needs no change.
+struct CelebrationBackdrop: View {
+    let palette: AreaPalette
+
+    var body: some View {
+        LinearGradient(colors: [palette.tint, SupportTheme.canvas], startPoint: .top, endPoint: .center)
+            .background(SupportTheme.canvas)
+            .ignoresSafeArea()
+    }
+}
+
+/// The primary action of a reward moment shown on a full hero gradient: a white button with
+/// text in a deep area color, at least 48pt tall, growing with the text.
+struct CelebrationLightButtonStyle: ButtonStyle {
+    let label: Color
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: ButtonStyleConfiguration) -> some View {
+        configuration.label
+            .font(.body.weight(.semibold))
+            .multilineTextAlignment(.center)
+            .foregroundStyle(label)
+            .padding(.horizontal, SupportTheme.Spacing.m)
+            .padding(.vertical, SupportTheme.Spacing.s)
+            .frame(maxWidth: .infinity, minHeight: SupportTheme.primaryButtonHeight)
+            .background(SupportTheme.onHero, in: RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
+            .opacity(isEnabled ? (configuration.isPressed ? 0.85 : 1) : 0.45)
+            .contentShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
+    }
+}
+
+/// The primary action of a reward moment: a hero gradient behind `onHero` text, at least 48pt
+/// tall, growing with the text. Reward screens use it in place of the accent primary button.
+struct CelebrationButtonStyle: ButtonStyle {
+    let gradient: LinearGradient
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: ButtonStyleConfiguration) -> some View {
+        configuration.label
+            .font(.body.weight(.semibold))
+            .multilineTextAlignment(.center)
+            .foregroundStyle(SupportTheme.onHero)
+            .padding(.horizontal, SupportTheme.Spacing.m)
+            .padding(.vertical, SupportTheme.Spacing.s)
+            .frame(maxWidth: .infinity, minHeight: SupportTheme.primaryButtonHeight)
+            .background(gradient, in: RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
+            .opacity(isEnabled ? (configuration.isPressed ? 0.85 : 1) : 0.45)
+            .contentShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
+    }
 }
 
 /// Content that rises gently into place after the emblem; under Reduce Motion it only fades in.

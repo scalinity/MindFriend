@@ -12,6 +12,8 @@ struct CopingKitStepView: View {
     @State private var isTimerRunning = false
     @State private var isComplete = false
 
+    private var palette: AreaPalette { SupportTheme.Area.copingKits.palette }
+
     var body: some View {
         VStack(spacing: SupportTheme.Spacing.l) {
             // Step header
@@ -51,7 +53,7 @@ struct CopingKitStepView: View {
             Text("Step \(stepNumber) of \(totalSteps)")
                 .font(.caption)
                 .fontWeight(.medium)
-                .foregroundStyle(SupportTheme.textSecondary)
+                .foregroundStyle(palette.ink)
 
             Text(step.typeDescription)
                 .font(.title2)
@@ -103,8 +105,7 @@ struct CopingKitStepView: View {
                         Label("Start", systemImage: "play.fill")
                             .fontWeight(.medium)
                     }
-                    .buttonStyle(.supportPrimary)
-                    .tint(SupportTheme.accent)
+                    .buttonStyle(CopingKitButtonStyle())
 
                     Button {
                         remainingSeconds = step.durationSeconds
@@ -129,7 +130,7 @@ struct CopingKitStepView: View {
                 .fontWeight(.semibold)
                 .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.supportPrimary)
+        .buttonStyle(CopingKitButtonStyle())
         .padding(.top, SupportTheme.Spacing.m)
     }
 
@@ -139,7 +140,7 @@ struct CopingKitStepView: View {
         VStack(spacing: SupportTheme.Spacing.m) {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(.largeTitle))
-                .foregroundStyle(SupportTheme.accent)
+                .foregroundStyle(SupportTheme.Status.positive)
 
             Text("Step Complete!")
                 .font(.headline)
@@ -187,11 +188,14 @@ struct CopingKitStepView: View {
 
 struct BreathingVisualization: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     let pattern: BreathingPattern
 
     @State private var phase: BreathingPhase = .inhale
     @State private var scale: CGFloat = 0.8
     @State private var animationCompleted = false
+
+    private var palette: AreaPalette { SupportTheme.Area.copingKits.palette }
 
     enum BreathingPhase {
         case inhale
@@ -204,12 +208,13 @@ struct BreathingVisualization: View {
         ZStack {
             // Outer circle
             Circle()
-                .stroke(SupportTheme.accent.opacity(0.2), lineWidth: 4)
+                .stroke(palette.ink.opacity(reduceTransparency ? 1 : 0.25), lineWidth: 4)
                 .frame(width: 180, height: 180)
 
-            // Animated inner circle
+            // Animated inner circle: a calm tint behind the phase text, outlined in the kit's pink
             Circle()
-                .fill(SupportTheme.accent.opacity(0.6))
+                .fill(reduceTransparency ? palette.tint : palette.ink.opacity(0.3))
+                .overlay(Circle().strokeBorder(palette.ink, lineWidth: 3))
                 .frame(width: reduceMotion ? 100 : 100 * scale, height: reduceMotion ? 100 : 100 * scale)
 
             // Text overlay

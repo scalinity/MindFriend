@@ -366,22 +366,7 @@ struct VoiceModeView: View {
         .animation(reduceMotion ? .easeInOut(duration: 0.2) : .spring(response: 0.4), value: stateMachine.state)
     }
 
-    private var orbShadowColor: Color {
-        switch stateMachine.state.orbColor {
-        case .userSpeaking:
-            return SupportTheme.accent
-        case .aiSpeaking:
-            return SupportTheme.accent
-        case .thinking:
-            return SupportTheme.accent
-        case .ready:
-            return SupportTheme.accent.opacity(0.6)
-        case .error:
-            return .red
-        default:
-            return SupportTheme.textSecondary
-        }
-    }
+    private var orbShadowColor: Color { OrbView.color(for: stateMachine.state.orbColor) }
 
     // MARK: - Status View
 
@@ -421,13 +406,13 @@ struct VoiceModeView: View {
     private var connectionStatusColor: Color {
         switch voiceService.connectionState {
         case .connected:
-            return SupportTheme.accent
+            return SupportTheme.Status.positive
         case .connecting, .reconnecting:
-            return SupportTheme.accent
+            return SupportTheme.Status.caution
         case .disconnected:
             return SupportTheme.textSecondary
         case .error:
-            return .red
+            return SupportTheme.Status.caution
         }
     }
 
@@ -568,11 +553,11 @@ struct VoiceModeView: View {
 
     private func voiceColor(_ voice: GrokVoice) -> Color {
         switch voice {
-        case .ara: return SupportTheme.accent
-        case .rex: return SupportTheme.accent
-        case .sal: return SupportTheme.accent
-        case .eve: return SupportTheme.accent
-        case .leo: return SupportTheme.accent
+        case .ara: return SupportTheme.Area.copingKits.palette.ink
+        case .rex: return SupportTheme.Area.voice.palette.ink
+        case .sal: return SupportTheme.Area.journal.palette.ink
+        case .eve: return SupportTheme.Area.quests.palette.ink
+        case .leo: return SupportTheme.Area.insights.palette.ink
         }
     }
 }

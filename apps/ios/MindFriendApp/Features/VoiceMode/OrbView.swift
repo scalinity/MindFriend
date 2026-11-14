@@ -8,6 +8,7 @@ import UIKit
 /// Audio-reactive: orb scale, deformation, and glow all respond to audio amplitude
 struct OrbView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     // MARK: - Configuration
 
@@ -16,6 +17,8 @@ struct OrbView: View {
         var micLevel: Float           // 0.0 - 1.0, smoothed RMS from microphone
         var playbackLevel: Float      // 0.0 - 1.0, smoothed RMS from TTS output
         var reducedMotion: Bool
+        /// Draws the state symbol over the orb. Off where the orb is decoration only.
+        var showsIcon: Bool = true
 
         static let idle = Configuration(
             state: .idle,
@@ -107,9 +110,11 @@ struct OrbView: View {
                 .frame(width: size, height: size)
                 .opacity(orbOpacity)
 
-            Image(systemName: config.state.orbIcon)
-                .font(.system(size: size * 0.24, weight: .medium))
-                .foregroundStyle(SupportTheme.onAccent)
+            if config.showsIcon {
+                Image(systemName: config.state.orbIcon)
+                    .font(.system(size: size * 0.24, weight: .medium))
+                    .foregroundStyle(SupportTheme.onAccent)
+            }
         }
         .contentShape(Circle())
         .onTapGesture {
@@ -138,8 +143,8 @@ struct OrbView: View {
         // Slow ambient breathing (subtle, audio takes priority)
         let ambientBreath = sin(time * ambientBreathingSpeed) * 0.02 + 1.0
 
-        // Draw outer glow rings (audio-reactive)
-        if config.state.isActive || level > 0.05 {
+        // Draw outer glow rings (audio-reactive); Reduce Transparency keeps the orb opaque
+        if !reduceTransparency && (config.state.isActive || level > 0.05) {
             drawGlowRings(
                 context: context,
                 center: center,
@@ -265,7 +270,25 @@ struct OrbView: View {
         }
         path.closeSubpath()
 
-        context.fill(path, with: .color(stateColor))
+        if reduceTransparency {
+            context.fill(path, with: .color(stateColor))
+            return
+        }
+
+        // Audio-reactive gradient: brighter at higher levels
+        let brightnessBoost = 1.0 + Double(level) * 0.15
+        let baseColor = stateColor
+        let brightColor = baseColor.opacity(min(1.0, 0.85 * brightnessBoost))
+        let dimColor = baseColor.opacity(min(1.0, 0.55 * brightnessBoost))
+
+        context.fill(
+            path,
+            with: .linearGradient(
+                Gradient(colors: [brightColor, dimColor]),
+                startPoint: CGPoint(x: center.x - baseRadius, y: center.y - baseRadius),
+                endPoint: CGPoint(x: center.x + baseRadius, y: center.y + baseRadius)
+            )
+        )
 
         // Audio-reactive edge glow: thicker and brighter with audio
         let glowWidth = 8.0 + Double(level) * 16.0
@@ -279,30 +302,28 @@ struct OrbView: View {
 
     // MARK: - State-Based Properties
 
-    private var stateColor: Color {
-        switch config.state.orbColor {
-        case .inactive:
-            return SupportTheme.accent
-        case .connecting:
-            return SupportTheme.accent
-        case .ready:
-            return SupportTheme.accent
+    private var stateColor: Color { Self.color(for: config.state.orbColor) }
+
+    /// The orb's color per state, taken from 1.0.5 through the area tokens: voice for the
+    /// conversation itself, insights while the person speaks, journal while thinking, quests
+    /// while connecting or interrupted. Errors use the caution orange because red is reserved for
+    /// crisis and destructive actions; an inactive or muted orb is neutral.
+    static func color(for orbColor: VoiceStateMachine.OrbColor) -> Color {
+        switch orbColor {
+        case .inactive, .muted:
+            return SupportTheme.textSecondary
+        case .connecting, .reconnecting, .interrupted:
+            return SupportTheme.Area.quests.palette.ink
+        case .ready, .aiSpeaking:
+            return SupportTheme.Area.voice.palette.ink
         case .userSpeaking:
-            return SupportTheme.accent
+            return SupportTheme.Area.insights.palette.ink
         case .thinking:
-            return SupportTheme.accent
-        case .aiSpeaking:
-            return SupportTheme.accent
-        case .interrupted:
-            return SupportTheme.Celebration.gold
-        case .muted:
-            return SupportTheme.accent
-        case .reconnecting:
-            return SupportTheme.accent
+            return SupportTheme.Area.journal.palette.ink
         case .paused:
-            return SupportTheme.accent  // Dim blue for idle disconnected
+            return SupportTheme.Area.voice.palette.ink.opacity(0.7)
         case .error:
-            return SupportTheme.accent
+            return SupportTheme.Status.caution
         }
     }
 
@@ -399,10 +420,12 @@ struct OrbContainerView: View {
             OrbView(config: config, size: size, onTap: onTap)
 
             // Overlay icon (since Canvas can't directly draw SF Symbols)
-            Image(systemName: config.state.orbIcon)
-                .font(.system(size: size * 0.24, weight: .medium))
-                .foregroundStyle(SupportTheme.onAccent)
-                .allowsHitTesting(false)
+            if config.showsIcon {
+                Image(systemName: config.state.orbIcon)
+                    .font(.system(size: size * 0.24, weight: .medium))
+                    .foregroundStyle(SupportTheme.onAccent)
+                    .allowsHitTesting(false)
+            }
         }
     }
 }

@@ -6,14 +6,16 @@ struct FeatureUnlockView: View {
 
     var body: some View {
         ZStack {
-            SupportTheme.canvas.ignoresSafeArea()
-            CelebrationParticles().ignoresSafeArea()
+            SupportTheme.Hero.unlock.ignoresSafeArea()
+            CelebrationParticles(palette: [SupportTheme.onHero, SupportTheme.onHero.opacity(0.7), SupportTheme.onHero.opacity(0.5)])
+                .ignoresSafeArea()
             ScrollView {
                 VStack(spacing: SupportTheme.Spacing.l) {
-                    CelebrationEmblem(.symbol("lock.open"), tint: SupportTheme.Celebration.gold, diameter: 112)
+                    CelebrationEmblem(.symbol("lock.open"), tint: SupportTheme.Area.voice.palette.ink, diameter: 112)
                     VStack(spacing: SupportTheme.Spacing.xs) {
                         Text("More ways to find support").font(.largeTitle.bold()).accessibilityAddTraits(.isHeader)
-                        Text("You've unlocked new features").foregroundStyle(SupportTheme.textSecondary)
+                            .foregroundStyle(SupportTheme.onHero)
+                        Text("You've unlocked new features").foregroundStyle(SupportTheme.onHero)
                     }
                     .multilineTextAlignment(.center)
                     .celebrationReveal(delay: 0.2)
@@ -23,7 +25,8 @@ struct FeatureUnlockView: View {
                         }
                     }
                     .celebrationReveal(delay: 0.3)
-                    Button("Continue", action: onDismiss).buttonStyle(.supportPrimary)
+                    Button("Continue", action: onDismiss)
+                        .buttonStyle(CelebrationLightButtonStyle(label: SupportTheme.Area.voice.palette.deep))
                 }
                 .foregroundStyle(SupportTheme.textPrimary)
                 .frame(maxWidth: SupportTheme.readableWidth)

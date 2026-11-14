@@ -36,11 +36,13 @@ struct WelcomeBackView: View {
                 .padding(.bottom, SupportTheme.Spacing.xl)
             }
         }
+        .background(CelebrationBackdrop(palette: SupportTheme.Area.quests.palette))
         .supportSheet()
         .foregroundStyle(SupportTheme.textPrimary)
         .overlay {
             if showConfetti {
-                CelebrationParticles()
+                CelebrationParticles(palette: [SupportTheme.Area.quests.palette.ink, SupportTheme.Celebration.gold,
+                                               SupportTheme.Area.people.palette.ink])
             }
         }
         .onAppear {
@@ -104,7 +106,8 @@ struct WelcomeBackView: View {
     // MARK: - Illustration
 
     private var illustrationSection: some View {
-        CelebrationEmblem(.symbol(illustrationIcon), diameter: 96)
+        CelebrationEmblem(.symbol(illustrationIcon), tint: SupportTheme.Area.quests.palette.ink, diameter: 96,
+                          fill: SupportTheme.Hero.welcomeBack)
             .padding(.top, SupportTheme.Spacing.m)
     }
 
@@ -154,7 +157,7 @@ struct WelcomeBackView: View {
                     Text("Continue My Journey")
                 }
             }
-            .buttonStyle(.supportPrimary)
+            .buttonStyle(CelebrationButtonStyle(gradient: SupportTheme.Hero.welcomeBack))
             .accessibilityLabel("Continue My Journey")
 
             // Secondary: Fresh Start (only for extended breaks+)
