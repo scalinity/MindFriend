@@ -1,4 +1,5 @@
 import XCTest
+import Supabase
 @testable import MindFriendApp
 
 final class HabitDateTests: XCTestCase {
@@ -60,6 +61,49 @@ final class HabitDateTests: XCTestCase {
     private func makeCompletion(date: Date, skipped: Bool = false) -> HabitCompletion {
         HabitCompletion(id: UUID(), habitId: UUID(), userId: UUID(), completedDate: date,
                         currentStreak: 4, skipped: skipped, skipReason: nil, createdAt: date)
+    }
+}
+
+/// A habit with a reminder, created on a phone in America/New_York, saved, reloaded, and
+/// scheduled. The wire format is the Supabase client's own; the server body is what
+/// PostgREST returns for habits.reminder_time once the column is timestamptz.
+final class HabitReminderWireTests: XCTestCase {
+    func testReminderSavesReloadsAndFiresAtThePickedLocalTime() throws {
+        let newYork = try XCTUnwrap(TimeZone(identifier: "America/New_York"))
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = newYork
+        // 8:30 AM picked on 13 November 2026.
+        let picked = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 11, day: 13, hour: 8, minute: 30)))
+        let habit = Habit(id: UUID(), userId: UUID(), name: "Morning breath", anchor: "pour my coffee",
+                          behavior: "take three breaths", category: .breathing, difficulty: .easy,
+                          durationSeconds: 30, reminderTime: picked, reminderMinutesBefore: 5,
+                          isActive: true, createdAt: picked, updatedAt: picked)
+
+        // Save: the exact text the insert carries, which supabase/tests/habit_reminders.sql casts.
+        let body = try PostgrestClient.Configuration.jsonEncoder.encode(habit)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        XCTAssertEqual(json["reminder_time"] as? String, "2026-11-13T13:30:00.000")
+
+        // Reload: a timetz body could not be decoded; the timestamptz body is the same instant.
+        var row = json
+        row["reminder_time"] = "13:30:00+00"
+        XCTAssertThrowsError(try PostgrestClient.Configuration.jsonDecoder.decode(
+            Habit.self, from: JSONSerialization.data(withJSONObject: row)))
+        row["reminder_time"] = "2026-11-13T13:30:00+00:00"
+        let reloaded = try PostgrestClient.Configuration.jsonDecoder.decode(
+            Habit.self, from: JSONSerialization.data(withJSONObject: row))
+        let reminder = try XCTUnwrap(reloaded.reminderTime)
+        XCTAssertEqual(reminder, picked)
+
+        // Fire: every day at 8:25 AM New York time, five minutes ahead, also after the DST change.
+        let trigger = HabitNotificationService.dailyTrigger(
+            anchorTime: reminder, minutesBefore: try XCTUnwrap(reloaded.reminderMinutesBefore), timeZone: newYork)
+        XCTAssertEqual(trigger.hour, 8)
+        XCTAssertEqual(trigger.minute, 25)
+        XCTAssertEqual(trigger.timeZone, newYork)
+        let july = try XCTUnwrap(calendar.date(from: DateComponents(year: 2027, month: 7, day: 1)))
+        let next = try XCTUnwrap(calendar.nextDate(after: july, matching: trigger, matchingPolicy: .nextTime))
+        XCTAssertEqual(calendar.dateComponents([.hour, .minute], from: next), DateComponents(hour: 8, minute: 25))
     }
 }
 
