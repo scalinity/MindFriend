@@ -50,6 +50,18 @@ BEGIN
   IF (SELECT current_streak FROM public.journal_streaks WHERE user_id = uid) <> 5 THEN
     RAISE EXCEPTION 'A zone switch reset the journal streak';
   END IF;
+  -- ...and the stored date comes back to local today, so tomorrow's entry extends the streak.
+  IF (SELECT last_entry_date FROM public.journal_streaks WHERE user_id = uid) <> local_today THEN
+    RAISE EXCEPTION 'The journal streak kept a date ahead of local today';
+  END IF;
+  UPDATE public.journal_streaks SET last_entry_date = local_today - 1 WHERE user_id = uid;
+  INSERT INTO public.journal_entries(user_id, content) VALUES (uid, 'Synthetic entry on the next local day');
+  IF (SELECT current_streak FROM public.journal_streaks WHERE user_id = uid) <> 6 THEN
+    RAISE EXCEPTION 'The entry on the following local day did not extend the streak';
+  END IF;
+  IF position('LEAST(last_micro_date, v_today)' in pg_get_functiondef('public.update_micro_streak()'::regprocedure)) = 0 THEN
+    RAISE EXCEPTION 'The micro-moment streak keeps a date ahead of local today';
+  END IF;
 
   -- A zone name that is not real falls back to UTC instead of failing the caller.
   UPDATE public.profiles SET timezone = 'Not/AZone' WHERE id = uid;
