@@ -23,6 +23,7 @@ SUITES = (
     "mentorship_messages.sql",
     "drift_reconciliation.sql",
     "current_premium_access.sql",
+    "habit_reminders.sql",
 )
 
 

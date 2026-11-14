@@ -133,8 +133,9 @@ final class HabitNotificationService {
         }
 
         // Extract time components for daily trigger
-        let components = calendar.dateComponents([.hour, .minute], from: notificationTime)
-        guard let hour = components.hour, let minute = components.minute else {
+        let dateComponents = Self.dailyTrigger(anchorTime: anchorTime, minutesBefore: reminderMinutes,
+                                               timeZone: userTimezone)
+        guard dateComponents.hour != nil, dateComponents.minute != nil else {
             throw HabitNotificationServiceError.timeZoneError
         }
 
@@ -153,12 +154,6 @@ final class HabitNotificationService {
             payload: payload
         )
 
-        // Create daily trigger
-        var dateComponents = DateComponents()
-        dateComponents.hour = hour
-        dateComponents.minute = minute
-        dateComponents.timeZone = userTimezone
-
         let trigger = UNCalendarNotificationTrigger(
             dateMatching: dateComponents,
             repeats: true
@@ -174,6 +169,17 @@ final class HabitNotificationService {
         } catch {
             throw HabitNotificationServiceError.notificationSchedulingFailed(error.localizedDescription)
         }
+    }
+
+    /// The daily wall-clock time a reminder fires: `minutesBefore` ahead of the picked time,
+    /// read in the device's time zone, so it repeats at the same local time every day.
+    nonisolated static func dailyTrigger(anchorTime: Date, minutesBefore: Int, timeZone: TimeZone) -> DateComponents {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let fireTime = calendar.date(byAdding: .minute, value: -minutesBefore, to: anchorTime) ?? anchorTime
+        var components = calendar.dateComponents([.hour, .minute], from: fireTime)
+        components.timeZone = timeZone
+        return components
     }
 
     /// Schedule a streak milestone notification
