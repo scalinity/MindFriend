@@ -8,7 +8,7 @@ import tarfile
 root = Path(__file__).resolve().parents[1]
 files = [
     "index.html", "privacy/index.html", "terms/index.html",
-    "support/index.html", "accessibility/index.html",
+    "support/index.html", "accessibility/index.html", "buddy/index.html",
     "css/home.css", "css/legal.css",
     "assets/logo.png", "assets/app-screenshot.jpg", "licenses/tailwindcss.txt",
 ]

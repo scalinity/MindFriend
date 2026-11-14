@@ -2338,7 +2338,7 @@ final class SupabaseDataService: ObservableObject {
             "inviter_id": AnyEncodable(currentUserId.uuidString),
             "invite_code": AnyEncodable(inviteCode),
             "invite_method": AnyEncodable(method.rawValue),
-            "invitee_contact": AnyEncodable(contact),
+            "invitee_contact": AnyEncodable(method == .email ? contact.lowercased() : contact),
             "status": AnyEncodable("pending"),
             "expires_at": AnyEncodable(expiresAt.ISO8601Format())
         ]
@@ -2351,17 +2351,8 @@ final class SupabaseDataService: ObservableObject {
             .execute()
             .value
 
-        // Send invite via edge function
-        do {
-            try await supabase.functions.invoke("send-buddy-invite", options: .init(body: [
-                "relationshipId": result.id?.uuidString ?? "",
-                "contact": contact,
-                "method": method.rawValue
-            ]))
-        } catch {
-            Log.data.warning("[Data] Failed to send buddy invite: \(error)")
-            // Don't fail - invite is created, just not sent
-        }
+        // The invite is sent from this phone (Messages, Mail or the share sheet), so the code in
+        // the message is this row's code. send-buddy-invite remains for released 1.x clients.
 
         Analytics.shared.track(.buddyInviteSent, properties: [
             "method": method.rawValue
