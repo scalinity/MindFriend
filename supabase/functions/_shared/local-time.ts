@@ -37,3 +37,14 @@ export function timeOfDayBadgeEarned(
   const hour = localHour(zone, now);
   return requirement === "activity_after_midnight" ? hour < 5 : hour === 5;
 }
+
+/** Calendar date (YYYY-MM-DD) in `timezone`, or in UTC when the zone is empty or invalid. */
+export function localDate(timezone: string | null | undefined, now: Date): string {
+  try {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: timezone || "UTC", year: "numeric", month: "2-digit", day: "2-digit",
+    }).format(now);
+  } catch {
+    return now.toISOString().split("T")[0];
+  }
+}
