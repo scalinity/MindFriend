@@ -67,7 +67,7 @@ struct SensoryAudioLibraryView: View {
                     VStack(spacing: SupportTheme.Spacing.m) {
                         Image(systemName: "speaker.wave.3.fill")
                             .font(.system(.largeTitle))
-                            .foregroundColor(SupportTheme.accent.opacity(0.5))
+                            .foregroundColor(SupportTheme.Area.sensory.palette.ink)
 
                         Text("Coming Soon")
                             .font(.title2)
@@ -97,7 +97,9 @@ struct SensoryAudioLibraryView: View {
             }
             .padding(.vertical, SupportTheme.Spacing.m)
         }
+        .background(SupportTheme.Area.sensory.palette.softGradient.ignoresSafeArea())
         .supportScreen()
+        .toolbarBackground(SupportTheme.Area.sensory.palette.tint, for: .navigationBar)
         .navigationTitle("Audio")
         .task {
             await loadSoundscapes()
@@ -147,7 +149,8 @@ struct SleepSoundscapeRow: View {
                 // Icon
                 ZStack {
                     Circle()
-                        .fill(SupportTheme.accent.opacity(isLocked ? 0.1 : 0.2))
+                        .fill(isLocked ? AnyShapeStyle(SupportTheme.Area.sensory.palette.tint)
+                                       : AnyShapeStyle(SupportTheme.Area.sensory.palette.heroGradient))
                         .frame(width: 60, height: 60)
 
                     if isLocked {
@@ -157,7 +160,7 @@ struct SleepSoundscapeRow: View {
                     } else {
                         Image(systemName: categoryIcon(soundscape.category))
                             .font(.title2)
-                            .foregroundColor(SupportTheme.accent)
+                            .foregroundColor(SupportTheme.onHero)
                     }
                 }
 
@@ -245,7 +248,7 @@ struct SleepSoundscapePlayerView: View {
     var body: some View {
         ZStack {
             // Background gradient
-            SupportTheme.canvas
+            SupportTheme.Area.sensory.palette.softGradient
             .ignoresSafeArea()
 
             VStack(spacing: SupportTheme.Spacing.xl) {
@@ -257,7 +260,7 @@ struct SleepSoundscapePlayerView: View {
                     } label: {
                         Image(systemName: "xmark.circle.fill")
                             .font(.title2)
-                            .foregroundColor(SupportTheme.textPrimary.opacity(0.8))
+                            .foregroundColor(SupportTheme.textPrimary)
                             .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                             .accessibilityLabel("Close")
                     }
@@ -271,7 +274,7 @@ struct SleepSoundscapePlayerView: View {
 
                         Text(soundscape.category.displayName)
                             .font(.caption)
-                            .foregroundColor(SupportTheme.textPrimary.opacity(0.7))
+                            .foregroundColor(SupportTheme.textSecondary)
                     }
                 }
                 .padding(.horizontal, SupportTheme.Spacing.m)
@@ -282,12 +285,12 @@ struct SleepSoundscapePlayerView: View {
                 // Album art / visual
                 ZStack {
                     Circle()
-                        .fill(SupportTheme.accent.opacity(0.3))
+                        .fill(SupportTheme.Area.sensory.palette.heroGradient)
                         .frame(width: 200, height: 200)
 
                     Image(systemName: categoryIcon(soundscape.category))
                         .font(.system(.largeTitle))
-                        .foregroundColor(SupportTheme.textPrimary.opacity(0.8))
+                        .foregroundColor(SupportTheme.onHero)
                 }
 
                 Spacer()
@@ -300,7 +303,7 @@ struct SleepSoundscapePlayerView: View {
 
                     if let duration = soundscape.audioURL.flatMap({ _ in Double(soundscape.durationSeconds) }), duration > 0 {
                         ProgressView(value: currentTime / duration)
-                            .tint(SupportTheme.accent)
+                            .tint(SupportTheme.Area.sensory.palette.ink)
                             .frame(width: 200)
                     }
                 }
@@ -315,12 +318,12 @@ struct SleepSoundscapePlayerView: View {
                     } label: {
                         ZStack {
                             Circle()
-                                .fill(SupportTheme.surface)
+                                .fill(SupportTheme.Area.sensory.palette.heroGradient)
                                 .frame(width: 80, height: 80)
 
                             Image(systemName: isPlaying ? "pause.fill" : "play.fill")
                                 .font(.title)
-                                .foregroundColor(SupportTheme.textPrimary)
+                                .foregroundColor(SupportTheme.onHero)
                         }
                         .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                         .accessibilityLabel(isPlaying ? "Pause" : "Play")
@@ -337,7 +340,7 @@ struct SleepSoundscapePlayerView: View {
                             Text("End")
                                 .font(.caption)
                         }
-                        .foregroundColor(SupportTheme.textPrimary.opacity(0.8))
+                        .foregroundColor(SupportTheme.textPrimary)
                     }
                 }
                 .padding(.bottom, SupportTheme.Spacing.xl)
@@ -431,12 +434,12 @@ struct SoundscapeRow: View {
                 // Icon
                 ZStack {
                     Circle()
-                        .fill(SupportTheme.accent.opacity(0.2))
+                        .fill(SupportTheme.Area.sensory.palette.heroGradient)
                         .frame(width: 60, height: 60)
 
                     Image(systemName: soundscapeIcon(soundscape.id))
                         .font(.title2)
-                        .foregroundColor(SupportTheme.accent)
+                        .foregroundColor(SupportTheme.onHero)
                 }
 
                 // Soundscape info

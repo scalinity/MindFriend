@@ -20,8 +20,8 @@ struct SleepHomeView: View {
         // Inside the shell, Explore's stack hosts Sleep; standalone it brings its own.
         SupportRootNavigation(embedded: supportRootEmbedded) {
             ZStack {
-                // Night-themed background gradient
-                SupportTheme.canvas
+                // Night-themed background: the sleep area's calm indigo and purple tints.
+                SupportTheme.Area.sleep.palette.softGradient
                 .ignoresSafeArea()
 
                 if viewModel.isLoading {
@@ -64,6 +64,7 @@ struct SleepHomeView: View {
                 }
             }
             .supportScreen()
+            .toolbarBackground(SupportTheme.Area.sleep.palette.tint, for: .navigationBar)
             .navigationTitle("Sleep")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -102,7 +103,7 @@ struct SleepHomeView: View {
 
             Text("Ready for restful sleep?")
                 .font(.subheadline)
-                .foregroundStyle(SupportTheme.textPrimary.opacity(0.7))
+                .foregroundStyle(SupportTheme.textSecondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, SupportTheme.Spacing.m)
@@ -137,15 +138,17 @@ struct SleepHomeView: View {
                         .fontWeight(selectedTab == type ? .semibold : .regular)
                         .padding(.horizontal, SupportTheme.Spacing.m)
                         .padding(.vertical, SupportTheme.Spacing.xs)
-                        .background(
-                            selectedTab == type
-                                ? SupportTheme.accent
-                                : SupportTheme.surface.opacity(0.1)
-                        )
+                        .background {
+                            if selectedTab == type {
+                                SupportTheme.Area.sleep.palette.heroGradient
+                            } else {
+                                SupportTheme.surface
+                            }
+                        }
                         .foregroundStyle(
                             selectedTab == type
-                                ? SupportTheme.onAccent
-                                : SupportTheme.textPrimary.opacity(0.8)
+                                ? SupportTheme.onHero
+                                : SupportTheme.textPrimary
                         )
                         .cornerRadius(SupportTheme.cardRadius)
                     }
@@ -252,7 +255,7 @@ struct SleepHomeView: View {
 
             Text("Guided routines coming soon...")
                 .font(.subheadline)
-                .foregroundStyle(SupportTheme.textPrimary.opacity(0.6))
+                .foregroundStyle(SupportTheme.textSecondary)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, SupportTheme.Spacing.xl)
         }
@@ -262,11 +265,11 @@ struct SleepHomeView: View {
         VStack(spacing: SupportTheme.Spacing.s) {
             Image(systemName: type.icon)
                 .font(.largeTitle)
-                .foregroundStyle(SupportTheme.textPrimary.opacity(0.4))
+                .foregroundStyle(SupportTheme.Area.sleep.palette.ink)
 
             Text("No \(type.displayName.lowercased()) available")
                 .font(.subheadline)
-                .foregroundStyle(SupportTheme.textPrimary.opacity(0.6))
+                .foregroundStyle(SupportTheme.textSecondary)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, SupportTheme.Spacing.xl)
@@ -280,7 +283,7 @@ struct SleepHomeView: View {
 
             Text(message)
                 .font(.subheadline)
-                .foregroundStyle(SupportTheme.textPrimary.opacity(0.8))
+                .foregroundStyle(SupportTheme.textSecondary)
                 .multilineTextAlignment(.center)
 
             Button("Try Again") {
@@ -300,9 +303,9 @@ struct SleepHomeView: View {
                 HStack(spacing: SupportTheme.Spacing.s) {
                     // Thumbnail
                     ZStack {
-                        SupportTheme.surface
+                        content.contentType.heroGradient
                         Image(systemName: content.contentType.icon)
-                            .foregroundStyle(SupportTheme.textPrimary)
+                            .foregroundStyle(SupportTheme.onHero)
                     }
                     .frame(width: 44, height: 44)
                     .cornerRadius(SupportTheme.controlRadius)
@@ -317,7 +320,7 @@ struct SleepHomeView: View {
 
                         Text(content.contentType.displayName)
                             .font(.caption)
-                            .foregroundStyle(SupportTheme.textPrimary.opacity(0.7))
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
 
                     Spacer()
@@ -329,7 +332,7 @@ struct SleepHomeView: View {
                         } label: {
                             Image(systemName: viewModel.playerState.isPlaying ? "pause.fill" : "play.fill")
                                 .font(.title2)
-                                .foregroundStyle(SupportTheme.textPrimary)
+                                .foregroundStyle(SupportTheme.Area.sleep.palette.ink)
                                 .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                                 .accessibilityLabel(viewModel.playerState.isPlaying ? "Pause" : "Play")
                         }
@@ -340,7 +343,7 @@ struct SleepHomeView: View {
                         } label: {
                             Image(systemName: "chevron.up")
                                 .font(.title3)
-                                .foregroundStyle(SupportTheme.textPrimary.opacity(0.7))
+                                .foregroundStyle(SupportTheme.textSecondary)
                                 .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                                 .accessibilityLabel("Open player")
                         }

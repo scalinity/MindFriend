@@ -23,7 +23,8 @@ struct LibraryJournalingPlayerView: View {
 
             // Keyboard toolbar appears automatically
         }
-        .background(SupportTheme.canvas)
+        .background(SupportTheme.Area.quests.palette.softGradient.ignoresSafeArea())
+        .tint(SupportTheme.Area.quests.palette.ink)
     }
 
     // MARK: - Header
@@ -35,7 +36,7 @@ struct LibraryJournalingPlayerView: View {
                 ProgressDots(
                     total: journaling.prompts.count,
                     current: currentPromptIndex,
-                    activeColor: SupportTheme.accent
+                    activeColor: SupportTheme.Area.quests.palette.ink
                 )
             }
 
@@ -86,7 +87,7 @@ struct LibraryJournalingPlayerView: View {
                 Text(category.capitalized)
                     .font(.caption)
                     .fontWeight(.semibold)
-                    .foregroundStyle(SupportTheme.accent)
+                    .foregroundStyle(SupportTheme.Area.quests.palette.ink)
                     .padding(.horizontal, SupportTheme.Spacing.xs)
                     .padding(.vertical, SupportTheme.Spacing.xxs)
                     .background(SupportTheme.surface)
@@ -119,7 +120,7 @@ struct LibraryJournalingPlayerView: View {
         .supportCard()
         .overlay(
             RoundedRectangle(cornerRadius: SupportTheme.cardRadius)
-                .stroke(focusedPrompt == index ? SupportTheme.accent : Color.clear, lineWidth: 2)
+                .stroke(focusedPrompt == index ? SupportTheme.Area.quests.palette.ink : Color.clear, lineWidth: 2)
         )
     }
 
@@ -132,7 +133,7 @@ struct LibraryJournalingPlayerView: View {
             ForEach(questions, id: \.self) { question in
                 HStack(alignment: .top, spacing: SupportTheme.Spacing.s) {
                     Image(systemName: "lightbulb.fill")
-                        .foregroundStyle(SupportTheme.accent)
+                        .foregroundStyle(SupportTheme.Area.quests.palette.ink)
 
                     Text(question)
                         .font(.body)

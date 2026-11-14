@@ -6,6 +6,7 @@ struct GeneratedStoryView: View {
     let content: GeneratedContent
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @StateObject private var player = AudioPlayerViewModel()
     @State private var showBackgroundSounds = false
     @State private var showSleepTimer = false
@@ -24,8 +25,8 @@ struct GeneratedStoryView: View {
 
     var body: some View {
         ZStack {
-            // Dark ambient background
-            SupportTheme.canvas
+            // Night ambient background: the sleep area's indigo to purple
+            SupportTheme.Area.sleep.palette.heroGradient
                 .ignoresSafeArea()
 
             // Subtle starfield or gradient
@@ -94,20 +95,21 @@ struct GeneratedStoryView: View {
 
     private var storyBackground: some View {
         ZStack {
-            // Gradient from deep purple to black
-            SupportTheme.canvas
+            SupportTheme.Area.sleep.palette.heroGradient
             .ignoresSafeArea()
 
-            // Subtle stars effect
-            GeometryReader { geometry in
-                ForEach(0..<30, id: \.self) { index in
-                    Circle()
-                        .fill(SupportTheme.surface.opacity(Double.random(in: 0.1...0.4)))
-                        .frame(width: CGFloat.random(in: 1...3))
-                        .position(
-                            x: CGFloat.random(in: 0...geometry.size.width),
-                            y: CGFloat.random(in: 0...geometry.size.height * 0.5)
-                        )
+            // Subtle stars effect (decorative; omitted under Reduce Transparency)
+            if !reduceTransparency {
+                GeometryReader { geometry in
+                    ForEach(0..<30, id: \.self) { index in
+                        Circle()
+                            .fill(SupportTheme.onHero.opacity(Double.random(in: 0.1...0.4)))
+                            .frame(width: CGFloat.random(in: 1...3))
+                            .position(
+                                x: CGFloat.random(in: 0...geometry.size.width),
+                                y: CGFloat.random(in: 0...geometry.size.height * 0.5)
+                            )
+                    }
                 }
             }
         }
@@ -122,7 +124,7 @@ struct GeneratedStoryView: View {
             } label: {
                 Image(systemName: "xmark.circle.fill")
                     .font(.title2)
-                    .foregroundStyle(SupportTheme.textPrimary.opacity(0.6))
+                    .foregroundStyle(SupportTheme.onHero)
                     .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                     .accessibilityLabel("Close")
             }
@@ -136,11 +138,10 @@ struct GeneratedStoryView: View {
                     Text(player.formattedSleepTimerRemaining)
                 }
                 .font(.caption)
-                .foregroundStyle(SupportTheme.accent)
+                .foregroundStyle(SupportTheme.onHero)
                 .padding(.horizontal, SupportTheme.Spacing.s)
                 .padding(.vertical, SupportTheme.Spacing.xxs)
-                .background(SupportTheme.surface.opacity(0.2))
-                .clipShape(Capsule())
+                .background(Capsule().strokeBorder(SupportTheme.onHero, lineWidth: 1))
             }
         }
     }
@@ -152,39 +153,44 @@ struct GeneratedStoryView: View {
             // Moon icon
             Image(systemName: "moon.stars.fill")
                 .font(.system(.largeTitle))
-                .foregroundStyle(SupportTheme.accent)
+                .foregroundStyle(SupportTheme.onHero)
+                .padding(SupportTheme.Spacing.l)
+                .background(Circle().strokeBorder(SupportTheme.onHero, lineWidth: 2))
 
             Text(content.title)
                 .font(.title2.bold())
-                .foregroundStyle(SupportTheme.textPrimary)
+                .foregroundStyle(SupportTheme.onHero)
                 .multilineTextAlignment(.center)
 
             if let duration = content.duration {
                 Text("\(duration / 60) min")
                     .font(.subheadline)
-                    .foregroundStyle(SupportTheme.textPrimary.opacity(0.6))
+                    .foregroundStyle(SupportTheme.onHero)
             }
 
             if player.usesBuiltInVoice {
                 Label("Built-in voice", systemImage: "speaker.wave.2")
                     .font(.caption)
-                    .foregroundStyle(SupportTheme.textPrimary.opacity(0.6))
+                    .foregroundStyle(SupportTheme.onHero)
             }
 
             // Loading/error states
             if player.isLoading {
                 ProgressView("Preparing audio...")
-                    .tint(SupportTheme.accent)
+                    .tint(SupportTheme.onHero)
+                    .foregroundStyle(SupportTheme.onHero)
             }
 
             if let error = player.error {
                 Text(error)
                     .font(.caption)
-                    .foregroundStyle(SupportTheme.accent)
+                    .foregroundStyle(SupportTheme.onHero)
                 Button("Try again") {
                     loadAttempt += 1
                 }
                 .font(.caption)
+                .foregroundStyle(SupportTheme.onHero)
+                .underline()
             }
         }
     }
@@ -197,7 +203,7 @@ struct GeneratedStoryView: View {
             VStack(spacing: SupportTheme.Spacing.xs) {
                 if player.usesBuiltInVoice {
                     ProgressView(value: player.progress)
-                        .tint(SupportTheme.accent)
+                        .tint(SupportTheme.onHero)
                 } else {
                     Slider(
                         value: Binding(
@@ -206,7 +212,7 @@ struct GeneratedStoryView: View {
                         ),
                         in: 0...max(player.duration, 1)
                     )
-                    .tint(SupportTheme.accent)
+                    .tint(SupportTheme.onHero)
                     .disabled(!player.canSeek)
                 }
 
@@ -218,7 +224,7 @@ struct GeneratedStoryView: View {
                     }
                 }
                 .font(.caption)
-                .foregroundStyle(SupportTheme.textPrimary.opacity(0.5))
+                .foregroundStyle(SupportTheme.onHero)
             }
 
             // Play/pause with skip
@@ -228,7 +234,7 @@ struct GeneratedStoryView: View {
                 } label: {
                     Image(systemName: "gobackward.15")
                         .font(.title2)
-                        .foregroundStyle(SupportTheme.textPrimary.opacity(0.7))
+                        .foregroundStyle(SupportTheme.onHero)
                         .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                         .accessibilityLabel("Back 15 seconds")
                 }
@@ -239,7 +245,7 @@ struct GeneratedStoryView: View {
                 } label: {
                     Image(systemName: player.isPlaybackRequested ? "pause.circle.fill" : "play.circle.fill")
                         .font(.system(.largeTitle))
-                        .foregroundStyle(SupportTheme.accent)
+                        .foregroundStyle(SupportTheme.onHero)
                         .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                 }
                 .disabled(!player.canPlay)
@@ -250,7 +256,7 @@ struct GeneratedStoryView: View {
                 } label: {
                     Image(systemName: "goforward.15")
                         .font(.title2)
-                        .foregroundStyle(SupportTheme.textPrimary.opacity(0.7))
+                        .foregroundStyle(SupportTheme.onHero)
                         .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                         .accessibilityLabel("Forward 15 seconds")
                 }
@@ -272,7 +278,7 @@ struct GeneratedStoryView: View {
                     Text("Sounds")
                         .font(.caption2)
                 }
-                .foregroundStyle(player.backgroundSound != nil ? .indigo : SupportTheme.textPrimary.opacity(0.6))
+                .foregroundStyle(SupportTheme.onHero)
             }
 
             // Sleep timer
@@ -284,7 +290,7 @@ struct GeneratedStoryView: View {
                     Text("Timer")
                         .font(.caption2)
                 }
-                .foregroundStyle(player.sleepTimerMinutes != nil ? .indigo : SupportTheme.textPrimary.opacity(0.6))
+                .foregroundStyle(SupportTheme.onHero)
             }
 
             // Brightness control
@@ -296,7 +302,7 @@ struct GeneratedStoryView: View {
                     Text("Dim")
                         .font(.caption2)
                 }
-                .foregroundStyle(SupportTheme.textPrimary.opacity(0.6))
+                .foregroundStyle(SupportTheme.onHero)
             }
 
             // Favorite
@@ -308,7 +314,7 @@ struct GeneratedStoryView: View {
                     Text("Save")
                         .font(.caption2)
                 }
-                .foregroundStyle(isFavorite ? .pink : SupportTheme.textPrimary.opacity(0.6))
+                .foregroundStyle(SupportTheme.onHero)
             }
         }
         .font(.title3)

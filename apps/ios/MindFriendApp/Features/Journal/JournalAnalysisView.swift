@@ -1,5 +1,15 @@
 import SwiftUI
 
+private extension View {
+    /// A content card in an area's calm tint, in place of the neutral surface card.
+    func areaCard(_ area: SupportTheme.Area) -> some View {
+        self
+            .padding(SupportTheme.Spacing.m)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(area.palette.tint, in: RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
+    }
+}
+
 struct JournalAnalysisView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var container: DependencyContainer
@@ -73,23 +83,27 @@ struct JournalAnalysisView: View {
             HStack {
                 Image(systemName: "sparkles")
                     .font(.title)
-                    .foregroundStyle(SupportTheme.accent)
+                    .foregroundStyle(SupportTheme.onHero)
                 Text("Your Insights")
                     .font(.title2)
                     .fontWeight(.bold)
+                    .foregroundStyle(SupportTheme.onHero)
             }
 
             Text("Here's what I noticed in your journal entry. Remember, these are gentle observations to help you reflect, not judgments.")
                 .font(.subheadline)
-                .foregroundStyle(SupportTheme.textSecondary)
+                .foregroundStyle(SupportTheme.onHero)
         }
+        .padding(SupportTheme.Spacing.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(SupportTheme.Area.journal.palette.heroGradient, in: RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
     }
 
     private var emotionalThemesSection: some View {
         VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Label("Emotional Themes", systemImage: "heart.fill")
                 .font(.headline)
-                .foregroundStyle(SupportTheme.accent)
+                .foregroundStyle(SupportTheme.Area.people.palette.ink)
 
             FlowLayout(spacing: SupportTheme.Spacing.xs) {
                 ForEach(analysis.emotionalThemes, id: \.self) { theme in
@@ -98,25 +112,25 @@ struct JournalAnalysisView: View {
                         .padding(.horizontal, SupportTheme.Spacing.s)
                         .padding(.vertical, SupportTheme.Spacing.xxs)
                         .background(SupportTheme.surface)
-                        .foregroundStyle(SupportTheme.accent)
+                        .foregroundStyle(SupportTheme.Area.people.palette.ink)
                         .clipShape(Capsule())
                 }
             }
         }
-        .supportCard()
+        .areaCard(.people)
     }
 
     private var supportiveInsightSection: some View {
         VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Label("A Gentle Reflection", systemImage: "leaf.fill")
                 .font(.headline)
-                .foregroundStyle(SupportTheme.accent)
+                .foregroundStyle(SupportTheme.Area.insights.palette.ink)
 
             Text(analysis.supportiveSummary)
                 .font(.body)
                 .lineSpacing(4)
         }
-        .supportCard()
+        .areaCard(.insights)
     }
 
     private var cognitiveDistortionsSection: some View {
@@ -124,7 +138,7 @@ struct JournalAnalysisView: View {
             VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Label("Thinking Patterns", systemImage: "brain.head.profile")
                     .font(.headline)
-                    .foregroundStyle(SupportTheme.accent)
+                    .foregroundStyle(SupportTheme.Area.quests.palette.ink)
 
                 Text("These are common patterns many people experience. Recognizing them is the first step to a more balanced perspective.")
                     .font(.caption)
@@ -137,14 +151,14 @@ struct JournalAnalysisView: View {
                 }
             }
         }
-        .supportCard()
+        .areaCard(.quests)
     }
 
     private var suggestedReframesSection: some View {
         VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             Label("Things to Consider", systemImage: "lightbulb.fill")
                 .font(.headline)
-                .foregroundStyle(SupportTheme.accent)
+                .foregroundStyle(SupportTheme.Area.quests.palette.ink)
 
             VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                 ForEach(analysis.suggestedReframes) { reframe in
@@ -159,7 +173,7 @@ struct JournalAnalysisView: View {
                 }
             }
         }
-        .supportCard()
+        .areaCard(.quests)
     }
 
     private var sentimentSection: some View {
@@ -177,11 +191,11 @@ struct JournalAnalysisView: View {
     private var sentimentColor: Color {
         switch analysis.overallSentiment.lowercased() {
         case "positive", "hopeful", "grateful":
-            return SupportTheme.accent
+            return SupportTheme.Status.positive
         case "negative", "sad", "frustrated", "anxious":
-            return SupportTheme.accent
+            return SupportTheme.Status.caution
         case "neutral", "reflective":
-            return SupportTheme.accent
+            return SupportTheme.Area.voice.palette.ink
         default:
             return .secondary
         }
@@ -221,7 +235,7 @@ struct DistortionCard: View {
             // Header
             HStack {
                 Image(systemName: distortionIcon)
-                    .foregroundStyle(SupportTheme.accent)
+                    .foregroundStyle(SupportTheme.Area.quests.palette.ink)
                 Text(distortion.displayName)
                     .font(.subheadline)
                     .fontWeight(.semibold)
@@ -256,7 +270,7 @@ struct DistortionCard: View {
                     Image(systemName: showingReframe ? "chevron.up" : "chevron.down")
                         .font(.caption2)
                 }
-                .foregroundStyle(SupportTheme.accent)
+                .foregroundStyle(SupportTheme.Area.quests.palette.ink)
             }
 
             if showingReframe {
@@ -267,7 +281,7 @@ struct DistortionCard: View {
                     Text(distortion.alternativePerspective)
                         .font(.caption)
                         .padding(SupportTheme.Spacing.xs)
-                        .background(SupportTheme.surface)
+                        .background(SupportTheme.Area.quests.palette.tint)
                         .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
                 }
                 .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
@@ -399,11 +413,11 @@ struct FeedbackButton: View {
                     .font(.caption)
             }
             .padding(SupportTheme.Spacing.m)
-            .background(isSelected ? SupportTheme.accent.opacity(0.1) : SupportTheme.separator)
+            .background(isSelected ? SupportTheme.Area.journal.palette.tint : SupportTheme.separator)
             .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
             .overlay(
                 RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
-                    .stroke(isSelected ? SupportTheme.accent : .clear, lineWidth: 2)
+                    .stroke(isSelected ? SupportTheme.Area.journal.palette.ink : .clear, lineWidth: 2)
             )
         }
         .buttonStyle(.plain)

@@ -1,5 +1,19 @@
 import SwiftUI
 
+extension ExerciseType {
+    /// 1.0.5 category colors: breathing blue, meditation purple, grounding green,
+    /// journaling orange, movement pink.
+    var categoryArea: SupportTheme.Area {
+        switch self {
+        case .breathing: return .exercises
+        case .meditation: return .journal
+        case .grounding: return .insights
+        case .journaling: return .quests
+        case .movement: return .people
+        }
+    }
+}
+
 struct ExerciseLibraryView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject var appState: AppState
@@ -83,7 +97,7 @@ struct ExerciseLibraryView: View {
                         }
                         .padding(SupportTheme.Spacing.m)
                         .background(SupportTheme.surface)
-                        .foregroundStyle(SupportTheme.accent)
+                        .foregroundStyle(SupportTheme.Area.exercises.palette.ink)
                         .cornerRadius(SupportTheme.controlRadius)
                     }
 
@@ -116,6 +130,7 @@ struct ExerciseLibraryView: View {
                     HStack(spacing: SupportTheme.Spacing.s) {
                         ExerciseFilterChip(
                             title: "All",
+                            area: .exercises,
                             isSelected: selectedType == nil,
                             action: { selectedType = nil }
                         )
@@ -124,6 +139,7 @@ struct ExerciseLibraryView: View {
                             ExerciseFilterChip(
                                 title: type.rawValue.capitalized,
                                 icon: type.icon,
+                                area: type.categoryArea,
                                 isSelected: selectedType == type,
                                 action: { selectedType = type }
                             )
@@ -244,6 +260,7 @@ struct ExerciseLibraryView: View {
 private struct ExerciseFilterChip: View {
     let title: String
     var icon: String?
+    let area: SupportTheme.Area
     let isSelected: Bool
     let action: () -> Void
 
@@ -258,8 +275,14 @@ private struct ExerciseFilterChip: View {
             .font(.subheadline)
             .padding(.horizontal, SupportTheme.Spacing.m)
             .padding(.vertical, SupportTheme.Spacing.xs)
-            .background(isSelected ? SupportTheme.accent : SupportTheme.surface)
-            .foregroundStyle(isSelected ? SupportTheme.onAccent : SupportTheme.textPrimary)
+            .background {
+                if isSelected {
+                    area.palette.heroGradient
+                } else {
+                    SupportTheme.surface
+                }
+            }
+            .foregroundStyle(isSelected ? SupportTheme.onHero : SupportTheme.textPrimary)
             .cornerRadius(SupportTheme.cardRadius)
         }
     }
@@ -279,9 +302,9 @@ struct ExerciseCard: View {
             // Icon - fixed size
             Image(systemName: exercise.type.icon)
                 .font(.title2)
-                .foregroundStyle(SupportTheme.accent)
+                .foregroundStyle(SupportTheme.onHero)
                 .frame(width: 50, height: 50)
-                .background(SupportTheme.surface)
+                .background(exercise.type.categoryArea.palette.heroGradient)
                 .cornerRadius(SupportTheme.controlRadius)
                 .accessibilityHidden(true)
 
@@ -298,7 +321,7 @@ struct ExerciseCard: View {
                     if isRecommended {
                         Image(systemName: "star.fill")
                             .font(.caption2)
-                            .foregroundColor(SupportTheme.accent)
+                            .foregroundColor(exercise.type.categoryArea.palette.ink)
                     }
                 }
 
@@ -327,8 +350,8 @@ struct ExerciseCard: View {
                             .font(.caption2)
                             .padding(.horizontal, SupportTheme.Spacing.xxs)
                             .padding(.vertical, SupportTheme.Spacing.xxs)
-                            .background(SupportTheme.surface)
-                            .foregroundColor(SupportTheme.accent)
+                            .background(exercise.type.categoryArea.palette.tint)
+                            .foregroundColor(exercise.type.categoryArea.palette.ink)
                             .cornerRadius(SupportTheme.controlRadius)
                     }
                 }
@@ -408,7 +431,7 @@ struct ExercisePlayerView: View {
 
                 Circle()
                     .trim(from: 0, to: progress)
-                    .stroke(SupportTheme.accent, style: StrokeStyle(lineWidth: 12, lineCap: .round))
+                    .stroke(exercise.type.categoryArea.palette.ink, style: StrokeStyle(lineWidth: 12, lineCap: .round))
                     .rotationEffect(.degrees(-90))
                     .animation(reduceMotion ? nil : .linear(duration: 1), value: progress)
 
@@ -467,7 +490,7 @@ struct ExercisePlayerView: View {
                 } label: {
                     Image(systemName: isPlaying ? "pause.circle.fill" : "play.circle.fill")
                         .font(.system(.largeTitle))
-                        .foregroundStyle(SupportTheme.accent)
+                        .foregroundStyle(exercise.type.categoryArea.palette.ink)
                         .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                         .accessibilityLabel(isPlaying ? "Pause" : "Play")
                 }

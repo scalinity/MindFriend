@@ -8,6 +8,17 @@
 
 import SwiftUI
 
+extension SensoryModality {
+    /// 1.0.5 colors: tactile blue, visual purple, audio teal.
+    var toolkitArea: SupportTheme.Area {
+        switch self {
+        case .tactile: return .voice
+        case .visual: return .journal
+        case .audio: return .sensory
+        }
+    }
+}
+
 struct SensoryHomeView: View {
     @EnvironmentObject private var dependencies: DependencyContainer
     @State private var recentSessions: [SensorySession] = []
@@ -35,7 +46,7 @@ struct SensoryHomeView: View {
                             title: "Tactile",
                             subtitle: "Feel gentle vibrations",
                             icon: "hand.tap.fill",
-                            color: SupportTheme.accent,
+                            area: SensoryModality.tactile.toolkitArea,
                             patternCount: TactilePattern.library.count
                         )
                     }
@@ -45,7 +56,7 @@ struct SensoryHomeView: View {
                             title: "Visual",
                             subtitle: "Watch calming animations",
                             icon: "eye.fill",
-                            color: SupportTheme.accent,
+                            area: SensoryModality.visual.toolkitArea,
                             patternCount: VisualAnimation.library.count
                         )
                     }
@@ -55,7 +66,7 @@ struct SensoryHomeView: View {
                             title: "Audio",
                             subtitle: "Listen to nature sounds",
                             icon: "speaker.wave.3.fill",
-                            color: SupportTheme.accent,
+                            area: SensoryModality.audio.toolkitArea,
                             patternCount: AudioSoundscape.library.count
                         )
                     }
@@ -99,7 +110,9 @@ struct SensoryHomeView: View {
             }
             .padding(.vertical, SupportTheme.Spacing.m)
         }
+        .background(SupportTheme.Area.sensory.palette.softGradient.ignoresSafeArea())
         .supportScreen()
+        .toolbarBackground(SupportTheme.Area.sensory.palette.tint, for: .navigationBar)
         .navigationTitle("Sensory Toolkit")
         .navigationBarTitleDisplayMode(.inline)
         .task {
@@ -119,7 +132,7 @@ struct ModalityCard: View {
     let title: String
     let subtitle: String
     let icon: String
-    let color: Color
+    let area: SupportTheme.Area
     let patternCount: Int
 
     var body: some View {
@@ -127,12 +140,12 @@ struct ModalityCard: View {
             // Icon
             ZStack {
                 Circle()
-                    .fill(color.opacity(0.2))
+                    .fill(area.palette.heroGradient)
                     .frame(width: 60, height: 60)
 
                 Image(systemName: icon)
                     .font(.title2)
-                    .foregroundColor(color)
+                    .foregroundColor(SupportTheme.onHero)
             }
             .fixedSize()
 
@@ -173,7 +186,7 @@ struct RecentSessionRow: View {
         HStack(spacing: SupportTheme.Spacing.s) {
             Image(systemName: session.modality.icon)
                 .font(.title3)
-                .foregroundColor(SupportTheme.textSecondary)
+                .foregroundColor(session.modality.toolkitArea.palette.ink)
                 .frame(width: 40)
 
             VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
@@ -206,7 +219,7 @@ struct SensoryTipCard: View {
         HStack(alignment: .top, spacing: SupportTheme.Spacing.s) {
             Image(systemName: icon)
                 .font(.title3)
-                .foregroundColor(SupportTheme.accent)
+                .foregroundColor(SupportTheme.Area.sensory.palette.ink)
                 .frame(width: 30)
 
             VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
@@ -226,7 +239,7 @@ struct SensoryTipCard: View {
         .padding(SupportTheme.Spacing.m)
         .background(
             RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
-                .fill(SupportTheme.accent.opacity(0.1))
+                .fill(SupportTheme.Area.sensory.palette.tint)
         )
     }
 }

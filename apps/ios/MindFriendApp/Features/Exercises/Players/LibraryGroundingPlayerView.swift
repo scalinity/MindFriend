@@ -25,7 +25,8 @@ struct LibraryGroundingPlayerView: View {
             // Bottom controls
             controlsSection
         }
-        .background(SupportTheme.canvas)
+        .background(SupportTheme.Area.insights.palette.softGradient.ignoresSafeArea())
+        .tint(SupportTheme.Area.insights.palette.ink)
     }
 
     // MARK: - Progress Header
@@ -46,7 +47,7 @@ struct LibraryGroundingPlayerView: View {
                         SenseIcon(
                             sense: prompt.sense ?? "general",
                             isCompleted: viewModel.acknowledgedItems.contains(index),
-                            color: SupportTheme.accent
+                            color: SupportTheme.Area.insights.palette.ink
                         )
                         .scaleEffect(reduceMotion ? 1 : (index == viewModel.currentGroundingIndex ? 1.1 : 0.85))
                         .animation(reduceMotion ? nil : .spring(response: 0.3), value: viewModel.currentGroundingIndex)
@@ -80,7 +81,7 @@ struct LibraryGroundingPlayerView: View {
             // Sense icon
             Image(systemName: prompt.senseIcon)
                 .font(.system(.largeTitle))
-                .foregroundStyle(SupportTheme.accent)
+                .foregroundStyle(SupportTheme.Area.insights.palette.ink)
 
             // Prompt text
             Text(prompt.text)
@@ -107,7 +108,7 @@ struct LibraryGroundingPlayerView: View {
                 } label: {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.title2)
-                        .foregroundStyle(currentInput.isEmpty ? .secondary : SupportTheme.accent)
+                        .foregroundStyle(currentInput.isEmpty ? .secondary : SupportTheme.Area.insights.palette.ink)
                         .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                         .accessibilityLabel("Add response")
                 }
@@ -137,7 +138,7 @@ struct LibraryGroundingPlayerView: View {
                     if !response.isEmpty {
                         HStack {
                             Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(SupportTheme.accent)
+                                .foregroundStyle(SupportTheme.Area.insights.palette.ink)
                             Text(response)
                                 .font(.body)
                         }

@@ -19,7 +19,7 @@ struct ExerciseRecommendStep: View {
     var body: some View {
         TutorialStepView(
             icon: "sparkles",
-            iconColor: SupportTheme.accent,
+            iconColor: SupportTheme.Area.journal.palette.ink,
             headline: "Personalized For You",
             subheadline: "We recommend exercises based on your current energy and mood.",
             primaryAction: onNext,
@@ -75,11 +75,11 @@ struct ExerciseRecommendStep: View {
     private var capacityColor: Color {
         switch capacityLevel {
         case 1: return .red
-        case 2: return SupportTheme.accent
-        case 3: return SupportTheme.accent
-        case 4: return SupportTheme.accent
-        case 5: return SupportTheme.accent
-        default: return SupportTheme.accent
+        case 2: return SupportTheme.Status.caution
+        case 3: return SupportTheme.Area.exercises.palette.ink
+        case 4: return SupportTheme.Status.positive
+        case 5: return SupportTheme.Area.voice.palette.ink
+        default: return SupportTheme.Area.voice.palette.ink
         }
     }
 
@@ -116,7 +116,7 @@ private struct InfoPoint: View {
         HStack(spacing: SupportTheme.Spacing.xs) {
             Image(systemName: "checkmark.circle.fill")
                 .font(.caption)
-                .foregroundStyle(SupportTheme.accent)
+                .foregroundStyle(SupportTheme.Status.positive)
             Text(text)
                 .font(.caption)
                 .foregroundStyle(SupportTheme.textSecondary)

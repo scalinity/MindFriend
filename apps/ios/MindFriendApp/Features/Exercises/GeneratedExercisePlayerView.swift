@@ -1,6 +1,33 @@
 import SwiftUI
 import AVFoundation
 
+extension GeneratedContentType {
+    /// The area color for generated content, matching the library exercise categories.
+    var playerArea: SupportTheme.Area {
+        switch self {
+        case .sleepStory: return .sleep
+        case .meditation, .mindfulness: return .journal
+        case .breathing: return .exercises
+        case .grounding: return .insights
+        case .journaling: return .quests
+        case .cbt: return .voice
+        case .affirmation: return .people
+        }
+    }
+}
+
+extension BreathingPhase {
+    /// 1.0.5 colors: inhale blue, hold purple, exhale green, pause indigo.
+    var area: SupportTheme.Area {
+        switch self {
+        case .inhale: return .voice
+        case .hold: return .journal
+        case .exhale: return .insights
+        case .pause: return .sleep
+        }
+    }
+}
+
 /// Unified player view for generated exercises with type-specific rendering
 struct GeneratedExercisePlayerView: View {
     let content: GeneratedContent
@@ -81,7 +108,7 @@ struct GeneratedExercisePlayerView: View {
                 ToolbarItem(placement: .primaryAction) {
                     Button(action: { viewModel.showRatingPrompt = true }) {
                         Image(systemName: content.userRating != nil ? "star.fill" : "star")
-                            .foregroundColor(SupportTheme.accent)
+                            .foregroundColor(content.contentType.playerArea.palette.ink)
                     }
                 }
             }
@@ -113,7 +140,7 @@ struct GeneratedExercisePlayerView: View {
                     // Content type badge
                     HStack {
                         Image(systemName: content.contentType.icon)
-                            .foregroundColor(SupportTheme.accent)
+                            .foregroundColor(content.contentType.playerArea.palette.ink)
                         Text(content.contentType.displayName)
                             .font(.subheadline)
                             .foregroundColor(SupportTheme.textSecondary)
@@ -134,7 +161,7 @@ struct GeneratedExercisePlayerView: View {
                 // Progress bar
                 if viewModel.isAudioPlaying {
                     ProgressView(value: viewModel.audioProgress)
-                        .tint(SupportTheme.accent)
+                        .tint(content.contentType.playerArea.palette.ink)
 
                     // Time display
                     HStack {
@@ -164,8 +191,8 @@ struct GeneratedExercisePlayerView: View {
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, SupportTheme.Spacing.s)
-                        .background(SupportTheme.accent)
-                        .foregroundStyle(SupportTheme.onAccent)
+                        .background(content.contentType.playerArea.palette.heroGradient)
+                        .foregroundStyle(SupportTheme.onHero)
                         .cornerRadius(SupportTheme.controlRadius)
                     }
 
@@ -202,8 +229,8 @@ struct BreathingPlayerView: View {
 
     var body: some View {
         ZStack {
-            // Gradient background that changes with phase
-            SupportTheme.canvas
+            // Calm background that changes with phase
+            viewModel.breathingPhase.area.palette.softGradient
             .ignoresSafeArea()
             .animation(reduceMotion ? nil : .easeInOut(duration: 0.5), value: viewModel.breathingPhase)
 
@@ -220,7 +247,7 @@ struct BreathingPlayerView: View {
 
                 // Animated breathing circle
                 Circle()
-                    .fill(SupportTheme.accent.opacity(0.3))
+                    .fill(viewModel.breathingPhase.area.palette.heroGradient)
                     .frame(width: 200, height: 200)
                     .scaleEffect(reduceMotion ? 1 : (viewModel.breathingCircleScale))
 
@@ -233,7 +260,7 @@ struct BreathingPlayerView: View {
                 // Cycle counter
                 Text("Cycle \(viewModel.currentCycle) of \(exercise.cycles)")
                     .font(.subheadline)
-                    .foregroundColor(SupportTheme.textPrimary.opacity(0.7))
+                    .foregroundColor(SupportTheme.textSecondary)
 
                 Spacer()
 
@@ -242,7 +269,7 @@ struct BreathingPlayerView: View {
                     Button(action: viewModel.togglePlayPause) {
                         Image(systemName: viewModel.isPlaying ? "pause.circle.fill" : "play.circle.fill")
                             .font(.system(.largeTitle))
-                            .foregroundColor(SupportTheme.textPrimary)
+                            .foregroundColor(viewModel.breathingPhase.area.palette.ink)
                     }
                 }
                 .padding(.bottom, SupportTheme.Spacing.xl)
@@ -294,7 +321,7 @@ struct MeditationPlayerView: View {
         VStack(spacing: SupportTheme.Spacing.m) {
             // Progress bar
             ProgressView(value: viewModel.progress)
-                .tint(SupportTheme.accent)
+                .tint(SupportTheme.Area.journal.palette.ink)
 
             // Time display
             HStack {
@@ -309,6 +336,7 @@ struct MeditationPlayerView: View {
             Button(action: viewModel.togglePlayPause) {
                 Image(systemName: viewModel.isPlaying ? "pause.circle.fill" : "play.circle.fill")
                     .font(.system(.largeTitle))
+                    .foregroundStyle(SupportTheme.Area.journal.palette.ink)
             }
         }
         .padding(SupportTheme.Spacing.m)
@@ -326,7 +354,7 @@ struct GroundingPlayerView: View {
         VStack(spacing: 0) {
             // Current prompt display
             ZStack {
-                SupportTheme.separator
+                SupportTheme.Area.insights.palette.softGradient
                     .ignoresSafeArea()
 
                 if viewModel.currentSegmentIndex < exercise.prompts.count {
@@ -336,7 +364,7 @@ struct GroundingPlayerView: View {
                         if let sense = prompt.sense {
                             Image(systemName: senseIcon(for: sense))
                                 .font(.system(.largeTitle))
-                                .foregroundColor(SupportTheme.accent)
+                                .foregroundColor(SupportTheme.Area.insights.palette.ink)
                         }
 
                         Text(prompt.text)
@@ -372,6 +400,7 @@ struct GroundingPlayerView: View {
                     Button(action: viewModel.togglePlayPause) {
                         Image(systemName: viewModel.isPlaying ? "pause.circle.fill" : "play.circle.fill")
                             .font(.system(.largeTitle))
+                            .foregroundStyle(SupportTheme.Area.insights.palette.ink)
                     }
 
                     Button("Next") {
@@ -421,8 +450,8 @@ struct JournalingPlayerView: View {
                                 .font(.caption)
                                 .padding(.horizontal, SupportTheme.Spacing.xs)
                                 .padding(.vertical, SupportTheme.Spacing.xxs)
-                                .background(SupportTheme.surface)
-                                .foregroundColor(SupportTheme.accent)
+                                .background(SupportTheme.Area.quests.palette.tint)
+                                .foregroundColor(SupportTheme.Area.quests.palette.ink)
                                 .cornerRadius(SupportTheme.controlRadius)
 
                             Spacer()
@@ -454,7 +483,7 @@ struct JournalingPlayerView: View {
                         ForEach(exercise.reflectionQuestions, id: \.self) { question in
                             HStack(alignment: .top, spacing: SupportTheme.Spacing.xs) {
                                 Image(systemName: "lightbulb.fill")
-                                    .foregroundColor(SupportTheme.accent)
+                                    .foregroundColor(SupportTheme.Area.quests.palette.ink)
                                     .font(.caption)
 
                                 Text(question)
@@ -615,13 +644,10 @@ class ExercisePlayerViewModel: ObservableObject {
         }
     }
 
+    /// Phase colors: inhale blue to cyan-leaning, hold purple, exhale green, pause indigo.
     var currentPhaseColors: [Color] {
-        switch breathingPhase {
-        case .inhale: return [SupportTheme.accent.opacity(0.6), SupportTheme.accent.opacity(0.4)]
-        case .hold: return [SupportTheme.accent.opacity(0.5), SupportTheme.accent.opacity(0.4)]
-        case .exhale: return [SupportTheme.accent.opacity(0.5), SupportTheme.accent.opacity(0.4)]
-        case .pause: return [SupportTheme.accent.opacity(0.5), SupportTheme.accent.opacity(0.4)]
-        }
+        let palette = breathingPhase.area.palette
+        return [palette.deep, palette.deepEnd]
     }
 
     var timeRemainingFormatted: String {
