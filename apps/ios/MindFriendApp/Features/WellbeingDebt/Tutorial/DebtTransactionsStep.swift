@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-/// Step 2: Two-column layout showing deposits (green) vs withdrawals (red)
+/// Step 2: Two-column layout showing deposits (green) vs withdrawals (orange)
 struct DebtTransactionsStep: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let onNext: () -> Void
@@ -32,7 +32,7 @@ struct DebtTransactionsStep: View {
     var body: some View {
         TutorialStepLayout(
             icon: "arrow.left.arrow.right.circle.fill",
-            iconColor: SupportTheme.accent,
+            iconColor: SupportTheme.Area.journal.palette.ink,
             headline: "What Fills & Drains",
             subheadline: "Your daily activities affect your wellbeing balance.",
             primaryAction: onNext,
@@ -44,17 +44,17 @@ struct DebtTransactionsStep: View {
                     HStack(spacing: SupportTheme.Spacing.xxs) {
                         Image(systemName: "plus.circle.fill")
                             .font(.caption)
-                            .foregroundStyle(SupportTheme.accent)
+                            .foregroundStyle(SupportTheme.Status.positive)
                         Text("Deposits")
                             .font(.subheadline.bold())
-                            .foregroundStyle(SupportTheme.accent)
+                            .foregroundStyle(SupportTheme.Status.positive)
                     }
 
                     ForEach(deposits, id: \.label) { item in
                         transactionRow(
                             icon: item.icon,
                             label: item.label,
-                            color: SupportTheme.accent,
+                            color: SupportTheme.Status.positive,
                             isVisible: visibleItems.contains(item.label)
                         )
                     }
@@ -72,17 +72,17 @@ struct DebtTransactionsStep: View {
                     HStack(spacing: SupportTheme.Spacing.xxs) {
                         Image(systemName: "minus.circle.fill")
                             .font(.caption)
-                            .foregroundStyle(SupportTheme.accent)
+                            .foregroundStyle(SupportTheme.Status.caution)
                         Text("Withdrawals")
                             .font(.subheadline.bold())
-                            .foregroundStyle(SupportTheme.accent)
+                            .foregroundStyle(SupportTheme.Status.caution)
                     }
 
                     ForEach(withdrawals, id: \.label) { item in
                         transactionRow(
                             icon: item.icon,
                             label: item.label,
-                            color: SupportTheme.accent,
+                            color: SupportTheme.Status.caution,
                             isVisible: visibleItems.contains(item.label)
                         )
                     }

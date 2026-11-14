@@ -16,9 +16,9 @@ struct RitualRecapCard: View {
             HStack(spacing: SupportTheme.Spacing.s) {
                 Image(systemName: "sparkles")
                     .font(.title2)
-                    .foregroundColor(SupportTheme.accent)
+                    .foregroundColor(SupportTheme.Area.journal.palette.ink)
                     .frame(width: 44, height: 44)
-                    .background(SupportTheme.surface)
+                    .background(SupportTheme.Area.journal.palette.tint)
                     .cornerRadius(SupportTheme.controlRadius)
 
                 VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
@@ -29,10 +29,10 @@ struct RitualRecapCard: View {
                         Text("RITUAL")
                             .font(.caption2)
                             .fontWeight(.bold)
-                            .foregroundColor(SupportTheme.accent)
+                            .foregroundColor(SupportTheme.Area.journal.palette.ink)
                             .padding(.horizontal, SupportTheme.Spacing.xs)
                             .padding(.vertical, SupportTheme.Spacing.xxs)
-                            .background(SupportTheme.surface)
+                            .background(SupportTheme.Area.journal.palette.tint)
                             .cornerRadius(SupportTheme.controlRadius)
                     }
 
@@ -103,7 +103,7 @@ struct ReflectionRow: View {
             // Quote mark
             Text("\u{201D}")
                 .font(.title2)
-                .foregroundColor(SupportTheme.accent.opacity(0.5))
+                .foregroundColor(SupportTheme.Area.journal.palette.ink.opacity(0.5))
 
             VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text(reflection.content)

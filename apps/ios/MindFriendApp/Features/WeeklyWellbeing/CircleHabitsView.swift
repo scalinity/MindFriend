@@ -142,7 +142,7 @@ struct CircleHabitsView: View {
     private func tipRow(icon: String, text: String) -> some View {
         HStack(spacing: SupportTheme.Spacing.s) {
             Image(systemName: icon)
-                .foregroundStyle(SupportTheme.accent)
+                .foregroundStyle(SupportTheme.Area.people.palette.ink)
                 .frame(minWidth: 24)
 
             Text(text)
@@ -197,6 +197,7 @@ struct UpcomingCheckinCard: View {
                 HStack {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.title2)
+                        .foregroundStyle(SupportTheme.Area.people.palette.ink)
 
                     VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                         Text(checkin.name)
@@ -257,6 +258,7 @@ struct TemplateCard: View {
                 HStack {
                     Image(systemName: "doc.text.fill")
                         .font(.title2)
+                        .foregroundStyle(SupportTheme.Area.people.palette.ink)
 
                     VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                         Text(template.name)
@@ -272,7 +274,7 @@ struct TemplateCard: View {
                     Spacer()
 
                     Image(systemName: template.isActive ? "checkmark.circle.fill" : "circle")
-                        .foregroundStyle(template.isActive ? SupportTheme.accent : SupportTheme.textSecondary)
+                        .foregroundStyle(template.isActive ? SupportTheme.Status.positive : SupportTheme.textSecondary)
                 }
 
                 HStack {
@@ -303,7 +305,7 @@ struct NudgeCard: View {
         VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             HStack {
                 Image(systemName: "bell.fill")
-                    .foregroundStyle(SupportTheme.accent)
+                    .foregroundStyle(SupportTheme.Area.people.palette.ink)
 
                 Text(nudge.message)
                     .font(.subheadline)

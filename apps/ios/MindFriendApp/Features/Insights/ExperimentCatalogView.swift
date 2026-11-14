@@ -89,9 +89,9 @@ struct ExperimentCatalogView: View {
                 if let actionType = experiment.actionTypeEnum {
                     Image(systemName: actionType.icon)
                         .font(.title2)
-                        .foregroundStyle(SupportTheme.onAccent)
+                        .foregroundStyle(SupportTheme.onHero)
                         .frame(width: 50, height: 50)
-                        .background(SupportTheme.accent)
+                        .background(SupportTheme.Area.insights.palette.heroGradient)
                         .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
                 }
 
@@ -106,7 +106,7 @@ struct ExperimentCatalogView: View {
 
                     // Progress bar
                     ProgressView(value: Double(experiment.completedDays), total: 7)
-                        .tint(SupportTheme.accent)
+                        .tint(SupportTheme.Status.positive)
                 }
 
                 Spacer()
@@ -232,9 +232,9 @@ struct ExperimentCard: View {
                 // Icon
                 Image(systemName: actionType.icon)
                     .font(.title2)
-                    .foregroundStyle(SupportTheme.textPrimary)
+                    .foregroundStyle(SupportTheme.onHero)
                     .frame(width: 44, height: 44)
-                    .background(iconColor)
+                    .background(iconArea.palette.heroGradient)
                     .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
 
                 // Title and description
@@ -269,16 +269,16 @@ struct ExperimentCard: View {
         .supportCard()
     }
 
-    private var iconColor: Color {
+    private var iconArea: SupportTheme.Area {
         switch actionType.color {
-        case "green": return SupportTheme.accent
-        case "purple": return SupportTheme.accent
-        case "indigo": return SupportTheme.accent
-        case "orange": return SupportTheme.accent
-        case "cyan": return SupportTheme.accent
-        case "teal": return SupportTheme.accent
-        case "red": return .red
-        default: return SupportTheme.accent
+        case "green": return .insights
+        case "purple": return .journal
+        case "indigo": return .sleep
+        case "orange": return .quests
+        case "cyan": return .exercises
+        case "teal": return .sensory
+        case "red": return .copingKits
+        default: return .insights
         }
     }
 }

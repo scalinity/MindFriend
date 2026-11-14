@@ -172,9 +172,9 @@ struct ReportRow: View {
         HStack(spacing: SupportTheme.Spacing.s) {
             Image(systemName: report.reportType.icon)
                 .font(.title2)
-                .foregroundStyle(SupportTheme.accent)
+                .foregroundStyle(SupportTheme.Area.insights.palette.ink)
                 .frame(width: 40, height: 40)
-                .background(SupportTheme.surface)
+                .background(SupportTheme.Area.insights.palette.tint)
                 .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
 
             VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
@@ -323,7 +323,7 @@ struct ReportFeatureRow: View {
         HStack(spacing: SupportTheme.Spacing.xs) {
             Image(systemName: icon)
                 .font(.caption)
-                .foregroundStyle(SupportTheme.accent)
+                .foregroundStyle(SupportTheme.Area.insights.palette.ink)
                 .frame(width: 16)
             Text(text)
                 .font(.caption)
@@ -398,7 +398,7 @@ struct ReportDetailView: View {
                                 Text("\(index + 1).")
                                     .font(.subheadline)
                                     .fontWeight(.medium)
-                                    .foregroundStyle(SupportTheme.accent)
+                                    .foregroundStyle(SupportTheme.Area.insights.palette.ink)
                                 Text(report.contentJson.recommendations[index])
                                     .font(.subheadline)
                             }
@@ -482,24 +482,6 @@ struct ReportMoodTrendChart: View {
             let minY: Double = 1
             let range = maxY - minY
 
-            Path { path in
-                guard data.count > 1 else { return }
-
-                let stepX = geometry.size.width / CGFloat(data.count - 1)
-
-                for (index, point) in data.enumerated() {
-                    let x = CGFloat(index) * stepX
-                    let y = geometry.size.height * (1 - CGFloat((point.value - minY) / range))
-
-                    if index == 0 {
-                        path.move(to: CGPoint(x: x, y: y))
-                    } else {
-                        path.addLine(to: CGPoint(x: x, y: y))
-                    }
-                }
-            }
-            .stroke(SupportTheme.accent, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
-
             // Gradient fill
             Path { path in
                 guard data.count > 1 else { return }
@@ -518,8 +500,30 @@ struct ReportMoodTrendChart: View {
                 path.closeSubpath()
             }
             .fill(
-                SupportTheme.surface
+                LinearGradient(
+                    colors: [SupportTheme.Area.insights.palette.tint, SupportTheme.surface],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
             )
+
+            Path { path in
+                guard data.count > 1 else { return }
+
+                let stepX = geometry.size.width / CGFloat(data.count - 1)
+
+                for (index, point) in data.enumerated() {
+                    let x = CGFloat(index) * stepX
+                    let y = geometry.size.height * (1 - CGFloat((point.value - minY) / range))
+
+                    if index == 0 {
+                        path.move(to: CGPoint(x: x, y: y))
+                    } else {
+                        path.addLine(to: CGPoint(x: x, y: y))
+                    }
+                }
+            }
+            .stroke(SupportTheme.Area.insights.palette.ink, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
         }
     }
 }
@@ -543,10 +547,10 @@ struct ActivityHeatmapView: View {
 
     private func activityColor(for days: Int) -> Color {
         switch days {
-        case 7: return SupportTheme.accent
-        case 5...6: return SupportTheme.accent.opacity(0.7)
-        case 3...4: return SupportTheme.accent.opacity(0.4)
-        case 1...2: return SupportTheme.accent.opacity(0.2)
+        case 7: return SupportTheme.Status.positive
+        case 5...6: return SupportTheme.Status.positive.opacity(0.7)
+        case 3...4: return SupportTheme.Status.positive.opacity(0.4)
+        case 1...2: return SupportTheme.Status.positive.opacity(0.2)
         default: return SupportTheme.field
         }
     }

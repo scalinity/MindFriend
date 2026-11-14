@@ -247,7 +247,7 @@ private struct ErrorView: View {
 
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 60))
-                .foregroundStyle(SupportTheme.accent)
+                .foregroundStyle(SupportTheme.Status.caution)
 
             Text("Something went wrong")
                 .font(.title2)

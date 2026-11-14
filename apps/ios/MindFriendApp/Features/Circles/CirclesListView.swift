@@ -588,16 +588,24 @@ struct MemberRowWithHug: View {
     let circleId: String
     let isCurrentUser: Bool
 
+    private static let avatarAreas: [SupportTheme.Area] = [.people, .journal, .voice, .quests, .insights, .exercises]
+
+    /// Each member keeps one color across launches, taken from their user id.
+    private var avatarPalette: AreaPalette {
+        let seed = member.userId.unicodeScalars.reduce(0) { $0 &+ Int($1.value) }
+        return Self.avatarAreas[seed % Self.avatarAreas.count].palette
+    }
+
     var body: some View {
         HStack(spacing: SupportTheme.Spacing.s) {
             // Avatar placeholder (CircleMember doesn't include avatarUrl)
             Circle()
-                .fill(SupportTheme.accent.opacity(0.15))
+                .fill(avatarPalette.tint)
                 .frame(width: 40, height: 40)
                 .overlay {
                     Text(String(member.displayName.prefix(1)).uppercased())
                         .font(.headline)
-                        .foregroundColor(SupportTheme.accent)
+                        .foregroundColor(avatarPalette.ink)
                 }
                 .accessibilityLabel("\(member.displayName)'s profile picture")
 
@@ -668,10 +676,10 @@ struct CirclePostRowWithReactions: View {
                             Text("MILESTONE")
                                 .font(.caption2)
                                 .fontWeight(.bold)
-                                .foregroundColor(SupportTheme.accent)
+                                .foregroundColor(SupportTheme.Area.quests.palette.ink)
                                 .padding(.horizontal, SupportTheme.Spacing.xs)
                                 .padding(.vertical, SupportTheme.Spacing.xxs)
-                                .background(SupportTheme.surface)
+                                .background(SupportTheme.Area.quests.palette.tint)
                                 .cornerRadius(SupportTheme.controlRadius)
                         }
 
@@ -695,7 +703,7 @@ struct CirclePostRowWithReactions: View {
                 .padding(.leading, SupportTheme.Spacing.xl)
         }
         .padding()
-        .background(isMilestone ? SupportTheme.accent.opacity(0.05) : SupportTheme.surface)
+        .background(isMilestone ? SupportTheme.Area.quests.palette.tint : SupportTheme.surface)
         .cornerRadius(SupportTheme.controlRadius)
         .padding(.horizontal)
     }
@@ -800,7 +808,7 @@ struct CircleCheckinView: View {
                             Text(emoji)
                                 .font(.system(size: 36))
                                 .padding(SupportTheme.Spacing.xs)
-                                .background(selectedEmoji == emoji ? SupportTheme.accent.opacity(0.2) : Color.clear)
+                                .background(selectedEmoji == emoji ? SupportTheme.Area.people.palette.tint : Color.clear)
                                 .cornerRadius(SupportTheme.controlRadius)
                         }
                     }

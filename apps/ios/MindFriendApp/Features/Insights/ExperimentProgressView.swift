@@ -113,9 +113,9 @@ struct ExperimentProgressView: View {
                 if let actionType = experiment.actionTypeEnum {
                     Image(systemName: actionType.icon)
                         .font(.largeTitle)
-                        .foregroundStyle(SupportTheme.onAccent)
+                        .foregroundStyle(SupportTheme.onHero)
                         .frame(width: 70, height: 70)
-                        .background(SupportTheme.accent)
+                        .background(SupportTheme.Area.insights.palette.heroGradient)
                         .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
                 }
 
@@ -131,7 +131,7 @@ struct ExperimentProgressView: View {
                     if experiment.hasBaseline {
                         Label("Baseline data available", systemImage: "checkmark.circle.fill")
                             .font(.caption)
-                            .foregroundStyle(SupportTheme.accent)
+                            .foregroundStyle(SupportTheme.Status.positive)
                     }
                 }
             }
@@ -139,7 +139,7 @@ struct ExperimentProgressView: View {
             // Progress bar
             VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                 ProgressView(value: Double(experiment.completedDays), total: 7)
-                    .tint(SupportTheme.accent)
+                    .tint(SupportTheme.Status.positive)
                     .scaleEffect(x: 1, y: 2, anchor: .center)
 
                 HStack {
@@ -173,7 +173,7 @@ struct ExperimentProgressView: View {
             if todayCompleted {
                 HStack {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(SupportTheme.accent)
+                        .foregroundStyle(SupportTheme.Status.positive)
                     Text("Completed for today!")
                         .fontWeight(.medium)
                 }
@@ -223,7 +223,7 @@ struct ExperimentProgressView: View {
 
             // Legend
             HStack(spacing: SupportTheme.Spacing.m) {
-                LegendItem(color: SupportTheme.accent, label: "Completed")
+                LegendItem(color: SupportTheme.Status.positive, label: "Completed")
                 LegendItem(color: SupportTheme.accent, label: "Today")
                 LegendItem(color: SupportTheme.separator, label: "Upcoming")
             }
@@ -278,7 +278,7 @@ struct DayBubble: View {
                 if isCompleted {
                     Image(systemName: "checkmark")
                         .font(.headline)
-                        .foregroundStyle(SupportTheme.textPrimary)
+                        .foregroundStyle(SupportTheme.onAccent)
                 } else {
                     Text("\(dayNumber)")
                         .font(.headline)
@@ -298,7 +298,7 @@ struct DayBubble: View {
 
     private var bubbleColor: Color {
         if isCompleted {
-            return SupportTheme.accent
+            return SupportTheme.Status.positive
         } else if isToday {
             return SupportTheme.accent
         } else {

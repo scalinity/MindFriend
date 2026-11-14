@@ -102,9 +102,9 @@ struct CompletedExperimentsView: View {
                                 if let actionType = experiment.actionTypeEnum {
                                     Image(systemName: actionType.icon)
                                         .font(.title3)
-                                        .foregroundStyle(SupportTheme.onAccent)
+                                        .foregroundStyle(SupportTheme.onHero)
                                         .frame(width: 40, height: 40)
-                                        .background(SupportTheme.accent)
+                                        .background(SupportTheme.Area.insights.palette.heroGradient)
                                         .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
                                 }
 
