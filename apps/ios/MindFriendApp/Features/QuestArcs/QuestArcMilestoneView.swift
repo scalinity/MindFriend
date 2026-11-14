@@ -19,20 +19,21 @@ struct QuestArcMilestoneView: View {
 
     var body: some View {
         ZStack {
-            // Background gradient
-            SupportTheme.canvas
-            .ignoresSafeArea()
+            // Soft wash of the quest color behind primary and secondary text
+            CelebrationBackdrop(palette: SupportTheme.Area.quests.palette)
 
             // Content
             VStack(spacing: SupportTheme.Spacing.xl) {
                 Spacer()
 
-                CelebrationEmblem(.text("\(milestoneNumber)"), tint: SupportTheme.Celebration.gold)
+                CelebrationEmblem(.text("\(milestoneNumber)"), tint: SupportTheme.Area.quests.palette.ink,
+                                  fill: SupportTheme.Area.quests.palette.heroGradient)
                     .celebrationReveal()
 
                 VStack(spacing: SupportTheme.Spacing.s) {
                     Text("Milestone reached")
                         .font(.largeTitle.weight(.bold))
+                        .foregroundStyle(SupportTheme.textPrimary)
 
                     Text("Day \(dayNumber) of \(arcTitle)")
                         .font(.title3)
@@ -61,7 +62,7 @@ struct QuestArcMilestoneView: View {
                         Label("Share with Circles", systemImage: "person.2.fill")
                             .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.supportPrimary)
+                    .buttonStyle(CelebrationButtonStyle(gradient: SupportTheme.Area.quests.palette.heroGradient))
 
                     Button {
                         onDismiss()
@@ -80,7 +81,8 @@ struct QuestArcMilestoneView: View {
 
             // Confetti overlay
             if showConfetti {
-                CelebrationParticles()
+                CelebrationParticles(palette: [SupportTheme.Area.quests.palette.ink, SupportTheme.Celebration.gold,
+                                               SupportTheme.Area.quests.palette.deep])
                     .ignoresSafeArea()
                     .allowsHitTesting(false)
             }
@@ -123,19 +125,20 @@ struct QuestArcCompletionView: View {
 
     var body: some View {
         ZStack {
-            // Background gradient
-            SupportTheme.canvas
-            .ignoresSafeArea()
+            // Soft wash of the journal color behind primary and secondary text
+            CelebrationBackdrop(palette: SupportTheme.Area.journal.palette)
 
             VStack(spacing: SupportTheme.Spacing.xl) {
                 Spacer()
 
-                CelebrationEmblem(.symbol("trophy.fill"), tint: SupportTheme.Celebration.gold)
+                CelebrationEmblem(.symbol("trophy.fill"), tint: SupportTheme.Area.journal.palette.ink,
+                                  fill: SupportTheme.Hero.levelUp)
                     .celebrationReveal()
 
                 VStack(spacing: SupportTheme.Spacing.s) {
                     Text("Journey complete")
                         .font(.largeTitle.weight(.bold))
+                        .foregroundStyle(SupportTheme.textPrimary)
 
                     Text(arcTitle)
                         .font(.title3)
@@ -177,7 +180,7 @@ struct QuestArcCompletionView: View {
                         Label("Start Another Journey", systemImage: "sparkles")
                             .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.supportPrimary)
+                    .buttonStyle(CelebrationButtonStyle(gradient: SupportTheme.Hero.levelUp))
 
                     Button {
                         onDismiss()
@@ -195,7 +198,8 @@ struct QuestArcCompletionView: View {
             }
 
             if showConfetti {
-                CelebrationParticles()
+                CelebrationParticles(palette: [SupportTheme.Area.journal.palette.ink, SupportTheme.Area.voice.palette.ink,
+                                               SupportTheme.Celebration.gold])
                     .ignoresSafeArea()
                     .allowsHitTesting(false)
             }

@@ -39,13 +39,16 @@ struct CopingKitCompletionView: View {
                 doneButton
             }
         }
+        .background(CelebrationBackdrop(palette: palette))
         .supportSheet()
     }
+
+    private var palette: AreaPalette { SupportTheme.Area.copingKits.palette }
 
     // MARK: - Celebration Icon
 
     private var celebrationIcon: some View {
-        CelebrationEmblem(.symbol("checkmark.circle.fill"))
+        CelebrationEmblem(.symbol("checkmark.circle.fill"), tint: palette.ink, fill: palette.heroGradient)
             .celebrationReveal()
             .padding(.top, SupportTheme.Spacing.m)
     }
@@ -73,7 +76,7 @@ struct CopingKitCompletionView: View {
                 // XP gained
                 HStack {
                     Image(systemName: "star.fill")
-                        .foregroundStyle(SupportTheme.accent)
+                        .foregroundStyle(SupportTheme.Celebration.gold)
 
                     Text("+\(result.xpAwarded) XP earned")
                         .fontWeight(.semibold)
@@ -88,7 +91,7 @@ struct CopingKitCompletionView: View {
                 if let levelUp = result.levelUp {
                     HStack {
                         Image(systemName: "arrow.up.circle.fill")
-                            .foregroundStyle(SupportTheme.accent)
+                            .foregroundStyle(SupportTheme.Status.positive)
 
                         Text("Level \(levelUp.oldLevel) → \(levelUp.newLevel)")
                             .fontWeight(.semibold)
@@ -101,7 +104,7 @@ struct CopingKitCompletionView: View {
                 // Default stats
                 HStack {
                     Image(systemName: "clock.fill")
-                        .foregroundStyle(SupportTheme.accent)
+                        .foregroundStyle(SupportTheme.Area.voice.palette.ink)
 
                     Text("\(kit.formattedDuration) completed")
                         .fontWeight(.medium)
@@ -130,7 +133,7 @@ struct CopingKitCompletionView: View {
                     VStack(spacing: SupportTheme.Spacing.xs) {
                         Image(systemName: "hand.thumbsup.fill")
                             .font(.largeTitle)
-                            .foregroundStyle(SupportTheme.accent)
+                            .foregroundStyle(SupportTheme.Status.positive)
                         Text("Yes")
                             .font(.caption)
                     }
@@ -143,7 +146,7 @@ struct CopingKitCompletionView: View {
                     VStack(spacing: SupportTheme.Spacing.xs) {
                         Image(systemName: "hand.thumbsdown.fill")
                             .font(.largeTitle)
-                            .foregroundStyle(.red)
+                            .foregroundStyle(SupportTheme.textSecondary)
                         Text("Not really")
                             .font(.caption)
                     }
@@ -166,7 +169,7 @@ struct CopingKitCompletionView: View {
     private var feedbackSubmittedSection: some View {
         HStack {
             Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(SupportTheme.accent)
+                .foregroundStyle(SupportTheme.Status.positive)
 
             Text("Thanks for your feedback!")
                 .fontWeight(.medium)
@@ -198,7 +201,7 @@ struct CopingKitCompletionView: View {
                 .fontWeight(.semibold)
                 .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.supportPrimary)
+        .buttonStyle(CopingKitButtonStyle())
         .padding(.horizontal, SupportTheme.Spacing.m)
         .padding(.bottom, SupportTheme.Spacing.m)
     }
