@@ -24,6 +24,7 @@ SUITES = (
     "drift_reconciliation.sql",
     "current_premium_access.sql",
     "habit_reminders.sql",
+    "local_day_boundaries.sql",
 )
 
 

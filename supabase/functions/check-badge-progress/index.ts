@@ -3,6 +3,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { timeOfDayBadgeEarned } from "../_shared/local-time.ts";
 
 interface Badge {
   id: string;
@@ -64,7 +65,7 @@ interface UserMetrics {
   profileComplete: boolean;
   daysSinceLastActivity: number;
   userCreatedAt: Date | null;
-  userTimezone: string;
+  userTimezone: string | null;
 }
 
 Deno.serve(async (req) => {
@@ -439,7 +440,7 @@ async function fetchUserMetrics(
     profileComplete,
     daysSinceLastActivity,
     userCreatedAt,
-    userTimezone: profileData?.timezone || "UTC",
+    userTimezone: profileData?.timezone ?? null,
   };
 }
 
@@ -561,25 +562,13 @@ function calculateProgress(
         }
         return { progress: 0, target: 1 };
 
-      case "activity_after_midnight": {
-        // Night Owl: Check if current activity is between midnight and 5am LOCAL time
-        const localHour = getLocalHour(metrics.userTimezone);
-        const isNightOwl = localHour >= 0 && localHour < 5;
+      case "activity_after_midnight":
+      case "activity_before_6am":
+        // Night Owl / Early Bird, in the person's own time; never while the zone is unknown.
         return {
-          progress: isNightOwl ? 1 : 0,
+          progress: timeOfDayBadgeEarned(trigger, metrics.userTimezone, new Date()) ? 1 : 0,
           target: 1,
         };
-      }
-
-      case "activity_before_6am": {
-        // Early Bird: Check if current activity is between 5am and 6am LOCAL time
-        const localHour = getLocalHour(metrics.userTimezone);
-        const isEarlyBird = localHour >= 5 && localHour < 6;
-        return {
-          progress: isEarlyBird ? 1 : 0,
-          target: 1,
-        };
-      }
 
       case "perfect_week":
         // Perfect Week: 7 consecutive quests completed (uses existing streak)
@@ -606,19 +595,3 @@ function totalXpForLevel(level: number): number {
   return 50 * (level - 1) * (level - 1);
 }
 
-// Get current hour in user's local timezone
-function getLocalHour(timezone: string): number {
-  try {
-    const now = new Date();
-    const formatter = new Intl.DateTimeFormat("en-US", {
-      timeZone: timezone,
-      hour: "numeric",
-      hour12: false,
-    });
-    const hourStr = formatter.format(now);
-    return parseInt(hourStr, 10);
-  } catch {
-    // Fallback to UTC if timezone is invalid
-    return new Date().getUTCHours();
-  }
-}

@@ -140,6 +140,7 @@ function getLocalDate(timezone: string = "UTC"): string {
 async function getUserCapacityLevel(
   supabase: SupabaseClient,
   userId: string,
+  localDate: string,
 ): Promise<"low" | "moderate" | "high"> {
   // Check for active override first
   const { data: override, error: overrideError } = await supabase
@@ -170,13 +171,12 @@ async function getUserCapacityLevel(
     }
   }
 
-  // Check cached capacity
-  const today = new Date().toISOString().split("T")[0];
+  // Check cached capacity (stored per local day)
   const { data: capacity, error: capacityError } = await supabase
     .from("user_capacity")
     .select("level")
     .eq("user_id", userId)
-    .eq("local_date", today)
+    .eq("local_date", localDate)
     .maybeSingle();
 
   // Log database errors but don't fail - use safe default
@@ -229,6 +229,7 @@ async function postStreakMilestone(
   userId: string,
   streakDays: number,
   displayName: string,
+  localDate: string,
 ): Promise<void> {
   // Get user's circles
   const { data: memberships } = await supabase
@@ -237,8 +238,6 @@ async function postStreakMilestone(
     .eq("user_id", userId);
 
   if (!memberships?.length) return;
-
-  const localDate = getLocalDate();
 
   // Batch insert milestone posts to all circles (P2 fix: eliminate N+1 query)
   const posts = memberships.map((membership) => ({
@@ -412,7 +411,7 @@ async function assignQuestToUser(
   }
 
   // Get user's capacity level FIRST - this determines duration filtering
-  const capacityLevel = await getUserCapacityLevel(supabase, userId);
+  const capacityLevel = await getUserCapacityLevel(supabase, userId, localDate);
   const durationFilter = getQuestDurationFilter(capacityLevel);
 
   console.log(
@@ -700,7 +699,7 @@ async function updateStreakAndCheckMilestone(
   // Check for milestone
   if (STREAK_MILESTONES.includes(newStreak)) {
     const displayName = profile?.display_name || "Someone";
-    await postStreakMilestone(supabase, userId, newStreak, displayName);
+    await postStreakMilestone(supabase, userId, newStreak, displayName, localDate);
   }
 
   // Check and award shield at 7-day milestones
@@ -1100,7 +1099,7 @@ Deno.serve(async (req) => {
       if (STREAK_MILESTONES.includes(result.restored_streak)) {
         const { data: userProfile } = await supabaseAdmin
           .from("profiles")
-          .select("display_name")
+          .select("display_name, timezone")
           .eq("id", user.id)
           .single();
 
@@ -1110,6 +1109,7 @@ Deno.serve(async (req) => {
           user.id,
           result.restored_streak,
           displayName,
+          getLocalDate(userProfile?.timezone || "UTC"),
         );
       }
 

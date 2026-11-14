@@ -892,6 +892,24 @@ final class SupabaseAuthService: ObservableObject {
             .execute()
     }
 
+    /// The server counts days and time-of-day badges in profiles.timezone, so keep it equal to the
+    /// device's zone. Writes only when the zone differs from the last one written for this account.
+    func syncTimeZone(_ device: TimeZone = .current, defaults: UserDefaults = .standard) async {
+        guard let userId else { return }
+        let key = "mf.syncedTimeZone.\(userId.uuidString)"
+        guard let zone = Self.timeZoneToSync(device: device, lastSynced: defaults.string(forKey: key)) else { return }
+        do {
+            try await updateProfile(timezone: zone)
+            defaults.set(zone, forKey: key)
+        } catch {
+            Log.auth.warning("Time zone sync failed: \(error.localizedDescription)")
+        }
+    }
+
+    nonisolated static func timeZoneToSync(device: TimeZone, lastSynced: String?) -> String? {
+        device.identifier == lastSynced ? nil : device.identifier
+    }
+
     /// Check if a handle is available (not taken by another user)
     /// Uses SECURITY DEFINER RPC to avoid exposing profile data
     func isHandleAvailable(_ handle: String, excludingUserId: UUID? = nil) async throws -> Bool {
