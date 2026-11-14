@@ -71,6 +71,7 @@ jobs:
             -only-testing:MindFriendAppTests/FamilyWellnessIntegrationTests/testAgeFilterFlow_ChildAgeChanges_ContentAccessUpdates \
             -only-testing:MindFriendAppTests/CrashReporterTests \
             -only-testing:MindFriendAppTests/CoreCompletionContractTests \
+            -only-testing:MindFriendAppTests/AreaColorContrastTests \
             -only-testing:MindFriendAppUITests/MindFriendAppUITests \
             CODE_SIGNING_ALLOWED=YES \
             CODE_SIGNING_REQUIRED=YES \
