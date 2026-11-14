@@ -730,6 +730,116 @@ enum SupportTheme {
         static let gold = dynamic(light: 0x9A6A12, dark: 0xF2C46D)
     }
 
+    /// Feature areas keep the color 1.0.5 gave them (docs/ux/2.0-vs-1.0.5). Neutral surfaces stay
+    /// calm; an area's color marks its identity: icon tiles, headers, rings, chips and charts.
+    /// The accent stays the color of primary actions, and red stays reserved for crisis and
+    /// destructive actions, so neither is an area color.
+    enum Area: String, CaseIterable {
+        case sleep, copingKits, journal, voice, exercises, quests, insights, people, safety, sensory
+
+        /// The 1.0.5 color each area is taken from.
+        var source: String {
+            switch self {
+            case .sleep: return "indigo, with purple"
+            case .copingKits: return "pink"
+            case .journal: return "purple"
+            case .voice: return "blue, with purple"
+            case .exercises: return "cyan, with blue"
+            case .quests: return "orange, with yellow"
+            case .insights: return "green"
+            case .people: return "pink, with purple"
+            case .safety: return "blue, with cyan"
+            case .sensory: return "teal"
+            }
+        }
+
+        var palette: AreaPalette { AreaPalette.table[self]! }
+    }
+
+    /// Text and symbols on an area's hero gradient.
+    static let onHero = Color.white
+
+    /// Status that carries meaning, such as wellbeing deposits and withdrawals or trends.
+    enum Status {
+        static let positive = Area.insights.palette.ink
+        static let caution = Area.quests.palette.ink
+    }
+
+    /// Hero and celebration gradients, built from the area colors.
+    enum Hero {
+        static let levelUp = gradient(Area.journal.palette.deep, Area.voice.palette.deep)
+        static let streak = gradient(Area.quests.palette.deep, Area.quests.palette.deepEnd)
+        static let badge = gradient(Area.insights.palette.deep, Area.insights.palette.deepEnd)
+        static let unlock = gradient(Area.voice.palette.deep, Area.journal.palette.deep)
+        static let welcomeBack = gradient(Area.quests.palette.deep, Area.people.palette.deep)
+        static let calm = gradient(Area.sleep.palette.deep, Area.sleep.palette.deepEnd)
+
+        static func gradient(_ start: Color, _ end: Color) -> LinearGradient {
+            LinearGradient(colors: [start, end], startPoint: .topLeading, endPoint: .bottomTrailing)
+        }
+    }
+}
+
+/// One area's colors. `ink` is for icons, rings, chips and short text on canvas, surface or the
+/// area's tint (4.5:1 or more in every mode). `tint`/`tintEnd` are calm backgrounds behind
+/// primary text. `deep`/`deepEnd` form the hero gradient behind `SupportTheme.onHero`.
+struct AreaPalette {
+    let ink: Color
+    let tint: Color
+    let tintEnd: Color
+    let deep: Color
+    let deepEnd: Color
+
+    var softGradient: LinearGradient {
+        LinearGradient(colors: [tint, tintEnd], startPoint: .topLeading, endPoint: .bottomTrailing)
+    }
+
+    var heroGradient: LinearGradient { SupportTheme.Hero.gradient(deep, deepEnd) }
+
+    fileprivate init(ink: (UInt32, UInt32), tint: (UInt32, UInt32), tintEnd: (UInt32, UInt32),
+                     deep: (UInt32, UInt32)) {
+        // Increase Contrast moves ink further from its backgrounds and deepens the hero stops.
+        self.ink = SupportTheme.areaColor(light: ink.0, dark: ink.1,
+                                          highLight: mixHex(ink.0, 0x000000, 0.25),
+                                          highDark: mixHex(ink.1, 0xFFFFFF, 0.35))
+        self.tint = SupportTheme.areaColor(light: tint.0, dark: tint.1)
+        self.tintEnd = SupportTheme.areaColor(light: tintEnd.0, dark: tintEnd.1)
+        self.deep = SupportTheme.areaColor(light: deep.0, dark: deep.0,
+                                           highLight: mixHex(deep.0, 0x000000, 0.2), highDark: mixHex(deep.0, 0x000000, 0.2))
+        self.deepEnd = SupportTheme.areaColor(light: deep.1, dark: deep.1,
+                                              highLight: mixHex(deep.1, 0x000000, 0.2), highDark: mixHex(deep.1, 0x000000, 0.2))
+    }
+
+    // (light, dark) pairs. Ink: icons, rings and short text. Tint: soft backgrounds.
+    // Deep: hero gradient stops, the same in both modes because they carry white text.
+    fileprivate static let table: [SupportTheme.Area: AreaPalette] = [
+        .sleep: .init(ink: (0x4A47C2, 0xA9A7FF), tint: (0xEEEDFF, 0x1F1D4A), tintEnd: (0xF5ECFD, 0x2A1C45), deep: (0x3F3DAE, 0x6A2FA3)),
+        .copingKits: .init(ink: (0xB8124A, 0xFF8FB0), tint: (0xFFEBF1, 0x3D1424), tintEnd: (0xFFF1F4, 0x3A1626), deep: (0xB8124A, 0x8E1F6B)),
+        .journal: .init(ink: (0x8030B0, 0xD9A2F7), tint: (0xF6EDFC, 0x2E1A40), tintEnd: (0xFBF0F7, 0x361A3A), deep: (0x7B2CB0, 0x5B3BC4)),
+        .voice: .init(ink: (0x1F5FD1, 0x8AB6FF), tint: (0xEAF2FF, 0x15264A), tintEnd: (0xF1EDFF, 0x221C4A), deep: (0x1F5FD1, 0x6B3AC4)),
+        .exercises: .init(ink: (0x0B6E8E, 0x6FD3F2), tint: (0xE6F7FC, 0x0F3040), tintEnd: (0xEAF3FF, 0x14284A), deep: (0x0B6E8E, 0x1F5FD1)),
+        .quests: .init(ink: (0xA34A00, 0xFFB45E), tint: (0xFFF1E0, 0x3A2410), tintEnd: (0xFFF8D6, 0x3A3010), deep: (0xB45309, 0xA33A0C)),
+        .insights: .init(ink: (0x1B7A3D, 0x6FDB8F), tint: (0xE8F7EC, 0x13331F), tintEnd: (0xEEF8E6, 0x1B3318), deep: (0x1B7A3D, 0x0B6E6E)),
+        .people: .init(ink: (0xB0216B, 0xFF9ACB), tint: (0xFFEBF4, 0x3D1430), tintEnd: (0xF6EDFC, 0x2E1A40), deep: (0xB0216B, 0x7B2CB0)),
+        .safety: .init(ink: (0x1F5FA8, 0x8EC5FF), tint: (0xE9F3FC, 0x14283F), tintEnd: (0xE6F7FC, 0x0F3040), deep: (0x1F4E8C, 0x0B6E8E)),
+        .sensory: .init(ink: (0x0A7175, 0x5FD6D9), tint: (0xE3F7F7, 0x0E3334), tintEnd: (0xE6F4FA, 0x10303A), deep: (0x0A7175, 0x0B6E8E)),
+    ]
+}
+
+/// Blends two RGB hex colors; `amount` is the share of `other`.
+private func mixHex(_ base: UInt32, _ other: UInt32, _ amount: Double) -> UInt32 {
+    func channel(_ shift: UInt32) -> UInt32 {
+        let a = Double((base >> shift) & 0xFF), b = Double((other >> shift) & 0xFF)
+        return UInt32((a + (b - a) * amount).rounded()) << shift
+    }
+    return channel(16) | channel(8) | channel(0)
+}
+
+extension SupportTheme {
+    fileprivate static func areaColor(light: UInt32, dark: UInt32, highLight: UInt32? = nil, highDark: UInt32? = nil) -> Color {
+        dynamic(light: light, dark: dark, highLight: highLight, highDark: highDark)
+    }
+
     /// Increase Contrast selects the `high` values where a token has them.
     fileprivate static func dynamic(light: UInt32, dark: UInt32, highLight: UInt32? = nil, highDark: UInt32? = nil) -> Color {
         Color(uiColor: UIColor { traits in

@@ -248,3 +248,74 @@ final class SupportNavigationTests: XCTestCase {
         XCTAssertEqual(DeepLinkRoute.streak.supportPlacement, .destination(.achievements))
     }
 }
+
+/// Area colors meet WCAG in light, dark and both with Increase Contrast: text 4.5:1 and
+/// non-text boundaries 3:1, for every pairing the tokens are documented for.
+final class AreaColorContrastTests: XCTestCase {
+    private let modes: [(String, UITraitCollection)] = [
+        ("light", UITraitCollection(traitsFrom: [.init(userInterfaceStyle: .light), .init(accessibilityContrast: .normal)])),
+        ("dark", UITraitCollection(traitsFrom: [.init(userInterfaceStyle: .dark), .init(accessibilityContrast: .normal)])),
+        ("light, increased contrast", UITraitCollection(traitsFrom: [.init(userInterfaceStyle: .light), .init(accessibilityContrast: .high)])),
+        ("dark, increased contrast", UITraitCollection(traitsFrom: [.init(userInterfaceStyle: .dark), .init(accessibilityContrast: .high)])),
+    ]
+
+    func testEveryAreaPairMeetsContrast() {
+        for area in SupportTheme.Area.allCases {
+            let palette = area.palette
+            for (mode, traits) in modes {
+                let ink = rgb(palette.ink, traits)
+                let backgrounds = [("canvas", SupportTheme.canvas), ("surface", SupportTheme.surface),
+                                   ("tint", palette.tint), ("tint end", palette.tintEnd)]
+                for (name, background) in backgrounds {
+                    let bg = rgb(background, traits)
+                    // Ink is used for short text, so it meets the text ratio, which also covers 3:1 boundaries.
+                    XCTAssertGreaterThanOrEqual(ratio(ink, bg), 4.5, "\(area) ink on \(name), \(mode)")
+                }
+                for (name, tint) in [("tint", palette.tint), ("tint end", palette.tintEnd)] {
+                    let bg = rgb(tint, traits)
+                    XCTAssertGreaterThanOrEqual(ratio(rgb(SupportTheme.textPrimary, traits), bg), 4.5, "\(area) text on \(name), \(mode)")
+                    XCTAssertGreaterThanOrEqual(ratio(rgb(SupportTheme.textSecondary, traits), bg), 4.5, "\(area) secondary text on \(name), \(mode)")
+                    XCTAssertGreaterThanOrEqual(ratio(rgb(SupportTheme.border, traits), bg), 3, "\(area) field border on \(name), \(mode)")
+                }
+                for (name, stop) in [("deep", palette.deep), ("deep end", palette.deepEnd)] {
+                    XCTAssertGreaterThanOrEqual(ratio(rgb(SupportTheme.onHero, traits), rgb(stop, traits)), 4.5, "\(area) hero text on \(name), \(mode)")
+                }
+            }
+        }
+    }
+
+    func testIncreasedContrastStrengthensInk() {
+        for area in SupportTheme.Area.allCases {
+            for (normal, high) in [(modes[0].1, modes[2].1), (modes[1].1, modes[3].1)] {
+                let surface = rgb(SupportTheme.surface, normal)
+                XCTAssertGreaterThan(ratio(rgb(area.palette.ink, high), surface), ratio(rgb(area.palette.ink, normal), surface), "\(area)")
+            }
+        }
+    }
+
+    /// Red stays for crisis and destructive actions: no area ink sits in the red hue band.
+    func testNoAreaUsesCrisisRed() {
+        for area in SupportTheme.Area.allCases {
+            let color = UIColor(area.palette.ink).resolvedColor(with: modes[0].1)
+            var hue: CGFloat = 0, saturation: CGFloat = 0, brightness: CGFloat = 0, alpha: CGFloat = 0
+            color.getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: &alpha)
+            let degrees = hue * 360
+            XCTAssertFalse(degrees < 15 || degrees > 350, "\(area) ink hue \(degrees) is in the crisis red band")
+        }
+    }
+
+    private func rgb(_ color: Color, _ traits: UITraitCollection) -> (Double, Double, Double) {
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        UIColor(color).resolvedColor(with: traits).getRed(&r, green: &g, blue: &b, alpha: &a)
+        return (Double(r), Double(g), Double(b))
+    }
+
+    private func ratio(_ x: (Double, Double, Double), _ y: (Double, Double, Double)) -> Double {
+        func lum(_ c: (Double, Double, Double)) -> Double {
+            func ch(_ v: Double) -> Double { v <= 0.04045 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4) }
+            return 0.2126 * ch(c.0) + 0.7152 * ch(c.1) + 0.0722 * ch(c.2)
+        }
+        let (hi, lo) = (max(lum(x), lum(y)), min(lum(x), lum(y)))
+        return (hi + 0.05) / (lo + 0.05)
+    }
+}
