@@ -78,10 +78,7 @@ struct SupportExploreView: View {
                     ForEach(suggestedDestinations) { destination in
                         NavigationLink(value: destination) {
                             VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
-                                Image(systemName: destination.icon)
-                                    .font(.title2)
-                                    .foregroundStyle(SupportTheme.accent)
-                                    .accessibilityHidden(true)
+                                cardIcon(destination.icon, area: destination.area)
                                 Text(destination.title)
                                     .font(.headline)
                                     .foregroundStyle(SupportTheme.textPrimary)
@@ -136,12 +133,11 @@ struct SupportExploreView: View {
 
     /// A button rather than a NavigationLink: inside a List, links gain a disclosure chevron outside the card.
     private func categoryTile(_ section: SupportSection) -> some View {
-        Button { navigator.explorePath.append(section) } label: {
+        let area = categoryArea(section)
+        return Button { navigator.explorePath.append(section) } label: {
             VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
-                Image(systemName: categoryIcon(section))
-                    .font(.title2)
-                    .foregroundStyle(SupportTheme.accent)
-                    .accessibilityHidden(true)
+                // The card is the area's soft gradient, so the tile is ringed rather than tinted.
+                SupportAreaIconTile(icon: categoryIcon(section), area: area, ringed: true)
                 Text(section.title)
                     .font(.headline)
                     .foregroundStyle(SupportTheme.textPrimary)
@@ -149,7 +145,7 @@ struct SupportExploreView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .supportCard()
+            .supportAreaCard(area)
         }
         .buttonStyle(.plain)
     }
@@ -157,9 +153,34 @@ struct SupportExploreView: View {
     private func categoryPage(_ section: SupportSection) -> some View {
         List { destinationSection(section) }
             .supportScreen()
+            .safeAreaInset(edge: .top, spacing: 0) { SupportAreaStrip(area: categoryArea(section)) }
 
             .navigationTitle(section.title)
             .navigationBarTitleDisplayMode(.inline)
+    }
+
+    /// Each category takes the area that fits most of what it holds.
+    private func categoryArea(_ section: SupportSection) -> SupportTheme.Area {
+        switch section {
+        case .practices: return .exercises
+        case .programsAndPathways: return .quests
+        case .toolsAndExperiments: return .insights
+        case .peopleAndCircles: return .people
+        default: return .exercises
+        }
+    }
+
+    /// An area tile above a card's title; a destination with no area keeps the neutral accent symbol.
+    @ViewBuilder
+    private func cardIcon(_ icon: String, area: SupportTheme.Area?) -> some View {
+        if let area {
+            SupportAreaIconTile(icon: icon, area: area)
+        } else {
+            Image(systemName: icon)
+                .font(.title2)
+                .foregroundStyle(SupportTheme.accent)
+                .accessibilityHidden(true)
+        }
     }
 
     private func categoryIcon(_ section: SupportSection) -> String {
@@ -190,7 +211,8 @@ struct SupportExploreView: View {
                             SupportRowLabel(
                                 title: program.title,
                                 subtitle: String(localized: "Day \(enrollment.currentDay) of \(program.durationDays)"),
-                                icon: "book.fill"
+                                icon: "book.fill",
+                                area: .quests
                             )
                         }
                     } else {
@@ -198,7 +220,8 @@ struct SupportExploreView: View {
                             SupportRowLabel(
                                 title: String(localized: "Continue your program"),
                                 subtitle: String(localized: "Day \(enrollment.currentDay)"),
-                                icon: "book.fill"
+                                icon: "book.fill",
+                                area: .quests
                             )
                         }
                     }
@@ -232,7 +255,8 @@ struct SupportExploreView: View {
                     SupportRowLabel(
                         title: String(localized: "Invite a buddy"),
                         subtitle: String(localized: "Send an invitation to someone you trust"),
-                        icon: "person.badge.plus"
+                        icon: "person.badge.plus",
+                        area: .people
                     )
                 }
                 .buttonStyle(.plain)
@@ -250,7 +274,8 @@ struct SupportExploreView: View {
                 SupportRowLabel(
                     title: circle.name,
                     subtitle: String(localized: "Your circle · \(circle.memberCount) members"),
-                    icon: "person.3.fill"
+                    icon: "person.3.fill",
+                    area: .people
                 )
             }
         }
@@ -285,7 +310,8 @@ struct SupportExploreView: View {
         let label = SupportRowLabel(
             title: destination.title,
             subtitle: showsSection ? destination.section.title : destination.subtitle,
-            icon: destination.icon
+            icon: destination.icon,
+            area: destination.area
         )
         if destination.isPinnable {
             let pin = SupportPin(destination)
@@ -368,7 +394,8 @@ struct ReplacePinSheet: View {
                         } label: {
                             SupportRowLabel(
                                 title: String(localized: "Replace \(pinned.record?.title ?? pinned.destination.title)"),
-                                icon: pinned.destination.icon
+                                icon: pinned.destination.icon,
+                                area: pinned.destination.area
                             )
                         }
                         .buttonStyle(.plain)
@@ -407,7 +434,8 @@ struct SupportJournalHub: View {
                     SupportRowLabel(
                         title: String(localized: "Text journal"),
                         subtitle: String(localized: "Write and revisit entries"),
-                        icon: "book.closed"
+                        icon: "book.closed",
+                        area: .journal
                     )
                 }
                 NavigationLink {
@@ -416,7 +444,8 @@ struct SupportJournalHub: View {
                     SupportRowLabel(
                         title: String(localized: "Voice journal"),
                         subtitle: String(localized: "Record an entry. The microphone starts only when you ask."),
-                        icon: "mic.fill"
+                        icon: "mic.fill",
+                        area: .voice
                     )
                 }
                 NavigationLink {
@@ -425,7 +454,8 @@ struct SupportJournalHub: View {
                     SupportRowLabel(
                         title: String(localized: "Voice journal history"),
                         subtitle: String(localized: "Saved recordings and other creative work"),
-                        icon: "waveform"
+                        icon: "waveform",
+                        area: .voice
                     )
                 }
             } footer: {
@@ -478,7 +508,8 @@ struct SupportPathwaysHub: View {
                     SupportRowLabel(
                         title: String(localized: "Start a new pathway"),
                         subtitle: String(localized: "Browse life transitions"),
-                        icon: "signpost.right.fill"
+                        icon: "signpost.right.fill",
+                        area: .quests
                     )
                 }
             }

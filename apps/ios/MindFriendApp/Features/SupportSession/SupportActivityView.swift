@@ -405,6 +405,8 @@ struct SupportActivityChoiceButton: View {
     var origin: SupportEntryOrigin = .explore
     var title: String?
     var icon: String?
+    /// With an icon, tints the symbol's tile in this area's colors.
+    var area: SupportTheme.Area?
     @State private var pendingSession: UUID?
     @State private var showPreviousChoice = false
     @State private var isWorking = false
@@ -414,7 +416,11 @@ struct SupportActivityChoiceButton: View {
         Button { start(previous: nil) } label: {
             if let icon {
                 VStack(spacing: SupportTheme.Spacing.xs) {
-                    Image(systemName: icon).font(.title2.weight(.medium)).accessibilityHidden(true)
+                    if let area {
+                        SupportAreaIconTile(icon: icon, area: area)
+                    } else {
+                        Image(systemName: icon).font(.title2.weight(.medium)).accessibilityHidden(true)
+                    }
                     Text(title ?? template.title).fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

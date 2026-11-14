@@ -155,6 +155,33 @@ enum SupportDestination: String, Codable, CaseIterable, Hashable, Identifiable {
         }
     }
 
+    /// The area whose color marks this destination (icon tiles, header strip). Settings, privacy and
+    /// memory-settings destinations have none and stay neutral.
+    var area: SupportTheme.Area? {
+        switch self {
+        case .sleep, .sleepTracking:
+            return .sleep
+        case .quickBreathing, .exerciseLibrary, .microMoments, .generatedForYou, .liveSessions:
+            return .exercises
+        case .sensoryToolkit:
+            return .sensory
+        case .journal, .privateVault, .memoryVault, .creativeHub, .quote:
+            return .journal
+        case .dailyQuest, .questArcs, .programs, .therapeuticPrograms, .pathways, .achievements, .badges,
+             .certificates, .streaks, .journey:
+            return .quests
+        case .insightLab, .weeklyInsights, .weeklyRecap, .outcomes, .moodHistory, .moodPrediction, .capacity,
+             .wellbeingDebt, .warningSigns, .forYou, .dailyBriefing, .plans, .habits, .stories:
+            return .insights
+        case .circles, .buddy, .mentorship, .peerSupport, .partnerMode, .family, .seasonalEvents, .therapists:
+            return .people
+        case .safetyPlan:
+            return .safety
+        default:
+            return nil
+        }
+    }
+
     var title: String {
         switch self {
         case .exerciseLibrary: return String(localized: "Exercises")
@@ -999,22 +1026,85 @@ struct SupportRootNavigation<Content: View>: View {
 
 // MARK: - Components
 
+/// A rounded icon tile in an area's colors: the area's tint behind a symbol in its ink. `ringed` is for a
+/// tile on a tinted card, where the tint itself would disappear: a surface fill with an ink ring instead.
+/// The tile grows with Dynamic Type up to a limit, and its symbol stops growing before the tile does.
+struct SupportAreaIconTile: View {
+    let icon: String
+    let area: SupportTheme.Area
+    let ringed: Bool
+    @ScaledMetric(relativeTo: .body) private var side: CGFloat = 36
+
+    init(icon: String, area: SupportTheme.Area, ringed: Bool = false) {
+        self.icon = icon
+        self.area = area
+        self.ringed = ringed
+    }
+
+    var body: some View {
+        let palette = area.palette
+        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+        Image(systemName: icon)
+            .font(.body.weight(.semibold))
+            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+            .foregroundStyle(palette.ink)
+            .frame(width: min(side, 60), height: min(side, 60))
+            .background(ringed ? SupportTheme.surface : palette.tint, in: shape)
+            .overlay { shape.strokeBorder(palette.ink, lineWidth: ringed ? 1.5 : 0) }
+            .accessibilityHidden(true)
+    }
+}
+
+/// A thin strip in an area's color under the navigation bar of a destination reached from Explore or Today.
+struct SupportAreaStrip: View {
+    let area: SupportTheme.Area
+
+    var body: some View {
+        LinearGradient(colors: [area.palette.ink, area.palette.tint], startPoint: .leading, endPoint: .trailing)
+            .frame(height: 4)
+            .accessibilityHidden(true)
+    }
+}
+
+/// An opaque content card with an area's soft gradient behind primary text.
+struct SupportAreaCardStyle: ViewModifier {
+    let area: SupportTheme.Area
+
+    func body(content: Content) -> some View {
+        content
+            .padding(SupportTheme.Spacing.m)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(area.palette.softGradient, in: RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
+    }
+}
+
+extension View {
+    func supportAreaCard(_ area: SupportTheme.Area) -> some View { modifier(SupportAreaCardStyle(area: area)) }
+}
+
 /// Icon + title + optional subtitle row label. Minimum 44pt target, wraps at large Dynamic Type sizes.
+/// With an `area` the icon sits in that area's tile; without one it keeps the neutral accent symbol.
+/// `onTint` is for a row on an area-tinted card.
 struct SupportRowLabel: View {
     let title: String
     var subtitle: String?
     let icon: String
+    var area: SupportTheme.Area?
+    var onTint = false
 
     init(_ destination: SupportDestination) {
         title = destination.title
         subtitle = destination.subtitle
         icon = destination.icon
+        area = destination.area
     }
 
-    init(title: String, subtitle: String? = nil, icon: String) {
+    init(title: String, subtitle: String? = nil, icon: String, area: SupportTheme.Area? = nil, onTint: Bool = false) {
         self.title = title
         self.subtitle = subtitle
         self.icon = icon
+        self.area = area
+        self.onTint = onTint
     }
 
     var body: some View {
@@ -1032,10 +1122,14 @@ struct SupportRowLabel: View {
                 }
             }
         } icon: {
-            Image(systemName: icon)
-                .foregroundStyle(SupportTheme.accent)
+            if let area {
+                SupportAreaIconTile(icon: icon, area: area, ringed: onTint)
+            } else {
+                Image(systemName: icon)
+                    .foregroundStyle(SupportTheme.accent)
+            }
         }
-        .labelStyle(SupportRowLabelStyle())
+        .labelStyle(SupportRowLabelStyle(tiled: area != nil))
         .frame(minHeight: SupportTheme.minimumTarget, alignment: .leading)
         .accessibilityElement(children: .combine)
     }
@@ -1043,13 +1137,20 @@ struct SupportRowLabel: View {
 
 /// A fixed icon column, scaled with Dynamic Type, beside the title and subtitle. In a List the automatic
 /// label style flows each title text under the icon at accessibility sizes, which indented a subtitle's
-/// first line and wrapped the rest back to the row's edge.
+/// first line and wrapped the rest back to the row's edge. An area tile sizes itself.
 private struct SupportRowLabelStyle: LabelStyle {
     @ScaledMetric(relativeTo: .body) private var iconWidth: CGFloat = 28
+    let tiled: Bool
+
+    init(tiled: Bool) { self.tiled = tiled }
 
     func makeBody(configuration: LabelStyleConfiguration) -> some View {
         HStack(spacing: SupportTheme.Spacing.s) {
-            configuration.icon.frame(width: iconWidth)
+            if tiled {
+                configuration.icon
+            } else {
+                configuration.icon.frame(width: iconWidth)
+            }
             configuration.title
         }
     }
@@ -1088,6 +1189,9 @@ struct SupportDestinationView: View {
 
     var body: some View {
         content.environment(\.supportRootEmbedded, true).supportScreen()
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if let area = destination.area { SupportAreaStrip(area: area) }
+            }
             .toolbar {
                 if destination.isPinnable {
                     ToolbarItem(placement: .primaryAction) {

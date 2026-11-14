@@ -148,7 +148,8 @@ struct SupportYouView: View {
                 SupportRowLabel(
                     title: SupportDestination.journal.title,
                     subtitle: String(localized: "Text and voice entries"),
-                    icon: SupportDestination.journal.icon
+                    icon: SupportDestination.journal.icon,
+                    area: SupportDestination.journal.area
                 )
             }
             Button {
