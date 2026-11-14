@@ -137,14 +137,14 @@ struct SupportTodayView: View {
                 : AnyLayout(VStackLayout(spacing: SupportTheme.Spacing.s))
             layout {
                 NavigationLink { MoodCheckInView().environment(\.supportRootEmbedded, true) } label: {
-                    quickLabel(Self.quickTitles[0], icon: "face.smiling")
+                    quickLabel(Self.quickTitles[0], icon: "face.smiling", area: .insights)
                 }
                 .accessibilityLabel("Check in with yourself")
                 NavigationLink { SupportDestinationView(destination: .quickBreathing) } label: {
-                    quickLabel(Self.quickTitles[1], icon: "wind")
+                    quickLabel(Self.quickTitles[1], icon: "wind", area: .exercises)
                 }
                 SupportActivityChoiceButton(template: .untangleThoughtV1, origin: .today,
-                    title: Self.quickTitles[2], icon: "text.bubble")
+                    title: Self.quickTitles[2], icon: "text.bubble", area: .journal)
             }
             .buttonStyle(.supportSecondary)
             .fixedSize(horizontal: false, vertical: true)
@@ -156,10 +156,9 @@ struct SupportTodayView: View {
         }
     }
 
-    private func quickLabel(_ title: String, icon: String) -> some View {
+    private func quickLabel(_ title: String, icon: String, area: SupportTheme.Area) -> some View {
         VStack(spacing: SupportTheme.Spacing.xs) {
-            // Symbol weight matches the medium-weight label beside it.
-            Image(systemName: icon).font(.title2.weight(.medium)).accessibilityHidden(true)
+            SupportAreaIconTile(icon: icon, area: area)
             Text(title).fixedSize(horizontal: false, vertical: true)
         }
         // Equal-height tiles: each fills the row, which takes the tallest tile's height, with its content centred.
@@ -174,11 +173,13 @@ struct SupportTodayView: View {
                 NavigationLink { QuestDetailView(quest: quest) } label: {
                     SupportRowLabel(title: quest.template.title,
                         subtitle: quest.status == .completed ? "Today's quest is complete" : "Today's quest",
-                        icon: quest.status == .completed ? "checkmark.circle" : "leaf")
+                        icon: quest.status == .completed ? "checkmark.circle" : "leaf",
+                        area: .quests, onTint: true)
                 }
             } else {
                 NavigationLink { SupportDestinationView(destination: .dailyQuest) } label: {
-                    SupportRowLabel(title: "Today's quest", subtitle: "Choose something that fits your day", icon: "leaf")
+                    SupportRowLabel(title: "Today's quest", subtitle: "Choose something that fits your day", icon: "leaf",
+                        area: .quests, onTint: true)
                 }
             }
             if let stats = appState.currentUser?.stats {
@@ -186,9 +187,10 @@ struct SupportTodayView: View {
                 Divider().overlay(SupportTheme.separator)
                 VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                     Text("Level \(stats.level) · \(stats.levelTitle)").font(.headline)
+                        .foregroundStyle(SupportTheme.Area.quests.palette.ink)
                     Text("\(stats.xpTotal) XP total").font(.subheadline).foregroundStyle(SupportTheme.textSecondary)
                     ProgressView(value: min(1, max(0, level.progress)))
-                        .tint(SupportTheme.accent)
+                        .tint(SupportTheme.Area.quests.palette.ink)
                         .accessibilityLabel("Progress to next level")
                     Text(level.level < 50 ? "\(level.xpToNextLevel) XP to the next level" : "Highest level reached")
                         .font(.caption).foregroundStyle(SupportTheme.textSecondary)
@@ -200,7 +202,7 @@ struct SupportTodayView: View {
         }
         .buttonStyle(.plain)
         .foregroundStyle(SupportTheme.textPrimary)
-        .supportCard()
+        .supportAreaCard(.quests)
     }
 
     private var pinnedSection: some View {
@@ -219,7 +221,8 @@ struct SupportTodayView: View {
             ForEach(pins.pins) { pin in
                 VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
                     NavigationLink { SupportPinnedDestinationView(pin: pin) } label: {
-                        SupportRowLabel(title: pin.title, subtitle: pin.destination.subtitle, icon: pin.destination.icon)
+                        SupportRowLabel(title: pin.title, subtitle: pin.destination.subtitle, icon: pin.destination.icon,
+                            area: pin.destination.area)
                     }
                     .buttonStyle(.plain)
                     if isEditingPins {
