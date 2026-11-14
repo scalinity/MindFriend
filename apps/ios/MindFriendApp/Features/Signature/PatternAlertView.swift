@@ -63,12 +63,12 @@ struct PatternAlertView: View {
         VStack(spacing: SupportTheme.Spacing.s) {
             ZStack {
                 Circle()
-                    .fill(severityGradient)
+                    .fill(severityFill)
                     .frame(width: 80, height: 80)
 
                 Image(systemName: severityIcon)
                     .font(.system(.largeTitle))
-                    .foregroundStyle(SupportTheme.textPrimary)
+                    .foregroundStyle(severityIconColor)
             }
 
             Text(alert.severity.displayName)
@@ -87,21 +87,30 @@ struct PatternAlertView: View {
                 .font(.caption)
                 .padding(.horizontal, SupportTheme.Spacing.s)
                 .padding(.vertical, SupportTheme.Spacing.xxs)
-                .background(SupportTheme.surface)
-                .foregroundStyle(SupportTheme.accent)
+                .background(SupportTheme.Area.quests.palette.tint)
+                .foregroundStyle(SupportTheme.Status.caution)
                 .cornerRadius(SupportTheme.cardRadius)
             }
         }
     }
 
-    private var severityGradient: Color {
+    /// Mild is a calm warm tint, moderate the caution color, severe a deep rose. Red stays
+    /// reserved for crisis actions.
+    private var severityFill: AnyShapeStyle {
         switch alert.severity {
         case .mild:
-            return SupportTheme.surface
+            return AnyShapeStyle(SupportTheme.Area.quests.palette.softGradient)
         case .moderate:
-            return SupportTheme.surface
+            return AnyShapeStyle(SupportTheme.Area.quests.palette.heroGradient)
         case .severe:
-            return SupportTheme.surface
+            return AnyShapeStyle(SupportTheme.Area.copingKits.palette.heroGradient)
+        }
+    }
+
+    private var severityIconColor: Color {
+        switch alert.severity {
+        case .mild: return SupportTheme.Area.quests.palette.ink
+        case .moderate, .severe: return SupportTheme.onHero
         }
     }
 
@@ -166,7 +175,7 @@ struct PatternAlertView: View {
                 if let component = SignatureComponent.component(for: active.signal) {
                     HStack {
                         Image(systemName: component.category.icon)
-                            .foregroundStyle(SupportTheme.accent)
+                            .foregroundStyle(SupportTheme.Area.journal.palette.ink)
                             .frame(minWidth: 24)
 
                         VStack(alignment: .leading) {
@@ -202,9 +211,9 @@ struct PatternAlertView: View {
 
     private func signalColor(_ value: Double) -> Color {
         switch value {
-        case 0.8...: return .red
-        case 0.6...: return SupportTheme.accent
-        default: return SupportTheme.accent
+        case 0.8...: return SupportTheme.Area.copingKits.palette.ink
+        case 0.6...: return SupportTheme.Status.caution
+        default: return SupportTheme.textSecondary
         }
     }
 
@@ -251,19 +260,19 @@ struct PatternAlertView: View {
         switch type {
         case .exercise:
             Image(systemName: "figure.mind.and.body")
-                .foregroundStyle(SupportTheme.accent)
+                .foregroundStyle(SupportTheme.Area.journal.palette.ink)
         case .chat:
             Image(systemName: "bubble.left.and.bubble.right.fill")
-                .foregroundStyle(SupportTheme.accent)
+                .foregroundStyle(SupportTheme.Area.voice.palette.ink)
         case .socialConnection:
             Image(systemName: "person.2.fill")
-                .foregroundStyle(SupportTheme.accent)
+                .foregroundStyle(SupportTheme.Status.positive)
         case .crisisResources:
             Image(systemName: "phone.fill")
                 .foregroundStyle(.red)
         case .journal:
             Image(systemName: "book.fill")
-                .foregroundStyle(SupportTheme.accent)
+                .foregroundStyle(SupportTheme.Status.caution)
         }
     }
 
@@ -331,11 +340,11 @@ struct PatternAlertView: View {
 
                 if selectedFeedback == feedback {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(SupportTheme.accent)
+                        .foregroundStyle(SupportTheme.Area.journal.palette.ink)
                 }
             }
             .padding(SupportTheme.Spacing.m)
-            .background(selectedFeedback == feedback ? SupportTheme.accent.opacity(0.1) : SupportTheme.separator)
+            .background(selectedFeedback == feedback ? SupportTheme.Area.journal.palette.tint : SupportTheme.separator)
             .cornerRadius(SupportTheme.controlRadius)
         }
         .buttonStyle(.plain)
@@ -352,16 +361,16 @@ struct PatternAlertView: View {
 
     private func feedbackColor(_ feedback: AlertFeedback) -> Color {
         switch feedback {
-        case .accuratePrediction, .helpedPrevent: return SupportTheme.accent
-        case .falseAlarm: return SupportTheme.accent
-        case .missedPattern: return .red
+        case .accuratePrediction, .helpedPrevent: return SupportTheme.Status.positive
+        case .falseAlarm: return SupportTheme.Status.caution
+        case .missedPattern: return SupportTheme.Area.copingKits.palette.ink
         }
     }
 
     private var feedbackGivenCard: some View {
         HStack {
             Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(SupportTheme.accent)
+                .foregroundStyle(SupportTheme.Status.positive)
 
             VStack(alignment: .leading) {
                 Text("Feedback Received")

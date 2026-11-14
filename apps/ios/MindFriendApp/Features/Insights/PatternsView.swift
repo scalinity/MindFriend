@@ -128,10 +128,11 @@ struct EngagementStateCard: View {
             HStack {
                 Label("Engagement", systemImage: "heart.fill")
                     .font(.headline)
+                    .foregroundColor(SupportTheme.Area.insights.palette.ink)
                 Spacer()
                 Text(state.currentState.displayName)
                     .font(.subheadline)
-                    .foregroundColor(SupportTheme.accent)
+                    .foregroundColor(state.currentState.color)
                     .padding(.horizontal, SupportTheme.Spacing.xs)
                     .padding(.vertical, SupportTheme.Spacing.xxs)
                     .background(SupportTheme.surface)
@@ -155,10 +156,10 @@ struct EngagementStateCard: View {
             if state.moodDeclineDetected {
                 HStack {
                     Image(systemName: "arrow.down.heart.fill")
-                        .foregroundColor(SupportTheme.accent)
+                        .foregroundColor(SupportTheme.Status.caution)
                     Text("Recent mood decline detected")
                         .font(.subheadline)
-                        .foregroundColor(SupportTheme.accent)
+                        .foregroundColor(SupportTheme.Status.caution)
                 }
             }
 
@@ -166,10 +167,10 @@ struct EngagementStateCard: View {
             if daysSinceLastActivity > 0 {
                 HStack {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundColor(SupportTheme.accent)
+                        .foregroundColor(SupportTheme.Status.caution)
                     Text("\(daysSinceLastActivity) day\(daysSinceLastActivity > 1 ? "s" : "") since last check-in")
                         .font(.subheadline)
-                        .foregroundColor(SupportTheme.accent)
+                        .foregroundColor(SupportTheme.Status.caution)
                 }
             }
         }
@@ -210,7 +211,7 @@ struct PatternCard: View {
             HStack(alignment: .top) {
                 Image(systemName: pattern.patternType.icon)
                     .font(.title2)
-                    .foregroundColor(SupportTheme.accent)
+                    .foregroundColor(pattern.patternType.color)
                     .frame(width: 32)
 
                 VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
@@ -265,7 +266,7 @@ struct PatternCard: View {
             } else {
                 HStack {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(SupportTheme.accent)
+                        .foregroundColor(SupportTheme.Status.positive)
                     Text("Acknowledged")
                         .font(.caption)
                         .foregroundColor(SupportTheme.textSecondary)
@@ -277,11 +278,11 @@ struct PatternCard: View {
 
     private var confidenceColor: Color {
         if pattern.confidence >= 0.8 {
-            return SupportTheme.accent
+            return SupportTheme.Status.positive
         } else if pattern.confidence >= 0.6 {
-            return SupportTheme.accent
+            return SupportTheme.Status.caution
         } else {
-            return SupportTheme.accent
+            return SupportTheme.textSecondary
         }
     }
 }
@@ -292,11 +293,11 @@ extension PatternType {
     var color: Color {
         switch self {
         case .dayOfWeek:
-            return SupportTheme.accent
+            return SupportTheme.Area.voice.palette.ink
         case .exerciseCorrelation:
-            return SupportTheme.accent
+            return SupportTheme.Status.positive
         case .questPreference:
-            return SupportTheme.accent
+            return SupportTheme.Status.caution
         }
     }
 }
@@ -307,17 +308,17 @@ extension EngagementState {
     var color: Color {
         switch self {
         case .highlyActive:
-            return SupportTheme.accent
+            return SupportTheme.Status.positive
         case .active:
-            return SupportTheme.accent
+            return SupportTheme.Area.voice.palette.ink
         case .moderate:
-            return SupportTheme.accent
+            return SupportTheme.Area.exercises.palette.ink
         case .drifting:
-            return SupportTheme.accent
+            return SupportTheme.Status.caution
         case .lapsed:
-            return SupportTheme.accent
+            return SupportTheme.Area.copingKits.palette.ink
         case .hibernating:
-            return SupportTheme.accent
+            return SupportTheme.textSecondary
         }
     }
 }

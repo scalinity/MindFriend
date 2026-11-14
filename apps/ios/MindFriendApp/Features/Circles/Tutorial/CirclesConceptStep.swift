@@ -18,7 +18,7 @@ struct CirclesConceptStep: View {
     var body: some View {
         TutorialStepView(
             icon: "person.2.fill",
-            iconColor: SupportTheme.accent,
+            iconColor: SupportTheme.Area.people.palette.ink,
             headline: "What Are Circles?",
             subheadline: "Small accountability groups (2-6 people) who support each other's wellness journey.",
             primaryAction: onNext,
@@ -29,7 +29,7 @@ struct CirclesConceptStep: View {
                 ZStack {
                     // Background circle
                     Circle()
-                        .stroke(SupportTheme.accent.opacity(0.2), lineWidth: 3)
+                        .stroke(SupportTheme.Area.people.palette.ink.opacity(0.2), lineWidth: 3)
                         .frame(width: 150, height: 150)
 
                     // Members
@@ -59,9 +59,9 @@ struct CirclesConceptStep: View {
 
                 // Benefits
                 VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
-                    CircleBenefitRow(icon: "heart.fill", color: SupportTheme.accent, text: "Share daily check-ins")
-                    CircleBenefitRow(icon: "hands.sparkles.fill", color: SupportTheme.accent, text: "Give and receive encouragement")
-                    CircleBenefitRow(icon: "checkmark.circle.fill", color: SupportTheme.accent, text: "Stay accountable together")
+                    CircleBenefitRow(icon: "heart.fill", color: SupportTheme.Area.people.palette.ink, text: "Share daily check-ins")
+                    CircleBenefitRow(icon: "hands.sparkles.fill", color: SupportTheme.Area.journal.palette.ink, text: "Give and receive encouragement")
+                    CircleBenefitRow(icon: "checkmark.circle.fill", color: SupportTheme.Status.positive, text: "Stay accountable together")
                 }
                 .padding(SupportTheme.Spacing.s)
                 .background(SupportTheme.surface)
@@ -72,7 +72,10 @@ struct CirclesConceptStep: View {
         }
     }
 
-    private let memberColors: [Color] = [SupportTheme.accent, SupportTheme.accent, SupportTheme.accent, SupportTheme.accent, SupportTheme.accent]
+    private let memberColors: [Color] = [
+        SupportTheme.Area.people.palette.ink, SupportTheme.Area.journal.palette.ink, SupportTheme.Area.voice.palette.ink,
+        SupportTheme.Area.quests.palette.ink, SupportTheme.Status.positive
+    ]
 }
 
 private struct CircleBenefitRow: View {

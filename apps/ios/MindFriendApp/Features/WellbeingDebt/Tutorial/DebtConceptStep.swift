@@ -19,7 +19,7 @@ struct DebtConceptStep: View {
     var body: some View {
         TutorialStepLayout(
             icon: "scalemass.fill",
-            iconColor: SupportTheme.accent,
+            iconColor: SupportTheme.Area.voice.palette.ink,
             headline: "Your Wellbeing Bank Account",
             subheadline: "Think of your energy like a bank account with deposits and withdrawals.",
             primaryAction: onNext,
@@ -32,7 +32,7 @@ struct DebtConceptStep: View {
                     VStack(spacing: SupportTheme.Spacing.xs) {
                         Image(systemName: "plus.circle.fill")
                             .font(.system(size: 36))
-                            .foregroundStyle(SupportTheme.accent)
+                            .foregroundStyle(SupportTheme.Status.positive)
                             .scaleEffect(reduceMotion ? 1 : (showDeposit ? 1.0 : 0.5))
                             .opacity(showDeposit ? 1.0 : 0.3)
 
@@ -45,7 +45,7 @@ struct DebtConceptStep: View {
                     VStack(spacing: SupportTheme.Spacing.xs) {
                         Image(systemName: "minus.circle.fill")
                             .font(.system(size: 36))
-                            .foregroundStyle(SupportTheme.accent)
+                            .foregroundStyle(SupportTheme.Status.caution)
                             .scaleEffect(reduceMotion ? 1 : (showWithdrawal ? 1.0 : 0.5))
                             .opacity(showWithdrawal ? 1.0 : 0.3)
 

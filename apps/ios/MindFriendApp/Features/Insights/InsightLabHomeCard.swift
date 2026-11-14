@@ -51,9 +51,9 @@ struct InsightLabHomeCard: View {
                 if let actionType = experiment.actionTypeEnum {
                     Image(systemName: actionType.icon)
                         .font(.title2)
-                        .foregroundStyle(SupportTheme.onAccent)
+                        .foregroundStyle(SupportTheme.onHero)
                         .frame(width: 44, height: 44)
-                        .background(SupportTheme.accent)
+                        .background(SupportTheme.Area.insights.palette.heroGradient)
                         .clipShape(RoundedRectangle(cornerRadius: SupportTheme.controlRadius))
                 }
 
@@ -77,7 +77,7 @@ struct InsightLabHomeCard: View {
                         .stroke(SupportTheme.separator, lineWidth: 4)
                     Circle()
                         .trim(from: 0, to: Double(experiment.completedDays) / 7)
-                        .stroke(SupportTheme.accent, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                        .stroke(SupportTheme.Status.positive, style: StrokeStyle(lineWidth: 4, lineCap: .round))
                         .rotationEffect(.degrees(-90))
 
                     Text("\(experiment.completedDays)/7")
@@ -112,7 +112,7 @@ struct InsightLabHomeCard: View {
             // Icon
             Image(systemName: "sparkles")
                 .font(.title2)
-                .foregroundStyle(SupportTheme.accent)
+                .foregroundStyle(SupportTheme.Area.insights.palette.ink)
 
             VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                 Text("Run a 7-day experiment")

@@ -127,7 +127,7 @@ struct WellbeingDebtDashboardView: View {
                     VStack(spacing: SupportTheme.Spacing.m) {
                         Image(systemName: "exclamationmark.triangle")
                             .font(.largeTitle)
-                            .foregroundStyle(SupportTheme.accent)
+                            .foregroundStyle(SupportTheme.Status.caution)
                         Text("No Data Available")
                             .font(.headline)
                             .accessibilityAddTraits(.isHeader)
@@ -299,7 +299,7 @@ struct WellbeingDebtDashboardView: View {
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
                     Rectangle()
-                        .fill(SupportTheme.field)
+                        .fill(SupportTheme.separator)
                         .frame(height: 8)
                         .clipShape(Capsule())
 
@@ -313,13 +313,16 @@ struct WellbeingDebtDashboardView: View {
         }
     }
 
-    private func progressGradient(_ progress: Double) -> Color {
+    /// Green while well inside the reference threshold, easing to the caution color as it nears.
+    private func progressGradient(_ progress: Double) -> LinearGradient {
+        let positive = SupportTheme.Status.positive
+        let caution = SupportTheme.Status.caution
         if progress < 0.7 {
-            return SupportTheme.accent
+            return LinearGradient(colors: [positive, positive], startPoint: .leading, endPoint: .trailing)
         } else if progress < 0.9 {
-            return SupportTheme.accent
+            return LinearGradient(colors: [positive, caution], startPoint: .leading, endPoint: .trailing)
         } else {
-            return SupportTheme.accent
+            return LinearGradient(colors: [caution, caution], startPoint: .leading, endPoint: .trailing)
         }
     }
 
@@ -376,9 +379,9 @@ struct WellbeingDebtDashboardView: View {
 
     private func trendColor(_ direction: DebtTrendDirection) -> Color {
         switch direction {
-        case .improving: return SupportTheme.accent
-        case .worsening: return .red
-        case .stable: return SupportTheme.accent
+        case .improving: return SupportTheme.Status.positive
+        case .worsening: return SupportTheme.Status.caution
+        case .stable: return SupportTheme.Area.voice.palette.ink
         }
     }
 
@@ -389,7 +392,7 @@ struct WellbeingDebtDashboardView: View {
         VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             HStack {
                 Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(SupportTheme.accent)
+                    .foregroundStyle(SupportTheme.Status.caution)
 
                 Text(status.severity == .danger ? "Review this pattern" : "Approaching Threshold")
                     .font(.headline)
@@ -418,7 +421,7 @@ struct WellbeingDebtDashboardView: View {
             }
         }
         .padding()
-        .background(SupportTheme.surface)
+        .background(SupportTheme.Area.quests.palette.tint)
         .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
     }
 
@@ -497,7 +500,7 @@ struct WellbeingDebtDashboardView: View {
                         Text(stat.category)
                         Spacer()
                         Text("\(Int(truncating: stat.totalAmount as NSDecimalNumber)) pts")
-                            .foregroundStyle(SupportTheme.textSecondary)
+                            .foregroundStyle(SupportTheme.Status.caution)
                     }
                 }
             }
@@ -509,7 +512,7 @@ struct WellbeingDebtDashboardView: View {
                         Text(stat.category)
                         Spacer()
                         Text("+\(Int(truncating: stat.totalAmount as NSDecimalNumber)) pts")
-                            .foregroundStyle(SupportTheme.accent)
+                            .foregroundStyle(SupportTheme.Status.positive)
                     }
                 }
             }
@@ -607,9 +610,8 @@ struct WellbeingDebtDashboardView: View {
 
     private func severityColor(_ severity: ThresholdSeverity) -> Color {
         switch severity {
-        case .safe: return SupportTheme.accent
-        case .warning: return SupportTheme.accent
-        case .danger: return .red
+        case .safe: return SupportTheme.Status.positive
+        case .warning, .danger: return SupportTheme.Status.caution
         }
     }
 

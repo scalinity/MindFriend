@@ -85,7 +85,7 @@ struct SafetyPlanCondensedView: View {
     private var staleBanner: some View {
         HStack(spacing: SupportTheme.Spacing.s) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(SupportTheme.accent)
+                .foregroundStyle(SupportTheme.Area.quests.palette.ink)
             Text("This safety plan may be outdated. Connect to refresh.")
                 .font(.caption)
                 .foregroundStyle(SupportTheme.textSecondary)
@@ -102,7 +102,7 @@ struct SafetyPlanCondensedView: View {
         VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             HStack {
                 Image(systemName: "eye.fill")
-                    .foregroundStyle(SupportTheme.accent)
+                    .foregroundStyle(SupportTheme.Area.quests.palette.ink)
                 Text("Recognizing What's Happening")
                     .font(.headline)
                     .accessibilityAddTraits(.isHeader)
@@ -112,7 +112,7 @@ struct SafetyPlanCondensedView: View {
                 ForEach(payload.warningSigns.prefix(3)) { sign in
                     HStack(spacing: SupportTheme.Spacing.xs) {
                         Circle()
-                            .fill(SupportTheme.accent.opacity(0.3))
+                            .fill(SupportTheme.Area.quests.palette.ink.opacity(0.3))
                             .frame(width: 8, height: 8)
                         Text(sign.text)
                             .font(.subheadline)
@@ -138,7 +138,7 @@ struct SafetyPlanCondensedView: View {
         VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             HStack {
                 Image(systemName: "leaf.fill")
-                    .foregroundStyle(SupportTheme.accent)
+                    .foregroundStyle(SupportTheme.Status.positive)
                 Text("Quick Actions You Can Take")
                     .font(.headline)
                     .accessibilityAddTraits(.isHeader)
@@ -171,7 +171,7 @@ struct SafetyPlanCondensedView: View {
         VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
             HStack {
                 Image(systemName: "person.2.fill")
-                    .foregroundStyle(SupportTheme.accent)
+                    .foregroundStyle(SupportTheme.Area.safety.palette.ink)
                 Text("People Who Can Help")
                     .font(.headline)
                     .accessibilityAddTraits(.isHeader)
@@ -260,7 +260,7 @@ struct CopingActionRow: View {
         } label: {
             HStack {
                 Image(systemName: coping.category.icon)
-                    .foregroundStyle(SupportTheme.accent)
+                    .foregroundStyle(SupportTheme.Status.positive)
                     .frame(minWidth: 24)
 
                 VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
@@ -279,7 +279,7 @@ struct CopingActionRow: View {
                 Spacer()
 
                 Image(systemName: "play.circle.fill")
-                    .foregroundStyle(SupportTheme.accent)
+                    .foregroundStyle(SupportTheme.Area.safety.palette.ink)
             }
             .padding(.vertical, SupportTheme.Spacing.xs)
             .contentShape(Rectangle())

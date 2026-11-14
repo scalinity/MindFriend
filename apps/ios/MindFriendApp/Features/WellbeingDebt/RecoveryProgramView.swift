@@ -98,7 +98,7 @@ struct RecoveryProgramView: View {
             VStack(spacing: SupportTheme.Spacing.xs) {
                 Image(systemName: "heart.circle.fill")
                     .font(.system(size: 60))
-                    .foregroundStyle(SupportTheme.accent)
+                    .foregroundStyle(SupportTheme.Area.voice.palette.ink)
 
                 Text("Start Recovery Program")
                     .font(.title2.bold())
@@ -163,11 +163,11 @@ struct RecoveryProgramView: View {
 
                 if selectedIntensity == intensity {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(SupportTheme.accent)
+                        .foregroundStyle(SupportTheme.Area.voice.palette.ink)
                 }
             }
             .padding()
-            .background(selectedIntensity == intensity ? SupportTheme.accent.opacity(0.1) : Color.clear)
+            .background(selectedIntensity == intensity ? SupportTheme.Area.voice.palette.tint : Color.clear)
             .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
         }
         .buttonStyle(.plain)
@@ -194,7 +194,7 @@ struct RecoveryProgramView: View {
             HStack {
                 Image(systemName: "flag.checkered.circle.fill")
                     .font(.title2)
-                    .foregroundStyle(SupportTheme.accent)
+                    .foregroundStyle(SupportTheme.Status.positive)
 
                 VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
                     Text("7-Day Recovery Plan")
@@ -247,7 +247,7 @@ struct RecoveryProgramView: View {
 
                         Text("Focus: \(formatFocusArea(daily.focusArea))")
                             .font(.caption.bold())
-                            .foregroundStyle(SupportTheme.accent)
+                            .foregroundStyle(SupportTheme.Area.voice.palette.ink)
                     }
 
                     Spacer()
@@ -277,7 +277,7 @@ struct RecoveryProgramView: View {
 
                         Text("+\(daily.actions.reduce(0) { $0 + $1.targetPoints }) points")
                             .font(.caption.bold())
-                            .foregroundStyle(SupportTheme.accent)
+                            .foregroundStyle(SupportTheme.Status.positive)
                     }
                     .padding(.top, SupportTheme.Spacing.xxs)
                 }
@@ -293,7 +293,7 @@ struct RecoveryProgramView: View {
         HStack(alignment: .top, spacing: SupportTheme.Spacing.s) {
             // Checkbox (non-functional, visual only)
             Image(systemName: "circle")
-                .foregroundStyle(SupportTheme.accent)
+                .foregroundStyle(SupportTheme.Area.voice.palette.ink)
 
             Text(action.action)
                 .font(.subheadline)
@@ -302,7 +302,7 @@ struct RecoveryProgramView: View {
 
             Text("+\(action.targetPoints)")
                 .font(.caption.bold())
-                .foregroundStyle(SupportTheme.accent)
+                .foregroundStyle(SupportTheme.Status.positive)
         }
     }
 
@@ -334,7 +334,7 @@ struct RecoveryProgramView: View {
         VStack(spacing: SupportTheme.Spacing.l) {
             Image(systemName: "chart.line.uptrend.xyaxis")
                 .font(.system(size: 60))
-                .foregroundStyle(SupportTheme.accent)
+                .foregroundStyle(SupportTheme.Area.voice.palette.ink)
 
             Text("Track More Data First")
                 .font(.title2.bold())
@@ -373,7 +373,7 @@ struct RecoveryProgramView: View {
     private func dataActionRow(icon: String, text: String) -> some View {
         HStack(spacing: SupportTheme.Spacing.s) {
             Image(systemName: icon)
-                .foregroundStyle(SupportTheme.accent)
+                .foregroundStyle(SupportTheme.Area.voice.palette.ink)
                 .frame(minWidth: 24)
 
             Text(text)

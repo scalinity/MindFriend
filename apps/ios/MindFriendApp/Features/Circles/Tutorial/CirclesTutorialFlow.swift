@@ -27,7 +27,7 @@ struct CirclesTutorialFlow: View {
         VStack(spacing: 0) {
             ProgressView(value: currentStep.progress)
                 .progressViewStyle(.linear)
-                .tint(SupportTheme.accent)
+                .tint(SupportTheme.Area.people.palette.ink)
                 .padding(.horizontal)
                 .padding(.top, SupportTheme.Spacing.xl)
 

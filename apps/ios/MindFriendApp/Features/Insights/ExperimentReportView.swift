@@ -85,12 +85,12 @@ struct ExperimentReportView: View {
             if let actionType = report.actionTypeEnum {
                 Image(systemName: actionType.icon)
                     .font(.system(.largeTitle))
-                    .foregroundStyle(SupportTheme.textPrimary)
+                    .foregroundStyle(SupportTheme.onHero)
                     .frame(width: 100, height: 100)
                     .background(
-                        report.moodImproved ? SupportTheme.accent :
-                        report.moodDeclined ? SupportTheme.accent :
-                        SupportTheme.accent
+                        report.moodDeclined
+                            ? SupportTheme.Area.quests.palette.heroGradient
+                            : SupportTheme.Area.insights.palette.heroGradient
                     )
                     .clipShape(Circle())
             }
@@ -111,7 +111,7 @@ struct ExperimentReportView: View {
                     .foregroundStyle(SupportTheme.onAccent)
                     .padding(.horizontal, SupportTheme.Spacing.s)
                     .padding(.vertical, SupportTheme.Spacing.xxs)
-                    .background(SupportTheme.accent)
+                    .background(SupportTheme.Status.positive)
                     .clipShape(Capsule())
             }
         }
@@ -200,7 +200,7 @@ struct ExperimentReportView: View {
                         }
                         .font(.title2)
                         .fontWeight(.bold)
-                        .foregroundStyle(delta >= 0.5 ? .green : delta <= -0.5 ? .red : SupportTheme.textPrimary)
+                        .foregroundStyle(deltaColor(delta))
                     }
                 }
             }
@@ -284,7 +284,7 @@ struct ExperimentReportView: View {
                         }
                         .font(.title2)
                         .fontWeight(.bold)
-                        .foregroundStyle(delta >= 0.5 ? .green : delta <= -0.5 ? .red : SupportTheme.textPrimary)
+                        .foregroundStyle(deltaColor(delta))
                     }
                 }
             }
@@ -298,7 +298,7 @@ struct ExperimentReportView: View {
         VStack(alignment: .leading, spacing: SupportTheme.Spacing.m) {
             Label("Recommendation", systemImage: "lightbulb.fill")
                 .font(.headline)
-                .foregroundStyle(SupportTheme.accent)
+                .foregroundStyle(SupportTheme.Area.quests.palette.ink)
 
             Text(report.recommendation.text)
                 .font(.body)
@@ -312,7 +312,7 @@ struct ExperimentReportView: View {
                     ForEach(report.recommendation.nextSteps, id: \.self) { step in
                         HStack(alignment: .top, spacing: SupportTheme.Spacing.xs) {
                             Image(systemName: "arrow.right.circle.fill")
-                                .foregroundStyle(SupportTheme.accent)
+                                .foregroundStyle(SupportTheme.Area.insights.palette.ink)
                                 .font(.caption)
                             Text(step)
                                 .font(.subheadline)
@@ -334,7 +334,7 @@ struct ExperimentReportView: View {
             ForEach(report.insights, id: \.self) { insight in
                 HStack(alignment: .top, spacing: SupportTheme.Spacing.xs) {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(SupportTheme.accent)
+                        .foregroundStyle(SupportTheme.Status.positive)
                         .font(.caption)
                     Text(insight)
                         .font(.subheadline)
@@ -371,12 +371,15 @@ struct ExperimentReportView: View {
 
     private func adherenceColor(_ rate: Double) -> Color {
         if rate >= 0.8 {
-            return SupportTheme.accent
-        } else if rate >= 0.5 {
-            return SupportTheme.accent
-        } else {
-            return .red
+            return SupportTheme.Status.positive
         }
+        return SupportTheme.Status.caution
+    }
+
+    private func deltaColor(_ delta: Double) -> Color {
+        if delta >= 0.5 { return SupportTheme.Status.positive }
+        if delta <= -0.5 { return SupportTheme.Status.caution }
+        return SupportTheme.textPrimary
     }
 
     // MARK: - Load Report

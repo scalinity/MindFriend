@@ -15,7 +15,7 @@ struct DebtTrendStep: View {
     var body: some View {
         TutorialStepLayout(
             icon: "chart.line.uptrend.xyaxis",
-            iconColor: SupportTheme.accent,
+            iconColor: SupportTheme.Area.sleep.palette.ink,
             headline: "Tracking Your Trajectory",
             subheadline: "We monitor your wellbeing patterns over time.",
             primaryAction: onNext,
@@ -27,28 +27,28 @@ struct DebtTrendStep: View {
                     icon: "calendar",
                     title: "Rolling Windows",
                     description: "7, 14, and 30-day scores show patterns over time",
-                    color: SupportTheme.accent
+                    color: SupportTheme.Area.voice.palette.ink
                 )
 
                 metricCard(
                     icon: "arrow.up.right",
                     title: "Trend & Velocity",
                     description: "See if you're improving or worsening, and by how much",
-                    color: SupportTheme.accent
+                    color: SupportTheme.Status.positive
                 )
 
                 metricCard(
                     icon: "gauge.with.needle",
                     title: "Your Threshold",
                     description: "We learn YOUR personal breaking point from past patterns",
-                    color: SupportTheme.accent
+                    color: SupportTheme.Status.caution
                 )
 
                 // Severity legend
                 HStack(spacing: SupportTheme.Spacing.s) {
-                    severityBadge(color: SupportTheme.accent, label: "Safe")
-                    severityBadge(color: SupportTheme.accent, label: "Warning")
-                    severityBadge(color: .red, label: "Danger")
+                    severityBadge(color: SupportTheme.Status.positive, label: "Safe")
+                    severityBadge(color: SupportTheme.Status.caution, label: "Warning")
+                    severityBadge(color: SupportTheme.Status.caution, label: "Danger")
                 }
                 .padding(.top, SupportTheme.Spacing.xs)
             }

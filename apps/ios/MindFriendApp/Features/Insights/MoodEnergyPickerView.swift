@@ -258,11 +258,10 @@ struct EnergySlider: View {
 
     private func energyColor(_ level: Int) -> Color {
         switch level {
-        case 1: return .red
-        case 2: return SupportTheme.accent
-        case 3: return SupportTheme.accent
-        case 4: return SupportTheme.accent
-        case 5: return SupportTheme.accent
+        case 1: return SupportTheme.Area.copingKits.palette.ink
+        case 2: return SupportTheme.Status.caution
+        case 3: return SupportTheme.Area.voice.palette.ink
+        case 4, 5: return SupportTheme.Status.positive
         default: return SupportTheme.accent
         }
     }

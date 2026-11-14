@@ -15,15 +15,15 @@ struct CirclesRitualsStep: View {
     @State private var showRituals = false
 
     private let rituals: [(icon: String, color: Color, name: String, description: String)] = [
-        ("sunrise.fill", SupportTheme.accent, "Morning Intentions", "Start the day together with shared goals"),
-        ("moon.stars.fill", SupportTheme.accent, "Evening Reflection", "Wind down and share gratitude"),
-        ("figure.mind.and.body", SupportTheme.accent, "Group Exercise", "Do wellness exercises together")
+        ("sunrise.fill", SupportTheme.Area.quests.palette.ink, "Morning Intentions", "Start the day together with shared goals"),
+        ("moon.stars.fill", SupportTheme.Area.journal.palette.ink, "Evening Reflection", "Wind down and share gratitude"),
+        ("figure.mind.and.body", SupportTheme.Status.positive, "Group Exercise", "Do wellness exercises together")
     ]
 
     var body: some View {
         TutorialStepView(
             icon: "sparkles",
-            iconColor: SupportTheme.accent,
+            iconColor: SupportTheme.Area.journal.palette.ink,
             headline: "Rituals & Support",
             subheadline: "Join scheduled group activities and support each other's growth.",
             primaryLabel: "Explore Circles",
@@ -64,7 +64,7 @@ struct CirclesRitualsStep: View {
                 // Invite prompt
                 HStack(spacing: SupportTheme.Spacing.xs) {
                     Image(systemName: "person.badge.plus")
-                        .foregroundStyle(SupportTheme.accent)
+                        .foregroundStyle(SupportTheme.Area.people.palette.ink)
                     Text("Invite friends to create your first circle")
                         .font(.caption)
                         .foregroundStyle(SupportTheme.textSecondary)

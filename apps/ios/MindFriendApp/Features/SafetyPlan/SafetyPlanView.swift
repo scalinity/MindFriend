@@ -77,7 +77,7 @@ struct SafetyPlanView: View {
 
             Image(systemName: "shield.checkered")
                 .font(.system(size: 80))
-                .foregroundStyle(SupportTheme.accent)
+                .foregroundStyle(SupportTheme.Area.safety.palette.ink)
 
             VStack(spacing: SupportTheme.Spacing.s) {
                 Text("Create Your Safety Plan")
@@ -97,21 +97,21 @@ struct SafetyPlanView: View {
             VStack(spacing: SupportTheme.Spacing.xs) {
                 HStack(spacing: SupportTheme.Spacing.s) {
                     Image(systemName: "clock.fill")
-                        .foregroundStyle(SupportTheme.accent)
+                        .foregroundStyle(SupportTheme.Area.safety.palette.ink)
                     Text("5-8 minutes to create")
                         .font(.subheadline)
                 }
 
                 HStack(spacing: SupportTheme.Spacing.s) {
                     Image(systemName: "lock.fill")
-                        .foregroundStyle(SupportTheme.accent)
+                        .foregroundStyle(SupportTheme.Status.positive)
                     Text("Private and protected")
                         .font(.subheadline)
                 }
 
                 HStack(spacing: SupportTheme.Spacing.s) {
                     Image(systemName: "wifi.slash")
-                        .foregroundStyle(SupportTheme.accent)
+                        .foregroundStyle(SupportTheme.Area.quests.palette.ink)
                     Text("Available offline")
                         .font(.subheadline)
                 }
@@ -323,7 +323,7 @@ struct SafetyPlanWizardView: View {
                 Circle()
                     .fill(
                         step.rawValue <= currentStep.rawValue
-                            ? SupportTheme.accent : SupportTheme.textSecondary.opacity(0.3)
+                            ? SupportTheme.Area.safety.palette.ink : SupportTheme.textSecondary.opacity(0.3)
                     )
                     .frame(width: 8, height: 8)
                     .scaleEffect(reduceMotion ? 1 : (step == currentStep ? 1.2 : 1.0))
@@ -332,7 +332,7 @@ struct SafetyPlanWizardView: View {
                     Rectangle()
                         .fill(
                             step.rawValue < currentStep.rawValue
-                                ? SupportTheme.accent : SupportTheme.textSecondary.opacity(0.3)
+                                ? SupportTheme.Area.safety.palette.ink : SupportTheme.textSecondary.opacity(0.3)
                         )
                         .frame(height: 2)
                 }
@@ -494,7 +494,7 @@ struct WarningSignsStepView: View {
                             addCustomSign()
                         } label: {
                             Image(systemName: "plus.circle.fill")
-                                .foregroundStyle(SupportTheme.accent)
+                                .foregroundStyle(SupportTheme.Area.safety.palette.ink)
                         }
                         .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                         .accessibilityLabel("Add item")
@@ -505,7 +505,7 @@ struct WarningSignsStepView: View {
                         ForEach(payload.warningSigns.filter({ $0.isCustom })) { item in
                             HStack {
                                 Image(systemName: "checkmark.circle.fill")
-                                    .foregroundStyle(SupportTheme.accent)
+                                    .foregroundStyle(SupportTheme.Area.safety.palette.ink)
                                 Text(item.text)
                                     .font(.subheadline)
                                 Spacer()
@@ -556,7 +556,7 @@ struct WarningSignRow: View {
         Button(action: onToggle) {
             HStack(spacing: SupportTheme.Spacing.s) {
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(isSelected ? SupportTheme.accent : SupportTheme.textSecondary)
+                    .foregroundStyle(isSelected ? SupportTheme.Area.safety.palette.ink : SupportTheme.textSecondary)
 
                 Text(text)
                     .font(.subheadline)
@@ -600,7 +600,7 @@ struct CopingStepView: View {
                     }
                     .padding()
                     .background(SupportTheme.surface)
-                    .foregroundStyle(SupportTheme.accent)
+                    .foregroundStyle(SupportTheme.Area.safety.palette.ink)
                     .clipShape(RoundedRectangle(cornerRadius: SupportTheme.cardRadius))
                 }
 
@@ -661,7 +661,7 @@ struct CopingStepView: View {
                             addCustomCoping()
                         } label: {
                             Image(systemName: "plus.circle.fill")
-                                .foregroundStyle(SupportTheme.accent)
+                                .foregroundStyle(SupportTheme.Area.safety.palette.ink)
                         }
                         .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                         .accessibilityLabel("Add item")
@@ -715,7 +715,7 @@ struct CopingRowView: View {
     var body: some View {
         HStack(spacing: SupportTheme.Spacing.s) {
             Image(systemName: coping.category.icon)
-                .foregroundStyle(SupportTheme.accent)
+                .foregroundStyle(SupportTheme.Area.safety.palette.ink)
                 .frame(minWidth: 24)
 
             VStack(alignment: .leading, spacing: SupportTheme.Spacing.xxs) {
@@ -785,7 +785,7 @@ struct ExercisePickerView: View {
                                     Spacer()
 
                                     Image(systemName: type.icon)
-                                        .foregroundStyle(SupportTheme.accent)
+                                        .foregroundStyle(SupportTheme.Area.safety.palette.ink)
                                 }
                             }
                             .foregroundStyle(SupportTheme.textPrimary)
@@ -1245,7 +1245,7 @@ struct EnvironmentStepRow: View {
         Button(action: onToggle) {
             HStack(spacing: SupportTheme.Spacing.s) {
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(isSelected ? SupportTheme.accent : SupportTheme.textSecondary)
+                    .foregroundStyle(isSelected ? SupportTheme.Area.safety.palette.ink : SupportTheme.textSecondary)
 
                 Text(text)
                     .font(.subheadline)
@@ -1284,7 +1284,7 @@ struct AnchorsStepView: View {
                             addAnchor()
                         } label: {
                             Image(systemName: "plus.circle.fill")
-                                .foregroundStyle(SupportTheme.accent)
+                                .foregroundStyle(SupportTheme.Area.safety.palette.ink)
                         }
                         .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                         .accessibilityLabel("Add item")
@@ -1295,7 +1295,7 @@ struct AnchorsStepView: View {
                         ForEach(payload.anchors) { anchor in
                             HStack {
                                 Image(systemName: "heart.fill")
-                                    .foregroundStyle(SupportTheme.accent)
+                                    .foregroundStyle(SupportTheme.Area.quests.palette.ink)
 
                                 Text(anchor.text)
                                     .font(.subheadline)

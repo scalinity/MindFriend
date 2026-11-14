@@ -186,7 +186,7 @@ struct CurrentWeekCard: View {
                                 .accessibilityAddTraits(.isHeader)
                             Text(insight.moodTrendMessage)
                                 .font(.subheadline)
-                                .foregroundColor(SupportTheme.accent)
+                                .foregroundColor(trend.insightColor)
                                 .multilineTextAlignment(.trailing)
                         }
                     }
@@ -200,6 +200,20 @@ struct CurrentWeekCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(SupportTheme.surface)
         .cornerRadius(SupportTheme.controlRadius)
+    }
+}
+
+// MARK: - Trend color
+
+private extension MoodTrend {
+    /// Improving is green, declining is warm orange, steady is blue and unknown is neutral.
+    var insightColor: Color {
+        switch self {
+        case .improving: return SupportTheme.Status.positive
+        case .stable: return SupportTheme.Area.voice.palette.ink
+        case .declining: return SupportTheme.Status.caution
+        case .baseline, .insufficientData: return SupportTheme.textSecondary
+        }
     }
 }
 
@@ -264,11 +278,11 @@ struct MoodChartCard: View {
                 HStack {
                     Label("Low: \(min)", systemImage: "arrow.down")
                         .font(.caption)
-                        .foregroundColor(SupportTheme.accent)
+                        .foregroundColor(SupportTheme.Status.caution)
                     Spacer()
                     Label("High: \(max)", systemImage: "arrow.up")
                         .font(.caption)
-                        .foregroundColor(SupportTheme.accent)
+                        .foregroundColor(SupportTheme.Status.positive)
                 }
             }
         }
@@ -280,10 +294,9 @@ struct MoodChartCard: View {
 
     private func moodColor(_ value: Double) -> Color {
         switch value {
-        case 4...: return SupportTheme.accent
-        case 3..<4: return SupportTheme.accent
-        case 2..<3: return SupportTheme.accent
-        default: return .red
+        case 4...: return SupportTheme.Status.positive
+        case 3..<4: return SupportTheme.Area.voice.palette.ink
+        default: return SupportTheme.Status.caution
         }
     }
 }
@@ -399,7 +412,7 @@ struct ActivitySummaryCard: View {
             if let circleCount = insight.circleCheckinCount, circleCount > 0 {
                 HStack {
                     Image(systemName: "person.2")
-                        .foregroundColor(SupportTheme.accent)
+                        .foregroundColor(SupportTheme.Area.people.palette.ink)
                     Text("\(circleCount) circle check-ins")
                         .font(.subheadline)
                         .foregroundColor(SupportTheme.textSecondary)
@@ -479,7 +492,7 @@ struct PastWeekCard: View {
                         trend != .insufficientData && trend != .baseline
                     {
                         Image(systemName: trend.icon)
-                            .foregroundColor(SupportTheme.accent)
+                            .foregroundColor(trend.insightColor)
                             .font(.caption)
                     }
                 }

@@ -19,7 +19,7 @@ struct CirclesCheckInStep: View {
     var body: some View {
         TutorialStepView(
             icon: "hand.wave.fill",
-            iconColor: SupportTheme.accent,
+            iconColor: SupportTheme.Area.quests.palette.ink,
             headline: "Daily Check-ins",
             subheadline: "Share how you're doing with your circle. Quick, simple, and supportive.",
             primaryAction: onNext,
@@ -31,7 +31,7 @@ struct CirclesCheckInStep: View {
                     // Header
                     HStack(spacing: SupportTheme.Spacing.s) {
                         Circle()
-                            .fill(SupportTheme.accent)
+                            .fill(SupportTheme.Area.voice.palette.ink)
                             .frame(width: 36, height: 36)
                             .overlay(
                                 Image(systemName: "person.fill")
@@ -57,9 +57,9 @@ struct CirclesCheckInStep: View {
                     // Reactions
                     if showReactions {
                         HStack(spacing: SupportTheme.Spacing.xs) {
-                            ReactionPill(emoji: "heart.fill", count: 3, color: SupportTheme.accent)
-                            ReactionPill(emoji: "hand.thumbsup.fill", count: 2, color: SupportTheme.accent)
-                            ReactionPill(emoji: "sparkles", count: 1, color: SupportTheme.accent)
+                            ReactionPill(emoji: "heart.fill", count: 3, color: SupportTheme.Area.people.palette.ink)
+                            ReactionPill(emoji: "hand.thumbsup.fill", count: 2, color: SupportTheme.Area.voice.palette.ink)
+                            ReactionPill(emoji: "sparkles", count: 1, color: SupportTheme.Area.quests.palette.ink)
                         }
                         .transition(reduceMotion ? .opacity.animation(.easeInOut(duration: 0.2)) : .scale.combined(with: .opacity))
                     }

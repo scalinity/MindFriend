@@ -17,7 +17,7 @@ struct DebtRecoveryStep: View {
     var body: some View {
         TutorialStepLayout(
             icon: "heart.circle.fill",
-            iconColor: SupportTheme.accent,
+            iconColor: SupportTheme.Area.copingKits.palette.ink,
             headline: "We've Got Your Back",
             subheadline: "When your debt approaches danger levels, we'll help you recover.",
             primaryLabel: "Get Started",
@@ -80,7 +80,7 @@ struct DebtRecoveryStep: View {
         HStack(spacing: SupportTheme.Spacing.xs) {
             Text(day)
                 .font(.caption2.bold())
-                .foregroundStyle(SupportTheme.accent)
+                .foregroundStyle(SupportTheme.Area.voice.palette.ink)
                 .fixedSize(horizontal: true, vertical: false)
 
             Text(activity)

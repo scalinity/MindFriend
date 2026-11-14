@@ -137,8 +137,8 @@ struct DebtBreakdownView: View {
     private var summaryStats: some View {
         VStack(spacing: SupportTheme.Spacing.m) {
             HStack {
-                statCard("Deposits", value: totalDeposits, color: SupportTheme.accent)
-                statCard("Withdrawals", value: totalWithdrawals, color: .red)
+                statCard("Deposits", value: totalDeposits, color: SupportTheme.Status.positive)
+                statCard("Withdrawals", value: totalWithdrawals, color: SupportTheme.Status.caution)
             }
 
             Divider()
@@ -153,7 +153,7 @@ struct DebtBreakdownView: View {
                 Text("\(netBalance > 0 ? "+" : "")\(NSDecimalNumber(decimal: netBalance).stringValue)")
                     .font(.title2.bold())
                     .accessibilityAddTraits(.isHeader)
-                    .foregroundStyle(netBalance >= 0 ? SupportTheme.accent : .red)
+                    .foregroundStyle(netBalance >= 0 ? SupportTheme.Status.positive : SupportTheme.Status.caution)
             }
         }
     }
@@ -181,7 +181,7 @@ struct DebtBreakdownView: View {
         HStack(alignment: .top, spacing: SupportTheme.Spacing.s) {
             // Icon
             Image(systemName: transaction.type == .deposit ? "arrow.up.circle.fill" : "arrow.down.circle.fill")
-                .foregroundStyle(transaction.type == .deposit ? SupportTheme.accent : .red)
+                .foregroundStyle(transaction.type == .deposit ? SupportTheme.Status.positive : SupportTheme.Status.caution)
                 .font(.title3)
                 .accessibilityAddTraits(.isHeader)
 
@@ -208,7 +208,7 @@ struct DebtBreakdownView: View {
                 "\(transaction.type == .deposit ? "+" : "-")\(NSDecimalNumber(decimal: transaction.amount).stringValue)"
             )
             .font(.subheadline.bold())
-            .foregroundStyle(transaction.type == .deposit ? SupportTheme.accent : .red)
+            .foregroundStyle(transaction.type == .deposit ? SupportTheme.Status.positive : SupportTheme.Status.caution)
         }
         .padding(.vertical, SupportTheme.Spacing.xxs)
     }
