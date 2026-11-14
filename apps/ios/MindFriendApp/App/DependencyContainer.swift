@@ -787,6 +787,8 @@ final class DependencyContainer: ObservableObject {
             NotificationManager.shared.configure(container: self)
             await NotificationManager.shared.activateAccount(userId)
             guard isCurrentAccount(userId, generation: generation) else { return }
+            await supabaseAuthService.syncTimeZone()
+            guard isCurrentAccount(userId, generation: generation) else { return }
             await ambientThemeService.start()
             guard isCurrentAccount(userId, generation: generation) else { return }
             do { try await questNotificationService.scheduleIfEnabled() }
@@ -808,6 +810,9 @@ final class DependencyContainer: ObservableObject {
               supabaseAuthService.currentUser?.id == owner else { return }
         let generation = accountGeneration
         await NotificationManager.shared.activateAccount(owner)
+        guard isCurrentAccount(owner, generation: generation) else { return }
+        // Foreground and significant time changes, which include a device time zone change.
+        await supabaseAuthService.syncTimeZone()
         guard isCurrentAccount(owner, generation: generation) else { return }
         await CompanionSyncCoordinator.shared.refresh()
     }

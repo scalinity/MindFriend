@@ -195,7 +195,7 @@ Deno.serve(async (req) => {
     }
 
     // Step 11: Fetch mood prediction
-    const moodPrediction = await fetchMoodPrediction(supabase, user.id);
+    const moodPrediction = await fetchMoodPrediction(supabase, user.id, local_date);
 
     // Step 12: Fetch quest
     const quest = await fetchOrAssignQuest(supabase, user.id, local_date);
@@ -207,7 +207,7 @@ Deno.serve(async (req) => {
     );
 
     // Step 14: Fetch sleep data
-    const sleepData = await fetchSleepData(supabase, user.id);
+    const sleepData = await fetchSleepData(supabase, user.id, local_date);
 
     // Step 15: Generate suggestion
     let suggestion: string;
@@ -321,10 +321,10 @@ function generateGreeting(userName: string, timezone: string): string {
 async function fetchMoodPrediction(
   supabase: any,
   userId: string,
+  todayDate: string,
 ): Promise<MoodPrediction | null> {
 
   try {
-    const todayDate = new Date().toISOString().split("T")[0];
 
     const { data, error } = await supabase
       .from("mood_predictions")
@@ -435,11 +435,13 @@ function processCalendarEvents(
 async function fetchSleepData(
   supabase: any,
   userId: string,
+  localDate: string,
 ): Promise<{ sleep_duration_hours: number } | null> {
 
   try {
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
+    // The day before the person's local date (both are calendar dates, so UTC math is exact).
+    const yesterday = new Date(`${localDate}T00:00:00Z`);
+    yesterday.setUTCDate(yesterday.getUTCDate() - 1);
     const yesterdayDate = yesterday.toISOString().split("T")[0];
 
     const { data, error } = await supabase

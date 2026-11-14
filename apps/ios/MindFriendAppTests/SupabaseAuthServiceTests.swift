@@ -840,3 +840,17 @@ private final class DeletedAccountHTTP: @unchecked Sendable {
         return Data("{}".utf8)
     }
 }
+
+/// profiles.timezone drives local days and the Night Owl and Early Bird badges on the server.
+final class TimeZoneSyncTests: XCTestCase {
+    func testTheDeviceZoneIsWrittenUntilTheProfileHasIt() throws {
+        let newYork = try XCTUnwrap(TimeZone(identifier: "America/New_York"))
+        let london = try XCTUnwrap(TimeZone(identifier: "Europe/London"))
+        // First launch or sign-in on this device: the profile still has the 'UTC' default.
+        XCTAssertEqual(SupabaseAuthService.timeZoneToSync(device: newYork, lastSynced: nil), "America/New_York")
+        // Later launches write nothing while the zone is unchanged.
+        XCTAssertNil(SupabaseAuthService.timeZoneToSync(device: newYork, lastSynced: "America/New_York"))
+        // Travel: the device zone changes and is written again.
+        XCTAssertEqual(SupabaseAuthService.timeZoneToSync(device: london, lastSynced: "America/New_York"), "Europe/London")
+    }
+}
