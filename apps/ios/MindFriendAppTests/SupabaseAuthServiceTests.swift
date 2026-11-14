@@ -843,14 +843,16 @@ private final class DeletedAccountHTTP: @unchecked Sendable {
 
 /// profiles.timezone drives local days and the Night Owl and Early Bird badges on the server.
 final class TimeZoneSyncTests: XCTestCase {
-    func testTheDeviceZoneIsWrittenUntilTheProfileHasIt() throws {
+    func testTheDeviceZoneIsWrittenWhenTheProfileDiffers() throws {
         let newYork = try XCTUnwrap(TimeZone(identifier: "America/New_York"))
         let london = try XCTUnwrap(TimeZone(identifier: "Europe/London"))
-        // First launch or sign-in on this device: the profile still has the 'UTC' default.
-        XCTAssertEqual(SupabaseAuthService.timeZoneToSync(device: newYork, lastSynced: nil), "America/New_York")
-        // Later launches write nothing while the zone is unchanged.
-        XCTAssertNil(SupabaseAuthService.timeZoneToSync(device: newYork, lastSynced: "America/New_York"))
-        // Travel: the device zone changes and is written again.
-        XCTAssertEqual(SupabaseAuthService.timeZoneToSync(device: london, lastSynced: "America/New_York"), "Europe/London")
+        // The profile still has the 'UTC' default.
+        XCTAssertEqual(SupabaseAuthService.timeZoneToSync(device: newYork, server: "UTC"), "America/New_York")
+        XCTAssertEqual(SupabaseAuthService.timeZoneToSync(device: newYork, server: nil), "America/New_York")
+        // Nothing to write while the profile already has this device's zone.
+        XCTAssertNil(SupabaseAuthService.timeZoneToSync(device: newYork, server: "America/New_York"))
+        // Another device on the same account wrote London; this New York device writes its zone back.
+        XCTAssertEqual(SupabaseAuthService.timeZoneToSync(device: newYork, server: "Europe/London"), "America/New_York")
+        XCTAssertEqual(SupabaseAuthService.timeZoneToSync(device: london, server: "America/New_York"), "Europe/London")
     }
 }

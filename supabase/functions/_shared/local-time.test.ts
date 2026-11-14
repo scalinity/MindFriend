@@ -1,5 +1,5 @@
 import { assertEquals } from "jsr:@std/assert@1.0.19";
-import { knownTimeZone, localHour, timeOfDayBadgeEarned } from "./local-time.ts";
+import { knownTimeZone, localDate, localHour, timeOfDayBadgeEarned } from "./local-time.ts";
 
 // 13 November 2026, 7:48 PM in New York: the time Night Owl was awarded in production.
 const evening = new Date("2026-11-14T00:48:54Z");
@@ -32,4 +32,12 @@ Deno.test("only a real, synced zone is known", () => {
   assertEquals(knownTimeZone("UTC"), null);
   assertEquals(knownTimeZone(""), null);
   assertEquals(knownTimeZone("Europe/London"), "Europe/London");
+});
+
+Deno.test("a morning prediction belongs to the local date", () => {
+  // 7:00 AM on 14 November in Tokyo is still 13 November in UTC.
+  const tokyoMorning = new Date("2026-11-13T22:00:00Z");
+  assertEquals(localDate("Asia/Tokyo", tokyoMorning), "2026-11-14");
+  assertEquals(localDate("UTC", tokyoMorning), "2026-11-13");
+  assertEquals(localDate("Not/AZone", tokyoMorning), "2026-11-13");
 });

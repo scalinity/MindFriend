@@ -893,22 +893,30 @@ final class SupabaseAuthService: ObservableObject {
     }
 
     /// The server counts days and time-of-day badges in profiles.timezone, so keep it equal to the
-    /// device's zone. Writes only when the zone differs from the last one written for this account.
-    func syncTimeZone(_ device: TimeZone = .current, defaults: UserDefaults = .standard) async {
+    /// device's zone. Compares with the profile's current value, because the same account may have
+    /// written another zone from another device since this one last synced.
+    func syncTimeZone(_ device: TimeZone = .current) async {
         guard let userId else { return }
-        let key = "mf.syncedTimeZone.\(userId.uuidString)"
-        guard let zone = Self.timeZoneToSync(device: device, lastSynced: defaults.string(forKey: key)) else { return }
         do {
+            let row: ProfileTimeZoneRow = try await supabase
+                .from(Tables.profiles)
+                .select("timezone")
+                .eq("id", value: userId)
+                .single()
+                .execute()
+                .value
+            guard let zone = Self.timeZoneToSync(device: device, server: row.timezone) else { return }
             try await updateProfile(timezone: zone)
-            defaults.set(zone, forKey: key)
         } catch {
             Log.auth.warning("Time zone sync failed: \(error.localizedDescription)")
         }
     }
 
-    nonisolated static func timeZoneToSync(device: TimeZone, lastSynced: String?) -> String? {
-        device.identifier == lastSynced ? nil : device.identifier
+    nonisolated static func timeZoneToSync(device: TimeZone, server: String?) -> String? {
+        device.identifier == server ? nil : device.identifier
     }
+
+    private struct ProfileTimeZoneRow: Decodable { let timezone: String? }
 
     /// Check if a handle is available (not taken by another user)
     /// Uses SECURITY DEFINER RPC to avoid exposing profile data

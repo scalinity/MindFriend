@@ -4,6 +4,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { escapeHtml, isValidEmail, sanitizeEmail } from "../_shared/utils.ts";
+import { checkRateLimit } from "../_shared/ratelimit.ts";
 
 interface SendBuddyInviteRequest {
   /** The invite row the app created; every released client sends it. */
@@ -129,11 +130,11 @@ Deno.serve(async (req) => {
 
     // One invite record and one code. The app inserts the invite and passes its id, so use that
     // row: a second row would carry a different code from the one shown on screen.
-    let relationship: { id: string; invite_code: string; expires_at: string };
+    let relationship: { id: string; invite_code: string; expires_at: string; invitee_contact?: string | null };
     if (relationshipId) {
       const { data: existing } = await supabaseAdmin
         .from("buddy_relationships")
-        .select("id, invite_code, expires_at, status")
+        .select("id, invite_code, expires_at, status, invitee_contact")
         .eq("id", relationshipId)
         .eq("inviter_id", user.id)
         .maybeSingle();
@@ -178,7 +179,7 @@ Deno.serve(async (req) => {
         .from("buddy_relationships")
         .select("id, invite_code, expires_at")
         .eq("inviter_id", user.id)
-        .ilike("invitee_contact", contact)
+        .ilike("invitee_contact", contact.replace(/[\\%_]/g, (c) => `\\${c}`))
         .eq("status", "pending")
         .gt("expires_at", new Date().toISOString())
         .limit(1)
@@ -269,8 +270,17 @@ Deno.serve(async (req) => {
 
       if (method === "email") {
         const resendApiKey = Deno.env.get("RESEND_API_KEY");
+        // Mail only the address stored on the invite, and at most 10 invite emails a day, so a
+        // reused invite cannot become a way to send mail to arbitrary or repeated addresses.
+        const recipient = relationship.invitee_contact || contact;
+        const emailQuota = resendApiKey
+          ? await checkRateLimit(supabaseAdmin, user.id, "send-buddy-invite-email", {
+            windowMs: 24 * 60 * 60 * 1000,
+            maxRequests: 10,
+          })
+          : null;
 
-        if (resendApiKey) {
+        if (resendApiKey && emailQuota?.allowed && isValidEmail(recipient)) {
           try {
             const safeInviterName = escapeHtml(inviterName);
 
@@ -282,7 +292,7 @@ Deno.serve(async (req) => {
               },
               body: JSON.stringify({
                 from: "MindFriend <noreply@getmindfriend.app>",
-                to: [contact],
+                to: [recipient],
                 subject: `${safeInviterName} wants to be your wellness buddy!`,
                 html: `
                   <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">

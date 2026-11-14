@@ -15,7 +15,8 @@ INSERT INTO public.user_settings(user_id) VALUES ('17400000-0000-4000-8000-00000
 DO $$
 DECLARE
   uid constant uuid := '17400000-0000-4000-8000-000000000001';
-  zone text := CASE WHEN extract(hour FROM now() AT TIME ZONE 'UTC') >= 12
+  -- Whichever of UTC+14 or UTC-11 has a different date from UTC right now (one always does).
+  zone text := CASE WHEN (now() AT TIME ZONE 'Pacific/Kiritimati')::date <> (now() AT TIME ZONE 'UTC')::date
                     THEN 'Pacific/Kiritimati' ELSE 'Pacific/Pago_Pago' END;
   local_today date;
   streak_day date;
@@ -41,6 +42,13 @@ BEGIN
   SELECT last_entry_date INTO streak_day FROM public.journal_streaks WHERE user_id = uid;
   IF streak_day IS DISTINCT FROM local_today THEN
     RAISE EXCEPTION 'Journal streak counted % instead of the local day %', streak_day, local_today;
+  END IF;
+
+  -- Switching zones can leave the last entry one day ahead of local today; it counts as today.
+  UPDATE public.journal_streaks SET last_entry_date = local_today + 1, current_streak = 5 WHERE user_id = uid;
+  INSERT INTO public.journal_entries(user_id, content) VALUES (uid, 'Synthetic entry after the zone switch');
+  IF (SELECT current_streak FROM public.journal_streaks WHERE user_id = uid) <> 5 THEN
+    RAISE EXCEPTION 'A zone switch reset the journal streak';
   END IF;
 
   -- A zone name that is not real falls back to UTC instead of failing the caller.

@@ -650,7 +650,8 @@ struct SupportBuddyHub: View {
         .supportScreen()
         .navigationTitle(SupportDestination.buddy.title)
         .navigationBarTitleDisplayMode(.inline)
-        .sheet(isPresented: $showInvite) {
+        // Joining a friend's code in the sheet creates the buddy; reload so the hub shows it.
+        .sheet(isPresented: $showInvite, onDismiss: { retry = UUID() }) {
             InviteBuddySheet().environmentObject(container)
         }
         .task(id: retry) { await load() }

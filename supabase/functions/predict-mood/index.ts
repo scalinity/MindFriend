@@ -4,6 +4,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { localDate } from "../_shared/local-time.ts";
 import { isAuthorizedCronRequest } from "../_shared/auth.ts";
 import {
   calculatePrediction,
@@ -128,6 +129,9 @@ Deno.serve(async (req) => {
     for (const batch of batches) {
       const batchPromises = batch.map(async (user) => {
         const userHash = hashUserId(user.user_id);
+        // Users are processed in their local morning, so the prediction is for their local date,
+        // the same date generate-daily-briefing asks for.
+        const predictedFor = localDate(user.timezone, now);
 
         const processUser = async () => {
           // Check if prediction already exists for today
@@ -135,7 +139,7 @@ Deno.serve(async (req) => {
             .from("mood_predictions")
             .select("id")
             .eq("user_id", user.user_id)
-            .eq("predicted_for", targetDate)
+            .eq("predicted_for", predictedFor)
             .single();
 
           if (existing) {
@@ -181,7 +185,7 @@ Deno.serve(async (req) => {
               .from("mood_predictions")
               .insert({
                 user_id: user.user_id,
-                predicted_for: targetDate,
+                predicted_for: predictedFor,
                 predicted_mood: prediction.predictedMood,
                 confidence: prediction.confidence,
                 factors: prediction.factors,
