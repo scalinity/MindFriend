@@ -7,6 +7,8 @@
 
 getmindfriend.app {
 	root * /srv/mindfriend-site/current
+	# Buddy invite links: one page reads the code from the path.
+	rewrite /buddy/* /buddy/index.html
 	file_server
 }
 

@@ -6,6 +6,8 @@ import { getCorsHeaders } from "../_shared/cors.ts";
 import { escapeHtml, isValidEmail, sanitizeEmail } from "../_shared/utils.ts";
 
 interface SendBuddyInviteRequest {
+  /** The invite row the app created; every released client sends it. */
+  relationshipId?: string;
   contact: string;
   method: "sms" | "email" | "link";
   send_notification?: boolean;
@@ -74,6 +76,7 @@ Deno.serve(async (req) => {
     }
 
     const {
+      relationshipId,
       contact: rawContact,
       method,
       send_notification = true,
@@ -124,112 +127,131 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Check rate limit (max 10 invites per day)
-    const today = new Date().toISOString().split("T")[0];
-    const { count: todayCount } = await supabaseAdmin
-      .from("buddy_relationships")
-      .select("*", { count: "exact", head: true })
-      .eq("inviter_id", user.id)
-      .gte("invited_at", `${today}T00:00:00Z`);
-
-    if (todayCount && todayCount >= 10) {
-      return new Response(
-        JSON.stringify({
-          error: "Daily invite limit reached (10 per day)",
-          code: "RATE_LIMIT",
-        }),
-        {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
-    }
-
-    // Check if there's already a pending invite for this contact
-    const { data: existingInvite } = await supabaseAdmin
-      .from("buddy_relationships")
-      .select("id, invite_code, expires_at")
-      .eq("inviter_id", user.id)
-      .eq("invitee_contact", contact.toLowerCase())
-      .eq("status", "pending")
-      .gt("expires_at", new Date().toISOString())
-      .single();
-
-    if (existingInvite) {
-      // Return existing invite
-      return new Response(
-        JSON.stringify({
-          success: true,
-          invite_code: existingInvite.invite_code,
-          relationship_id: existingInvite.id,
-          expires_at: existingInvite.expires_at,
-          message: "An active invitation already exists for this contact",
-        }),
-        {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
-    }
-
-    // Generate invite code (ensure uniqueness)
-    let inviteCode: string;
-    let attempts = 0;
-    do {
-      inviteCode = generateBuddyCode();
+    // One invite record and one code. The app inserts the invite and passes its id, so use that
+    // row: a second row would carry a different code from the one shown on screen.
+    let relationship: { id: string; invite_code: string; expires_at: string };
+    if (relationshipId) {
       const { data: existing } = await supabaseAdmin
         .from("buddy_relationships")
-        .select("id")
-        .eq("invite_code", inviteCode)
-        .single();
+        .select("id, invite_code, expires_at, status")
+        .eq("id", relationshipId)
+        .eq("inviter_id", user.id)
+        .maybeSingle();
 
-      if (!existing) break;
-      attempts++;
-    } while (attempts < 10);
+      if (
+        !existing || existing.status !== "pending" ||
+        new Date(existing.expires_at) <= new Date()
+      ) {
+        return new Response(
+          JSON.stringify({ error: "Invite not found", code: "INVITE_NOT_FOUND" }),
+          {
+            status: 404,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          },
+        );
+      }
+      relationship = existing;
+    } else {
+      // Check rate limit (max 10 invites per day)
+      const today = new Date().toISOString().split("T")[0];
+      const { count: todayCount } = await supabaseAdmin
+        .from("buddy_relationships")
+        .select("*", { count: "exact", head: true })
+        .eq("inviter_id", user.id)
+        .gte("invited_at", `${today}T00:00:00Z`);
 
-    if (attempts >= 10) {
-      return new Response(
-        JSON.stringify({
-          error: "Failed to generate unique invite code",
-          code: "CODE_GEN_FAILED",
-        }),
-        {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
+      if (todayCount && todayCount >= 10) {
+        return new Response(
+          JSON.stringify({
+            error: "Daily invite limit reached (10 per day)",
+            code: "RATE_LIMIT",
+          }),
+          {
+            status: 429,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          },
+        );
+      }
+
+      // Reuse a pending invite for this contact (any letter case), and still send it.
+      const { data: existingInvite } = await supabaseAdmin
+        .from("buddy_relationships")
+        .select("id, invite_code, expires_at")
+        .eq("inviter_id", user.id)
+        .ilike("invitee_contact", contact)
+        .eq("status", "pending")
+        .gt("expires_at", new Date().toISOString())
+        .limit(1)
+        .maybeSingle();
+
+      if (existingInvite) {
+        relationship = existingInvite;
+      } else {
+        // Generate invite code (ensure uniqueness)
+        let inviteCode: string;
+        let attempts = 0;
+        do {
+          inviteCode = generateBuddyCode();
+          const { data: existing } = await supabaseAdmin
+            .from("buddy_relationships")
+            .select("id")
+            .eq("invite_code", inviteCode)
+            .single();
+
+          if (!existing) break;
+          attempts++;
+        } while (attempts < 10);
+
+        if (attempts >= 10) {
+          return new Response(
+            JSON.stringify({
+              error: "Failed to generate unique invite code",
+              code: "CODE_GEN_FAILED",
+            }),
+            {
+              status: 500,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            },
+          );
+        }
+
+        // Set expiry (30 days)
+        const expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + 30);
+
+        // Create buddy relationship
+        const { data: created, error: insertError } = await supabaseAdmin
+          .from("buddy_relationships")
+          .insert({
+            inviter_id: user.id,
+            invite_code: inviteCode,
+            invite_method: method,
+            invitee_contact: method === "link" ? null : contact.toLowerCase(),
+            status: "pending",
+            expires_at: expiresAt.toISOString(),
+          })
+          .select()
+          .single();
+
+        if (insertError || !created) {
+          console.error("Error creating buddy relationship:", insertError);
+          return new Response(
+            JSON.stringify({
+              success: false,
+              error: "Failed to create invitation",
+            }),
+            {
+              status: 500,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            },
+          );
+        }
+        relationship = created;
+      }
     }
 
-    // Set expiry (30 days)
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 30);
-
-    // Create buddy relationship
-    const { data: relationship, error: insertError } = await supabaseAdmin
-      .from("buddy_relationships")
-      .insert({
-        inviter_id: user.id,
-        invite_code: inviteCode,
-        invite_method: method,
-        invitee_contact: method === "link" ? null : contact.toLowerCase(),
-        status: "pending",
-        expires_at: expiresAt.toISOString(),
-      })
-      .select()
-      .single();
-
-    if (insertError || !relationship) {
-      console.error("Error creating buddy relationship:", insertError);
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: "Failed to create invitation",
-        }),
-        {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
-    }
+    const inviteCode = relationship.invite_code;
+    const expiresAt = new Date(relationship.expires_at);
 
     let notificationSent = false;
 

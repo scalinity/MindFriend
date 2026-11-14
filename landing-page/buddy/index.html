@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Join your buddy on MindFriend</title><link rel="icon" href="/assets/logo.png"><link rel="stylesheet" href="/css/legal.css"><style>body{background:#faf9f5;color:#1a1a2e;font-family:Inter,-apple-system,BlinkMacSystemFont,sans-serif}p{margin:1.25rem 0;line-height:1.7}a{color:#4f46e5;text-decoration:underline}.code{font-size:2.25rem;font-weight:700;letter-spacing:.2em;color:#4338ca;background:#eef2ff;border-radius:16px;padding:1rem 1.5rem;display:inline-block;margin:.5rem 0}.button{display:inline-block;background:#4338ca;color:#fff;text-decoration:none;font-weight:600;padding:.9rem 1.5rem;border-radius:12px;margin:.5rem .5rem .5rem 0}.button.secondary{background:#fff;color:#4338ca;border:2px solid #4338ca}ol{line-height:1.8;padding-left:1.25rem;list-style:decimal}li{margin:.25rem 0}:focus-visible{outline:2px solid #6366f1;outline-offset:4px}</style></head>
+<body><main class="max-w-3xl mx-auto px-6 py-12"><a href="/">MindFriend</a>
+<h1 class="text-4xl font-bold mt-8 mb-6">You're invited to be wellness buddies</h1>
+<p>A friend would like to share their MindFriend journey with you. Buddies can see each other's streaks and send encouragement.</p>
+<p id="code-line" hidden>Your buddy code<br><span class="code" id="code"></span></p>
+<p><a class="button" id="open" href="mindfriend://buddy">Open in MindFriend</a><a class="button secondary" href="https://apps.apple.com/us/app/mindfriend-ai-wellness/id6758198271">Get MindFriend</a></p>
+<h2 class="text-2xl font-bold mt-8">How to join</h2>
+<ol><li>Install MindFriend and sign in.</li><li>Come back to this page and tap Open in MindFriend, or open Buddy in the app and enter the code under Have a code from a friend?</li></ol>
+<p>The code works for 30 days.</p>
+<nav aria-label="Site"><a href="/support/">Support</a> · <a href="/privacy/">Privacy Policy</a></nav></main>
+<script>
+(function () {
+  var match = location.pathname.match(/^\/buddy\/([A-Za-z0-9]{4,32})\/?$/);
+  if (!match) return;
+  var code = match[1].toUpperCase();
+  document.getElementById("code").textContent = code;
+  document.getElementById("code-line").hidden = false;
+  document.getElementById("open").href = "mindfriend://buddy/" + code;
+})();
+</script></body></html>

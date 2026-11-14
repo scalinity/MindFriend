@@ -436,3 +436,29 @@ final class DeepLinkNavigationTests: XCTestCase {
         )
     }
 }
+
+/// A buddy invite carries one code: the one stored on the invite and shown on screen.
+@MainActor
+final class BuddyInviteMessageTests: XCTestCase {
+    func testTheInviteTextCarriesTheStoredCodeAndAWorkingLink() throws {
+        let code = "CYK4GF"
+        let body = BuddyInviteMessage.body(code: code)
+        XCTAssertTrue(body.contains("https://getmindfriend.app/buddy/CYK4GF"))
+        XCTAssertTrue(body.contains("enter my code CYK4GF"))
+        XCTAssertFalse(body.contains("\u{2014}"), "No em dashes in user-facing text")
+        // The web page hands the same code to the app's own link.
+        let appLink = try XCTUnwrap(URL(string: "mindfriend://buddy/\(code)"))
+        XCTAssertEqual(DeepLinkRouter().parseURL(appLink), .buddy(code: code))
+    }
+
+    func testTextAndEmailFallBackToTheShareSheetWhenThePhoneCannotSend() {
+        // The simulator has no Messages or Mail account, so both use the share sheet with the same text.
+        for method in [BuddyRelationship.InviteMethod.sms, .email] {
+            if case .share(let text) = BuddyInviteComposer.make(method: method, contact: "dad@example.com", code: "CYK4GF") {
+                XCTAssertEqual(text, BuddyInviteMessage.body(code: "CYK4GF"))
+            } else {
+                XCTFail("Expected the share sheet on a device that cannot send \(method)")
+            }
+        }
+    }
+}

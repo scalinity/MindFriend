@@ -2,7 +2,7 @@ The public website uses the supplied MindFriend home, privacy and terms pages, p
 
 Run `sh landing-page/build-css.sh` from the repository root to rebuild the two stylesheets with the existing Tailwind 3 themes. The build uses Tailwind CSS 3.4.17; no JavaScript is required to display page content. The optional animation libraries retain their original CDN integrity pins.
 
-Run `python3 landing-page/deploy/package.py OUTPUT.tar.gz` to create a public-only archive and SHA-256 manifest. The ten-file allowlist excludes old auth experiments, workflow JSON, build inputs and private files. The app screenshot is an existing public App Store asset; its source is recorded in `assets/sources.json`. Tailwind's license is included.
+Run `python3 landing-page/deploy/package.py OUTPUT.tar.gz` to create a public-only archive and SHA-256 manifest. The allowlist excludes old auth experiments, workflow JSON, build inputs and private files. The app screenshot is an existing public App Store asset; its source is recorded in `assets/sources.json`. Tailwind's license is included.
 
 The production configuration serves `getmindfriend.app` from `/srv/mindfriend-site/current` and redirects `www` to the apex while preserving the URI. Caddy obtains and renews free HTTPS certificates. The dedicated `mindfriend-site.service` runs as the existing `www-data` account with its TLS state under `/var/lib/mindfriend-site`; the Caddy admin endpoint is disabled. No app/backend credentials belong in this website.
 
