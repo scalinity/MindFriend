@@ -18,7 +18,7 @@ struct ExerciseCustomStep: View {
     var body: some View {
         TutorialStepView(
             icon: "wand.and.stars",
-            iconColor: SupportTheme.accent,
+            iconColor: SupportTheme.Area.quests.palette.ink,
             headline: "Custom Exercises",
             subheadline: "Need something specific? AI can generate personalized exercises just for you.",
             primaryLabel: "Start Exploring",
@@ -32,7 +32,7 @@ struct ExerciseCustomStep: View {
                         HStack(spacing: SupportTheme.Spacing.s) {
                             Image(systemName: "wand.and.stars")
                                 .font(.title2)
-                                .foregroundStyle(SupportTheme.accent)
+                                .foregroundStyle(SupportTheme.Area.quests.palette.ink)
                                 .symbolEffect(.pulse.wholeSymbol, isActive: !reduceMotion && (showGeneration))
 
                             VStack(alignment: .leading) {
@@ -57,13 +57,13 @@ struct ExerciseCustomStep: View {
                         VStack(alignment: .leading, spacing: SupportTheme.Spacing.s) {
                             HStack {
                                 Image(systemName: "moon.stars.fill")
-                                    .foregroundStyle(SupportTheme.accent)
+                                    .foregroundStyle(SupportTheme.Area.quests.palette.ink)
                                 Text("Evening Wind-Down")
                                     .font(.subheadline.weight(.semibold))
                                 Spacer()
                                 Text("AI Generated")
                                     .font(.caption2)
-                                    .foregroundStyle(SupportTheme.accent)
+                                    .foregroundStyle(SupportTheme.Area.quests.palette.ink)
                                     .padding(.horizontal, SupportTheme.Spacing.xs)
                                     .padding(.vertical, SupportTheme.Spacing.xxs)
                                     .background(SupportTheme.surface)

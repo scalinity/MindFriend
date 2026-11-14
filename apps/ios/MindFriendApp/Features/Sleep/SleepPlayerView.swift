@@ -3,6 +3,7 @@ import SwiftUI
 /// Full-screen player view for sleep content
 struct SleepPlayerView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     let content: SleepContent
     @ObservedObject var viewModel: SleepViewModel
     @Environment(\.dismiss) private var dismiss
@@ -43,15 +44,18 @@ struct SleepPlayerView: View {
             .padding(SupportTheme.Spacing.m)
         }
 
+        .tint(SupportTheme.Area.sleep.palette.ink)
         .sheet(isPresented: $showTimerPicker) {
             sleepTimerPicker
         }
     }
 
+    private var sleepPalette: AreaPalette { SupportTheme.Area.sleep.palette }
+
     // MARK: - Subviews
 
     private var backgroundGradient: some View {
-        SupportTheme.canvas
+        sleepPalette.softGradient
         .ignoresSafeArea()
     }
 
@@ -62,7 +66,7 @@ struct SleepPlayerView: View {
             } label: {
                 Image(systemName: "chevron.down")
                     .font(.title2)
-                    .foregroundStyle(SupportTheme.textPrimary.opacity(0.8))
+                    .foregroundStyle(SupportTheme.textPrimary)
                     .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                     .accessibilityLabel("Close player")
             }
@@ -73,12 +77,12 @@ struct SleepPlayerView: View {
                 Text("NOW PLAYING")
                     .font(.caption2)
                     .fontWeight(.semibold)
-                    .foregroundStyle(SupportTheme.textPrimary.opacity(0.5))
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .tracking(1)
 
                 Text(content.contentType.displayName)
                     .font(.caption)
-                    .foregroundStyle(SupportTheme.textPrimary.opacity(0.7))
+                    .foregroundStyle(SupportTheme.textSecondary)
             }
 
             Spacer()
@@ -90,7 +94,7 @@ struct SleepPlayerView: View {
                 } label: {
                     Image(systemName: viewModel.playerState.sleepTimerDuration != nil ? "moon.fill" : "moon")
                         .font(.title2)
-                        .foregroundStyle(viewModel.playerState.sleepTimerDuration != nil ? .indigo : SupportTheme.textPrimary.opacity(0.8))
+                        .foregroundStyle(viewModel.playerState.sleepTimerDuration != nil ? sleepPalette.ink : SupportTheme.textPrimary)
                         .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                         .accessibilityLabel("Sleep timer")
                 }
@@ -105,35 +109,38 @@ struct SleepPlayerView: View {
 
     private var artworkView: some View {
         ZStack {
-            // Glow effect
-            Circle()
-                .fill(
-                    SupportTheme.surface
-                )
-                .frame(width: 360, height: 360)
-                .blur(radius: 30)
+            // Static sleep-area glow; solid ring instead of a translucent blur under Reduce Transparency.
+            if !reduceTransparency {
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [sleepPalette.ink.opacity(0.4), .clear],
+                            center: .center,
+                            startRadius: 0,
+                            endRadius: 180
+                        )
+                    )
+                    .frame(width: 360, height: 360)
+            }
 
             // Main artwork circle
             ZStack {
                 Circle()
-                    .fill(
-                        SupportTheme.surface
-                    )
+                    .fill(content.contentType.heroGradient)
 
                 // Icon
                 Image(systemName: content.contentType.icon)
                     .font(.system(.largeTitle))
-                    .foregroundStyle(SupportTheme.textPrimary.opacity(0.9))
+                    .foregroundStyle(SupportTheme.onHero)
 
-                // Animated ring when playing
+                // Ring when playing
                 if viewModel.playerState.isPlaying {
                     Circle()
-                        .stroke(SupportTheme.surface.opacity(0.2), lineWidth: 2)
+                        .stroke(SupportTheme.onHero.opacity(reduceTransparency ? 1 : 0.35), lineWidth: 2)
                         .scaleEffect(1.1)
                 }
             }
             .frame(width: 240, height: 240)
-            .shadow(color: SupportTheme.canvas.opacity(0.3), radius: 20, y: 10)
         }
     }
 
@@ -148,7 +155,7 @@ struct SleepPlayerView: View {
             // Only show category, no "Loopable" text (soundscapes loop by default)
             Label(content.category.displayName, systemImage: content.category.icon)
                 .font(.caption)
-                .foregroundStyle(SupportTheme.textPrimary.opacity(0.5))
+                .foregroundStyle(SupportTheme.textSecondary)
         }
         .padding(.vertical, SupportTheme.Spacing.m)
     }
@@ -160,12 +167,12 @@ struct SleepPlayerView: View {
                 ZStack(alignment: .leading) {
                     // Track background
                     Capsule()
-                        .fill(SupportTheme.surface.opacity(0.2))
+                        .fill(reduceTransparency ? SupportTheme.separator : sleepPalette.ink.opacity(0.25))
                         .frame(height: 4)
 
                     // Progress
                     Capsule()
-                        .fill(SupportTheme.surface)
+                        .fill(sleepPalette.ink)
                         .frame(
                             width: CGFloat(isDraggingProgress ? dragProgress : min(1, max(0, viewModel.playerState.progress))) * geometry.size.width,
                             height: 4
@@ -174,7 +181,7 @@ struct SleepPlayerView: View {
 
                     // Knob
                     Circle()
-                        .fill(SupportTheme.surface)
+                        .fill(sleepPalette.ink)
                         .frame(width: 12, height: 12)
                         .offset(x: CGFloat(isDraggingProgress ? dragProgress : min(1, max(0, viewModel.playerState.progress))) * (geometry.size.width - 12))
                         .animation(reduceMotion ? nil : isDraggingProgress ? nil : .linear(duration: 0.5), value: viewModel.playerState.progress)
@@ -197,14 +204,14 @@ struct SleepPlayerView: View {
             HStack {
                 Text(viewModel.playerState.formattedCurrentTime)
                     .font(.caption)
-                    .foregroundStyle(SupportTheme.textPrimary.opacity(0.6))
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .monospacedDigit()
 
                 Spacer()
 
                 Text(viewModel.playerState.formattedTimeRemaining)
                     .font(.caption)
-                    .foregroundStyle(SupportTheme.textPrimary.opacity(0.6))
+                    .foregroundStyle(SupportTheme.textSecondary)
                     .monospacedDigit()
             }
         }
@@ -219,7 +226,7 @@ struct SleepPlayerView: View {
             } label: {
                 Image(systemName: "gobackward.15")
                     .font(.title)
-                    .foregroundStyle(SupportTheme.textPrimary.opacity(0.8))
+                    .foregroundStyle(sleepPalette.ink)
                     .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                     .accessibilityLabel("Back 15 seconds")
             }
@@ -230,16 +237,16 @@ struct SleepPlayerView: View {
             } label: {
                 ZStack {
                     Circle()
-                        .fill(SupportTheme.surface)
+                        .fill(sleepPalette.heroGradient)
                         .frame(width: 72, height: 72)
 
                     if viewModel.playerState.isBuffering {
                         ProgressView()
-                            .tint(SupportTheme.accent)
+                            .tint(SupportTheme.onHero)
                     } else {
                         Image(systemName: viewModel.playerState.isPlaying ? "pause.fill" : "play.fill")
                             .font(.title)
-                            .foregroundStyle(SupportTheme.textPrimary)
+                            .foregroundStyle(SupportTheme.onHero)
                             .offset(x: viewModel.playerState.isPlaying ? 0 : 2)
                     }
                 }
@@ -253,7 +260,7 @@ struct SleepPlayerView: View {
             } label: {
                 Image(systemName: "goforward.15")
                     .font(.title)
-                    .foregroundStyle(SupportTheme.textPrimary.opacity(0.8))
+                    .foregroundStyle(sleepPalette.ink)
                     .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                     .accessibilityLabel("Forward 15 seconds")
             }
@@ -268,11 +275,11 @@ struct SleepPlayerView: View {
                 if let remaining = viewModel.playerState.sleepTimerRemaining {
                     HStack(spacing: SupportTheme.Spacing.xs) {
                         Image(systemName: "moon.fill")
-                            .foregroundStyle(SupportTheme.accent)
+                            .foregroundStyle(sleepPalette.ink)
 
                         Text("Sleep timer: \(formatTime(remaining))")
                             .font(.subheadline)
-                            .foregroundStyle(SupportTheme.textPrimary.opacity(0.7))
+                            .foregroundStyle(SupportTheme.textSecondary)
 
                         Spacer()
 
@@ -280,22 +287,22 @@ struct SleepPlayerView: View {
                             viewModel.cancelSleepTimer()
                         }
                         .font(.subheadline)
-                        .foregroundStyle(SupportTheme.accent)
+                        .foregroundStyle(sleepPalette.ink)
                     }
                     .padding(SupportTheme.Spacing.m)
-                    .background(SupportTheme.surface.opacity(0.05))
+                    .background(SupportTheme.surface)
                     .cornerRadius(SupportTheme.controlRadius)
                 } else if viewModel.playerState.isFading {
                     HStack(spacing: SupportTheme.Spacing.xs) {
                         ProgressView()
-                            .tint(SupportTheme.accent)
+                            .tint(sleepPalette.ink)
 
                         Text("Fading out...")
                             .font(.subheadline)
-                            .foregroundStyle(SupportTheme.textPrimary.opacity(0.7))
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                     .padding(SupportTheme.Spacing.m)
-                    .background(SupportTheme.surface.opacity(0.05))
+                    .background(SupportTheme.surface)
                     .cornerRadius(SupportTheme.controlRadius)
                 }
             }
@@ -318,7 +325,7 @@ struct SleepPlayerView: View {
 
                             if viewModel.playerState.sleepTimerDuration == duration {
                                 Image(systemName: "checkmark")
-                                    .foregroundStyle(SupportTheme.accent)
+                                    .foregroundStyle(sleepPalette.ink)
                             }
                         }
                     }
@@ -348,17 +355,6 @@ struct SleepPlayerView: View {
     }
 
     // MARK: - Helpers
-
-    private func gradientColors(for type: SleepContentType) -> [Color] {
-        switch type {
-        case .story:
-            return [SupportTheme.accent, SupportTheme.accent]
-        case .soundscape:
-            return [SupportTheme.accent, SupportTheme.accent]
-        case .routine:
-            return [SupportTheme.accent, SupportTheme.accent]
-        }
-    }
 
     private func formatTime(_ seconds: TimeInterval) -> String {
         let minutes = Int(seconds) / 60

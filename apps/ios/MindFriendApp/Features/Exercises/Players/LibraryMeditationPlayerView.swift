@@ -30,7 +30,8 @@ struct LibraryMeditationPlayerView: View {
             // Bottom controls
             controlsSection
         }
-        .background(SupportTheme.canvas)
+        .background(SupportTheme.Area.journal.palette.softGradient.ignoresSafeArea())
+        .tint(SupportTheme.Area.journal.palette.ink)
         .onDisappear {
             // Stop audio when leaving
             if viewModel.hasAudio {
@@ -45,7 +46,7 @@ struct LibraryMeditationPlayerView: View {
         HStack(spacing: SupportTheme.Spacing.xs) {
             Image(systemName: viewModel.audioPlayer.isPlaying ? "waveform" : "speaker.wave.2")
                 .font(.caption)
-                .foregroundStyle(viewModel.audioPlayer.isPlaying ? SupportTheme.accent : SupportTheme.textSecondary)
+                .foregroundStyle(viewModel.audioPlayer.isPlaying ? SupportTheme.Area.journal.palette.ink : SupportTheme.textSecondary)
                 .symbolEffect(.variableColor.iterative, isActive: !reduceMotion && (viewModel.audioPlayer.isPlaying))
 
             Text("Guided Audio")
@@ -64,7 +65,7 @@ struct LibraryMeditationPlayerView: View {
             } label: {
                 Image(systemName: viewModel.audioPlayer.isPlaying ? "speaker.wave.2.fill" : "speaker.slash.fill")
                     .font(.caption)
-                    .foregroundStyle(viewModel.audioPlayer.isPlaying ? SupportTheme.accent : SupportTheme.textSecondary)
+                    .foregroundStyle(viewModel.audioPlayer.isPlaying ? SupportTheme.Area.journal.palette.ink : SupportTheme.textSecondary)
                     .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                     .accessibilityLabel(viewModel.audioPlayer.isPlaying ? "Mute audio" : "Play audio")
             }
@@ -81,7 +82,7 @@ struct LibraryMeditationPlayerView: View {
             // Progress bar
             StepProgressBar(
                 progress: viewModel.progress,
-                color: SupportTheme.accent
+                color: SupportTheme.Area.journal.palette.ink
             )
             .padding(.horizontal, SupportTheme.Spacing.m)
 
@@ -195,7 +196,7 @@ struct LibraryMeditationPlayerView: View {
             } label: {
                 Image(systemName: viewModel.isPlaying ? "pause.circle.fill" : "play.circle.fill")
                     .font(.system(.largeTitle))
-                    .foregroundStyle(SupportTheme.accent)
+                    .foregroundStyle(SupportTheme.Area.journal.palette.ink)
                     .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                     .accessibilityLabel(viewModel.isPlaying ? "Pause" : "Play")
             }
@@ -234,7 +235,7 @@ private struct SegmentProgressIndicator: View {
         HStack(spacing: SupportTheme.Spacing.xxs) {
             ForEach(0..<total, id: \.self) { index in
                 RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
-                    .fill(index <= current ? SupportTheme.accent : SupportTheme.textSecondary.opacity(0.3))
+                    .fill(index <= current ? SupportTheme.Area.journal.palette.ink : SupportTheme.textSecondary.opacity(0.3))
                     .frame(height: 4)
             }
         }

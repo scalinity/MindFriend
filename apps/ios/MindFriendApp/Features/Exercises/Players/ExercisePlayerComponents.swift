@@ -19,14 +19,17 @@ enum LibraryBreathingPhase: String, CaseIterable, Equatable {
         }
     }
 
-    var color: Color {
+    /// 1.0.5 colors: inhale blue, hold purple, exhale green.
+    var area: SupportTheme.Area {
         switch self {
-        case .inhale: return SupportTheme.accent
-        case .holdIn: return SupportTheme.accent
-        case .exhale: return SupportTheme.accent
-        case .holdOut: return SupportTheme.accent
+        case .inhale: return .voice
+        case .holdIn, .holdOut: return .journal
+        case .exhale: return .insights
         }
     }
+
+    /// The phase's vivid color for the orb; text never sits on it.
+    var color: Color { area.palette.deep }
 
     var accessibilityLabel: String {
         switch self {
@@ -43,30 +46,47 @@ enum LibraryBreathingPhase: String, CaseIterable, Equatable {
 /// Animated breathing circle component
 struct BreathingCircle: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     let scale: CGFloat
     let phase: LibraryBreathingPhase
 
     var body: some View {
         ZStack {
             // Outer glow
-            Circle()
-                .fill(
-                    SupportTheme.surface
-                )
-                .scaleEffect(reduceMotion ? 1 : (scale * 1.2))
+            if !reduceTransparency {
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [phase.color.opacity(0.3), .clear],
+                            center: .center,
+                            startRadius: 0,
+                            endRadius: 150
+                        )
+                    )
+                    .scaleEffect(reduceMotion ? 1 : (scale * 1.2))
+            }
 
             // Main circle
             Circle()
                 .fill(
-                    SupportTheme.surface
+                    RadialGradient(
+                        colors: reduceTransparency
+                            ? [phase.color, phase.color]
+                            : [phase.color.opacity(0.8), phase.color.opacity(0.4)],
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: 100
+                    )
                 )
                 .scaleEffect(reduceMotion ? 1 : (scale))
 
             // Inner glow
-            Circle()
-                .fill(phase.color.opacity(0.6))
-                .scaleEffect(reduceMotion ? 1 : (scale * 0.3))
-                .blur(radius: 10)
+            if !reduceTransparency {
+                Circle()
+                    .fill(SupportTheme.onHero.opacity(0.35))
+                    .scaleEffect(reduceMotion ? 1 : (scale * 0.3))
+                    .blur(radius: 10)
+            }
         }
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.3), value: phase)
     }
@@ -110,7 +130,7 @@ struct StepProgressBar: View {
 
                 // Progress fill
                 RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
-                    .fill(SupportTheme.accent)
+                    .fill(color)
                     .frame(width: max(0, geometry.size.width * progress))
                     .animation(reduceMotion ? nil : .spring(response: 0.4, dampingFraction: 0.8), value: progress)
             }
@@ -195,6 +215,7 @@ struct TimerDisplay: View {
 struct PlayerControls: View {
     let isPlaying: Bool
     let canReset: Bool
+    var tint: Color = SupportTheme.accent
     let onPlayPause: () -> Void
     let onReset: () -> Void
     let onComplete: () -> Void
@@ -213,7 +234,7 @@ struct PlayerControls: View {
             Button(action: onPlayPause) {
                 Image(systemName: isPlaying ? "pause.circle.fill" : "play.circle.fill")
                     .font(.system(.largeTitle))
-                    .foregroundStyle(SupportTheme.accent)
+                    .foregroundStyle(tint)
             }
 
             // Complete button
@@ -233,6 +254,7 @@ struct SegmentView: View {
     let text: String
     let isActive: Bool
     let segmentType: String?
+    var area: SupportTheme.Area = .journal
 
     var body: some View {
         VStack(alignment: .leading, spacing: SupportTheme.Spacing.xs) {
@@ -240,7 +262,7 @@ struct SegmentView: View {
                 Text(type.capitalized)
                     .font(.caption)
                     .fontWeight(.medium)
-                    .foregroundStyle(isActive ? SupportTheme.accent : SupportTheme.textSecondary)
+                    .foregroundStyle(isActive ? area.palette.ink : SupportTheme.textSecondary)
                     .textCase(.uppercase)
             }
 
@@ -254,7 +276,7 @@ struct SegmentView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
-                .fill(isActive ? SupportTheme.accent.opacity(0.1) : Color.clear)
+                .fill(isActive ? area.palette.tint : Color.clear)
         )
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.3), value: isActive)
     }
@@ -312,10 +334,10 @@ struct JournalPromptCard: View {
                 Text(category.capitalized)
                     .font(.caption)
                     .fontWeight(.semibold)
-                    .foregroundStyle(SupportTheme.accent)
+                    .foregroundStyle(SupportTheme.Area.quests.palette.ink)
                     .padding(.horizontal, SupportTheme.Spacing.xs)
                     .padding(.vertical, SupportTheme.Spacing.xxs)
-                    .background(SupportTheme.surface)
+                    .background(SupportTheme.Area.quests.palette.tint)
                     .clipShape(Capsule())
             }
 
@@ -363,7 +385,7 @@ struct MovementStepCard: View {
             if isActive, let time = timeRemaining {
                 HStack {
                     ProgressView(value: Double(time), total: Double(step.durationSeconds))
-                        .tint(step.isRestPeriod == true ? .green : SupportTheme.accent)
+                        .tint(step.isRestPeriod == true ? SupportTheme.Area.insights.palette.ink : SupportTheme.Area.people.palette.ink)
 
                     Text("\(time)s")
                         .font(.caption)
@@ -379,11 +401,11 @@ struct MovementStepCard: View {
         .padding(SupportTheme.Spacing.m)
         .background(
             RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
-                .fill(isActive ? SupportTheme.accent.opacity(0.1) : SupportTheme.surface)
+                .fill(isActive ? SupportTheme.Area.people.palette.tint : SupportTheme.surface)
         )
         .overlay(
             RoundedRectangle(cornerRadius: SupportTheme.controlRadius)
-                .stroke(isActive ? SupportTheme.accent : .clear, lineWidth: 2)
+                .stroke(isActive ? SupportTheme.Area.people.palette.ink : .clear, lineWidth: 2)
         )
     }
 }
@@ -392,10 +414,10 @@ struct MovementStepCard: View {
 
 /// Full-screen gradient background for immersive mode
 struct ImmersiveBackground: View {
-    let colors: [Color]
+    let area: SupportTheme.Area
 
     var body: some View {
-        SupportTheme.canvas
+        area.palette.softGradient
         .ignoresSafeArea()
     }
 }

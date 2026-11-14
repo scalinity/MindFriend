@@ -45,8 +45,8 @@ struct SessionView: View {
 
     var body: some View {
         ZStack {
-            // Background gradient
-            SupportTheme.canvas
+            // Background gradient in the modality's 1.0.5 color
+            modality.toolkitArea.palette.softGradient
             .ignoresSafeArea()
 
             if let error = viewModel.errorMessage {
@@ -100,7 +100,7 @@ struct SessionView: View {
 
                             Text(modality.displayName)
                                 .font(.caption)
-                                .foregroundColor(SupportTheme.textPrimary.opacity(0.7))
+                                .foregroundColor(SupportTheme.textSecondary)
                         }
                     }
                     .padding(.horizontal, SupportTheme.Spacing.m)
@@ -114,7 +114,7 @@ struct SessionView: View {
                         if reduceMotion {
                             Image(systemName: "circle.circle")
                                 .font(.largeTitle)
-                                .foregroundStyle(SupportTheme.accent)
+                                .foregroundStyle(modality.toolkitArea.palette.ink)
                                 .opacity(viewModel.isPlaying ? 1 : 0.6)
                                 .animation(.easeInOut(duration: 0.2), value: viewModel.isPlaying)
                                 .frame(maxWidth: .infinity, maxHeight: 300)
@@ -134,7 +134,7 @@ struct SessionView: View {
                                 .foregroundColor(SupportTheme.textPrimary.opacity(0.8))
 
                             ProgressView(value: viewModel.progressPercentage)
-                                .tint(SupportTheme.accent.opacity(0.6))
+                                .tint(modality.toolkitArea.palette.ink)
                                 .frame(width: 150)
                         }
                     } else {
@@ -145,7 +145,7 @@ struct SessionView: View {
                                 .foregroundColor(SupportTheme.textPrimary)
 
                             ProgressView(value: viewModel.progressPercentage)
-                                .tint(SupportTheme.accent)
+                                .tint(modality.toolkitArea.palette.ink)
                                 .frame(width: 200)
                         }
                     }
@@ -162,12 +162,12 @@ struct SessionView: View {
                         } label: {
                             ZStack {
                                 Circle()
-                                    .fill(SupportTheme.surface)
+                                    .fill(modality.toolkitArea.palette.heroGradient)
                                     .frame(width: 80, height: 80)
 
                                 Image(systemName: viewModel.isPlaying ? "pause.fill" : "play.fill")
                                     .font(.title)
-                                    .foregroundColor(SupportTheme.textPrimary)
+                                    .foregroundColor(SupportTheme.onHero)
                             }
                             .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                             .accessibilityLabel(viewModel.isPlaying ? "Pause" : "Play")

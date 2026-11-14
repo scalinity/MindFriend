@@ -8,7 +8,7 @@ struct LibraryBreathingPlayerView: View {
     var body: some View {
         ZStack {
             // Immersive gradient background
-            ImmersiveBackground(colors: viewModel.breathingPhaseColors)
+            ImmersiveBackground(area: viewModel.breathingPhase.area)
                 .animation(reduceMotion ? nil : .easeInOut(duration: 0.5), value: viewModel.breathingPhase)
 
             VStack(spacing: SupportTheme.Spacing.xl) {
@@ -19,7 +19,7 @@ struct LibraryBreathingPlayerView: View {
                     if let intro = viewModel.breathingInstructions?.introText {
                         Text(intro)
                             .font(.body)
-                            .foregroundStyle(SupportTheme.textPrimary.opacity(0.8))
+                            .foregroundStyle(SupportTheme.textSecondary)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, SupportTheme.Spacing.xl)
                             .transition(reduceMotion ? .opacity : .opacity)
@@ -37,7 +37,7 @@ struct LibraryBreathingPlayerView: View {
                 if reduceMotion {
                     // Static circle for reduced motion
                     Circle()
-                        .fill(viewModel.breathingPhase.color.opacity(0.6))
+                        .fill(viewModel.breathingPhase.color)
                         .frame(width: 200, height: 200)
                 } else {
                     BreathingCircle(
@@ -57,7 +57,7 @@ struct LibraryBreathingPlayerView: View {
                         current: viewModel.currentCycle,
                         total: instructions.cycles
                     )
-                    .foregroundStyle(SupportTheme.textPrimary.opacity(0.7))
+                    .foregroundStyle(SupportTheme.textSecondary)
                 }
 
                 Spacer()
@@ -66,6 +66,7 @@ struct LibraryBreathingPlayerView: View {
                 PlayerControls(
                     isPlaying: viewModel.isPlaying,
                     canReset: viewModel.isPlaying || viewModel.currentCycle > 1,
+                    tint: viewModel.breathingPhase.area.palette.ink,
                     onPlayPause: {
                         if viewModel.isPlaying {
                             viewModel.pauseTimer()

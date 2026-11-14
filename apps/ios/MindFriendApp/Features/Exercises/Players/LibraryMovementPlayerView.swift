@@ -24,7 +24,8 @@ struct LibraryMovementPlayerView: View {
             // Controls
             controlsSection
         }
-        .background(SupportTheme.canvas)
+        .background(SupportTheme.Area.people.palette.softGradient.ignoresSafeArea())
+        .tint(SupportTheme.Area.people.palette.ink)
     }
 
     // MARK: - Header
@@ -34,7 +35,7 @@ struct LibraryMovementPlayerView: View {
             // Overall progress
             StepProgressBar(
                 progress: viewModel.progress,
-                color: SupportTheme.accent
+                color: SupportTheme.Area.people.palette.ink
             )
             .padding(.horizontal, SupportTheme.Spacing.m)
 
@@ -89,7 +90,7 @@ struct LibraryMovementPlayerView: View {
             // Animated figure
             Image(systemName: "figure.walk")
                 .font(.system(.largeTitle))
-                .foregroundStyle(SupportTheme.accent)
+                .foregroundStyle(SupportTheme.Area.people.palette.ink)
                 .symbolEffect(.pulse, isActive: !reduceMotion && (viewModel.isPlaying))
 
             // Timer
@@ -131,7 +132,7 @@ struct LibraryMovementPlayerView: View {
             } label: {
                 Image(systemName: viewModel.isPlaying ? "pause.circle.fill" : "play.circle.fill")
                     .font(.system(.largeTitle))
-                    .foregroundStyle(SupportTheme.accent)
+                    .foregroundStyle(SupportTheme.Area.people.palette.ink)
                     .frame(minWidth: SupportTheme.minimumTarget, minHeight: SupportTheme.minimumTarget)
                     .accessibilityLabel(viewModel.isPlaying ? "Pause" : "Play")
             }

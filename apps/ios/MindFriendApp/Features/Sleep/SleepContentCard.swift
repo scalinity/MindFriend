@@ -77,10 +77,10 @@ struct SleepContentCard: View {
                     HStack(spacing: SupportTheme.Spacing.xxs) {
                         Image(systemName: content.contentType.icon)
                             .font(.caption2)
-                            .foregroundStyle(SupportTheme.textPrimary.opacity(0.7))
+                            .foregroundStyle(SupportTheme.Area.sleep.palette.ink)
                         Text(content.category.displayName)
                             .font(.caption)
-                            .foregroundStyle(SupportTheme.textPrimary.opacity(0.7))
+                            .foregroundStyle(SupportTheme.textSecondary)
                     }
                 }
             }
@@ -90,24 +90,28 @@ struct SleepContentCard: View {
 
     private var thumbnailPlaceholder: some View {
         ZStack {
-            SupportTheme.surface
+            content.contentType.heroGradient
 
             Image(systemName: content.contentType.icon)
                 .font(.title)
-                .foregroundStyle(SupportTheme.textPrimary.opacity(0.8))
+                .foregroundStyle(SupportTheme.onHero)
         }
         .frame(height: 100)
         .cornerRadius(SupportTheme.controlRadius)
     }
+}
 
-    private func gradientColors(for type: SleepContentType) -> [Color] {
-        switch type {
+extension SleepContentType {
+    /// 1.0.5 colors: stories indigo to purple, soundscapes teal to cyan, routines blue to indigo.
+    /// Symbols on it are `SupportTheme.onHero`.
+    var heroGradient: LinearGradient {
+        switch self {
         case .story:
-            return [SupportTheme.accent.opacity(0.8), SupportTheme.accent.opacity(0.6)]
+            return SupportTheme.Area.sleep.palette.heroGradient
         case .soundscape:
-            return [SupportTheme.accent.opacity(0.8), SupportTheme.accent.opacity(0.6)]
+            return SupportTheme.Area.sensory.palette.heroGradient
         case .routine:
-            return [SupportTheme.accent.opacity(0.8), SupportTheme.accent.opacity(0.6)]
+            return SupportTheme.Hero.gradient(SupportTheme.Area.voice.palette.deep, SupportTheme.Area.sleep.palette.deep)
         }
     }
 }
@@ -152,7 +156,7 @@ struct SleepContentListItem: View {
                     HStack(spacing: SupportTheme.Spacing.xs) {
                         Label(content.formattedDuration, systemImage: "clock")
                             .font(.caption)
-                            .foregroundStyle(SupportTheme.textPrimary.opacity(0.7))
+                            .foregroundStyle(SupportTheme.textSecondary)
 
                         // Premium badge - only show if content is premium AND user is not premium
                         if content.isPremium && !isPremiumUser {
@@ -168,7 +172,7 @@ struct SleepContentListItem: View {
                 // Play indicator
                 Image(systemName: "play.circle.fill")
                     .font(.title2)
-                    .foregroundStyle(SupportTheme.accent)
+                    .foregroundStyle(SupportTheme.Area.sleep.palette.ink)
             }
             .padding(.vertical, SupportTheme.Spacing.xs)
             .contentShape(Rectangle())
@@ -178,9 +182,9 @@ struct SleepContentListItem: View {
 
     private var thumbnailPlaceholder: some View {
         ZStack {
-            SupportTheme.surface
+            content.contentType.heroGradient
             Image(systemName: content.contentType.icon)
-                .foregroundStyle(SupportTheme.textPrimary.opacity(0.8))
+                .foregroundStyle(SupportTheme.onHero)
         }
     }
 }
