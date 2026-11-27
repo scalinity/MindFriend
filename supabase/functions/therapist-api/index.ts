@@ -58,7 +58,7 @@ Deno.serve(async (req) => {
       .from("therapy_access_log")
       .select("*", { count: "exact", head: true })
       .eq("therapist_id", therapistId)
-      .gte("accessed_at", oneHourAgo);
+      .gte("created_at", oneHourAgo);
 
     if (
       !countError &&

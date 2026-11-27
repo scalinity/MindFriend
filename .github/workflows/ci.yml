@@ -106,6 +106,7 @@ jobs:
             supabase/functions/_shared/sleep-session-readers.test.ts \
             supabase/functions/_shared/local-time.test.ts \
             supabase/functions/manage-safety-plan/handler.test.ts \
+            supabase/functions/therapist-api/handler.test.ts \
             supabase/functions/delete-account/request-body.test.ts \
             supabase/functions/tests/voice_context_test.ts
       # Synthetic certificate chains are generated with openssl into .cache;
