@@ -432,11 +432,11 @@ enum SupportDestination: String, Codable, CaseIterable, Hashable, Identifiable {
     }
 
     /// Candidates for "Pin to Today". Settings, memory, history and help rows (and the unavailable Quotes
-    /// placeholder) are never pinnable.
+    /// placeholder) are never pinnable, and neither is anything that is not shown.
     var isPinnable: Bool {
         switch section {
         case .settings, .memory, .help, .history: return false
-        default: return self != .quote && self != .streaks
+        default: return self != .quote && !Self.notShown.contains(self)
         }
     }
 
@@ -509,9 +509,13 @@ enum SupportDestination: String, Codable, CaseIterable, Hashable, Identifiable {
         }
     }
 
-    /// Streak data stays on the server, but streaks are not shown anywhere in the app.
+    /// Destinations kept in the code but not shown anywhere in the app: no row, search result or pin.
+    /// Streak data stays on the server, but streaks are not shown. Peer support is not shown because
+    /// listener matching is not turned on and the app has no way to become a listener.
+    static let notShown: Set<SupportDestination> = [.streaks, .peerSupport]
+
     static func destinations(in section: SupportSection) -> [SupportDestination] {
-        allCases.filter { $0.section == section && $0 != .streaks }
+        allCases.filter { $0.section == section && !notShown.contains($0) }
     }
 
     /// Additional Explore rows that deliberately appear in a second place. Assessments live in

@@ -247,6 +247,21 @@ final class SupportNavigationTests: XCTestCase {
         XCTAssertFalse(SupportDestination.streaks.isPinnable)
         XCTAssertEqual(DeepLinkRoute.streak.supportPlacement, .destination(.achievements))
     }
+
+    func testPeerSupportIsNotShownAnywhere() {
+        // Explore rows, search and suggestions all draw from exploreRows.
+        for section in SupportSection.allCases {
+            XCTAssertFalse(SupportDestination.exploreRows(in: section).contains(.peerSupport), section.rawValue)
+        }
+        XCTAssertFalse(SupportDestination.peerSupport.isPinnable)
+
+        // A Today pin saved by an earlier build is dropped on load.
+        let suite = UserDefaults(suiteName: "SupportNavigationTests.\(UUID().uuidString)")!
+        let account = UUID()
+        let json = #"[{"destination":"peerSupport"},{"destination":"circles"}]"#
+        suite.set(Data(json.utf8), forKey: "mf.support.pins.v2.\(account.uuidString)")
+        XCTAssertEqual(SupportPinStore(accountID: account, defaults: suite).pins.map(\.destination), [.circles])
+    }
 }
 
 /// Area colors meet WCAG in light, dark and both with Increase Contrast: text 4.5:1 and
