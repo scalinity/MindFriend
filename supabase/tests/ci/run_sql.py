@@ -28,6 +28,7 @@ SUITES = (
     "buddy_invites.sql",
     "therapist_invitations.sql",
     "therapy_connection_writes.sql",
+    "therapist_record_writes.sql",
 )
 
 
