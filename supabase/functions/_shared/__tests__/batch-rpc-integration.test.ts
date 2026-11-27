@@ -6,7 +6,7 @@
  * - proactive-scheduler: Batch message insert & status updates → verify optimization
  * - check-lapsed-users: Absence calculation → batch operations → measure metrics
  *
- * Primary assertion: 201 sequential queries → 5 batch queries (99.88% reduction, 40× improvement)
+ * Primary assertion: 201 sequential queries → 5 batch queries (97.51% reduction, 40× improvement)
  * Secondary goal: Eliminate HTTP 429 rate limit errors in production
  */
 
@@ -108,9 +108,10 @@ Deno.test(
     // Verify reduction
     assertEquals(counter.getSequentialCount(), 150);
     assertEquals(counter.getBatchCount(), 3);
+    // 150 → 3 is exactly 98%, so the floor is inclusive.
     assert(
-      counter.getReductionPercentage() > 98,
-      "Reduction percentage should exceed 98%",
+      counter.getReductionPercentage() >= 98,
+      "Reduction percentage should reach 98%",
     );
     assert(
       counter.getImprovementFactor() > 40,
@@ -164,9 +165,10 @@ Deno.test(
       counter.getReductionPercentage() > 97,
       "Reduction percentage should exceed 97%",
     );
+    // 200 → 5 is exactly 40×, so the target is inclusive.
     assert(
-      counter.getImprovementFactor() > 40,
-      "Improvement factor should exceed 40x",
+      counter.getImprovementFactor() >= 40,
+      "Improvement factor should reach 40x",
     );
 
     console.log(
@@ -268,14 +270,15 @@ Deno.test(
     const reductionPercentage = counter.getReductionPercentage();
     const improvementFactor = counter.getImprovementFactor();
 
-    // PROJECT SPEC: 99.88% reduction, 40× improvement
+    // PROJECT SPEC: 201 → 5 queries is a 97.51% reduction and a 40× improvement.
+    // This simulation sums to 351 → 9: 97.44% and exactly 39×.
     assert(
-      reductionPercentage > 99.5,
-      "Reduction percentage should exceed 99.5% (target: 99.88%)",
+      reductionPercentage > 97,
+      "Reduction percentage should exceed 97% (target: 97.5%)",
     );
     assert(
-      improvementFactor > 39,
-      "Improvement factor should exceed 39× (target: 40×)",
+      improvementFactor >= 39,
+      "Improvement factor should reach 39× (target: 40×)",
     );
 
     console.log(`\n========== AGGREGATE METRICS ==========`);
@@ -283,7 +286,7 @@ Deno.test(
       `Sequential Queries: ${measuredSequential} (expected ~${expectedSequential})`,
     );
     console.log(`Batch Queries: ${measuredBatch} (expected ~${achievedBatch})`);
-    console.log(`Reduction: ${reductionPercentage.toFixed(2)}% (spec: 99.88%)`);
+    console.log(`Reduction: ${reductionPercentage.toFixed(2)}% (spec: 97.51%)`);
     console.log(
       `Improvement Factor: ${improvementFactor.toFixed(2)}× (spec: 40×)`,
     );
@@ -412,7 +415,7 @@ console.log(`
 ║                                                                ║
 ║  Test 4: Aggregate metrics (PROJECT GOAL)                      ║
 ║    • 201 sequential queries → 5 batch queries                  ║
-║    • 99.88% reduction target achieved ✓                        ║
+║    • 97.5% reduction target achieved ✓                         ║
 ║    • 40× improvement factor target achieved ✓                  ║
 ║                                                                ║
 ║  Test 5: Rate limit elimination verification                   ║
