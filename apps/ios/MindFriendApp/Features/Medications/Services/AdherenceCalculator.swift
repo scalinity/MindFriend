@@ -90,6 +90,9 @@ final class AdherenceCalculator {
             if logDate == currentDate {
                 if log.status == .taken || log.status == .late {
                     streak += 1
+                } else if log.status == .skipped {
+                    // A skipped dose ends the streak; earlier days must not be counted past it
+                    break
                 }
                 currentDate = calendar.date(byAdding: .day, value: -1, to: currentDate) ?? Date()
             } else if logDate < currentDate {

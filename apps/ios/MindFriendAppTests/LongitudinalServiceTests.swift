@@ -39,7 +39,7 @@ final class LongitudinalServiceTestsPlaceholder: XCTestCase {
     func testReportTypeIcons() {
         XCTAssertEqual(ReportType.quarterly.icon, "calendar.badge.clock")
         XCTAssertEqual(ReportType.annual.icon, "calendar")
-        XCTAssertEqual(ReportType.custom.icon, "calendar.badge.plus")
+        XCTAssertEqual(ReportType.custom.icon, "slider.horizontal.3")
     }
 
     // MARK: - Seasonal Patterns Tests

@@ -513,6 +513,8 @@ final class DebtRecalculationRegressionTests: XCTestCase {
     }
 
     func testRenderNonblockingProgressAndTimeoutRecovery() async throws {
+        let restoreAccessibility = enableAccessibilityTree()
+        defer { restoreAccessibility() }
         let defaults = UserDefaults.standard
         let saved = defaults.object(forKey: "wellbeing_debt_tutorial_completed")
         defaults.set(true, forKey: "wellbeing_debt_tutorial_completed")
@@ -604,6 +606,8 @@ final class DebtRecalculationRegressionTests: XCTestCase {
     }
 
     func testLateInitialLoadCannotReplaceSuccessfulRecalculation() async throws {
+        let restoreAccessibility = enableAccessibilityTree()
+        defer { restoreAccessibility() }
         let score = await fixture().score
         let reader = DebtHeldLoadFixture(score: score)
         let operation = DebtRecalculation(timeout: .seconds(2))
@@ -638,6 +642,8 @@ final class DebtRecalculationRegressionTests: XCTestCase {
     }
 
     func testAutomaticRefreshRendersWithoutManualAnalyze() async throws {
+        let restoreAccessibility = enableAccessibilityTree()
+        defer { restoreAccessibility() }
         let reader = fixture()
         await reader.enableAutomaticRefresh()
         let defaults = UserDefaults.standard
@@ -667,6 +673,8 @@ final class DebtRecalculationRegressionTests: XCTestCase {
     }
 
     func testAutomaticFailureShowsWorkingRetryOnHomeCard() async throws {
+        let restoreAccessibility = enableAccessibilityTree()
+        defer { restoreAccessibility() }
         let reader = fixture(behavior: .offline)
         await reader.enableAutomaticRefresh()
         let host = UIHostingController(rootView: WellbeingDebtCard(reader: reader)
@@ -683,6 +691,33 @@ final class DebtRecalculationRegressionTests: XCTestCase {
         try await Task.sleep(for: .milliseconds(200))
         capture(host, name: "Issue23-home-recovered-score")
         XCTAssertNotNil(findElement("Wellbeing Balance", in: window))
+    }
+
+    /// SwiftUI builds its accessibility tree only while an accessibility client (VoiceOver, XCUITest) is attached.
+    /// A unit-test host has none, so the screens below render (see the attached screenshots) but report no
+    /// accessibility elements, and the label lookups find nothing. This turns on the two switches that make
+    /// SwiftUI publish its tree, and returns the call that puts them back.
+    private func enableAccessibilityTree() -> () -> Void {
+        let switches = [
+            ("_AXSAutomationEnabled", "_AXSSetAutomationEnabled"),
+            ("_AXSApplicationAccessibilityEnabled", "_AXSApplicationAccessibilitySetEnabled"),
+        ]
+        var restores: [() -> Void] = []
+        for (getterName, setterName) in switches {
+            guard let library = dlopen("/usr/lib/libAccessibility.dylib", RTLD_NOW),
+                let getter = dlsym(library, getterName), let setter = dlsym(library, setterName)
+            else {
+                XCTFail("Accessibility switch \(setterName) is unavailable on this runtime")
+                continue
+            }
+            let isEnabled = unsafeBitCast(getter, to: (@convention(c) () -> UInt8).self)
+            let setEnabled = unsafeBitCast(setter, to: (@convention(c) (UInt8) -> Void).self)
+            let previous = isEnabled()
+            setEnabled(1)
+            restores.append { setEnabled(previous) }
+        }
+        let restoreAll = restores
+        return { restoreAll.forEach { $0() } }
     }
 
     private func findElement(_ label: String, in root: NSObject) -> NSObject? {

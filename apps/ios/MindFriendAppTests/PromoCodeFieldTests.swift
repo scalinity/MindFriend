@@ -8,9 +8,11 @@ final class PromoCodeFieldTests: XCTestCase {
     var billingService: MockBillingService!
     var sut: PromoCodeField!
 
-    @State var code = ""
-    @State var validatedPromo: PromoCode?
-    @State var isValidating = false
+    // Plain stored properties: `@State` outside a View is not installed in a view graph, so writes are dropped
+    // and every read returns the initial value.
+    var code = ""
+    var validatedPromo: PromoCode?
+    var isValidating = false
 
     override func setUp() {
         super.setUp()

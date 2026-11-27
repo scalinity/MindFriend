@@ -562,6 +562,43 @@ struct MoodPrediction: Identifiable, Codable, Equatable {
     }
 }
 
+extension MoodPrediction {
+    /// `predicted_for` is a Postgres DATE ("2026-01-23"). The Supabase SDK's date strategy only accepts
+    /// full timestamps, so a value that is not one is read as a calendar day in the device time zone.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        userId = try c.decode(UUID.self, forKey: .userId)
+        if let timestamp = try? c.decode(Date.self, forKey: .predictedFor) {
+            predictedFor = timestamp
+        } else {
+            let day = try c.decode(String.self, forKey: .predictedFor)
+            guard let date = Self.calendarDayFormatter.date(from: day) else {
+                throw DecodingError.dataCorruptedError(
+                    forKey: .predictedFor, in: c, debugDescription: "Invalid date: \(day)")
+            }
+            predictedFor = date
+        }
+        predictedMood = try c.decode(Decimal.self, forKey: .predictedMood)
+        confidence = try c.decode(Decimal.self, forKey: .confidence)
+        factors = try c.decode([MoodPredictionFactor].self, forKey: .factors)
+        modelVersion = try c.decode(String.self, forKey: .modelVersion)
+        featuresUsed = try c.decodeIfPresent([String: AnyCodableValue].self, forKey: .featuresUsed)
+        actualMood = try c.decodeIfPresent(Decimal.self, forKey: .actualMood)
+        predictionAccuracy = try c.decodeIfPresent(Decimal.self, forKey: .predictionAccuracy)
+        notificationSent = try c.decode(Bool.self, forKey: .notificationSent)
+        notificationSentAt = try c.decodeIfPresent(Date.self, forKey: .notificationSentAt)
+        createdAt = try c.decode(Date.self, forKey: .createdAt)
+    }
+
+    private static let calendarDayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
+}
+
 /// A factor contributing to the mood prediction
 struct MoodPredictionFactor: Codable, Equatable, Identifiable {
     var id: String { factor }

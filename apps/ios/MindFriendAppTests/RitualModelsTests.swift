@@ -216,21 +216,31 @@ final class RitualModelsTests: XCTestCase {
     }
 
     func testFormattedTimeUntilStart_seconds() {
-        let ritual = createRitual(scheduledFor: Date().addingTimeInterval(30))
+        let now = Date(timeIntervalSinceReferenceDate: 800_000_000)
+        let ritual = createRitual(scheduledFor: now.addingTimeInterval(30))
 
-        XCTAssertEqual(ritual.formattedTimeUntilStart, "Starting in 30s")
+        XCTAssertEqual(ritual.formattedTimeUntilStart(now: now), "Starting in 30s")
     }
 
     func testFormattedTimeUntilStart_minutes() {
-        let ritual = createRitual(scheduledFor: Date().addingTimeInterval(300))
+        let now = Date(timeIntervalSinceReferenceDate: 800_000_000)
+        let ritual = createRitual(scheduledFor: now.addingTimeInterval(300))
 
-        XCTAssertEqual(ritual.formattedTimeUntilStart, "Starting in 5m")
+        XCTAssertEqual(ritual.formattedTimeUntilStart(now: now), "Starting in 5m")
     }
 
     func testFormattedTimeUntilStart_hours() {
-        let ritual = createRitual(scheduledFor: Date().addingTimeInterval(7200))
+        let now = Date(timeIntervalSinceReferenceDate: 800_000_000)
+        let ritual = createRitual(scheduledFor: now.addingTimeInterval(7200))
 
-        XCTAssertEqual(ritual.formattedTimeUntilStart, "Starting in 2h")
+        XCTAssertEqual(ritual.formattedTimeUntilStart(now: now), "Starting in 2h")
+    }
+
+    func testFormattedTimeUntilStart_roundsPartialSecondUp() {
+        let now = Date(timeIntervalSinceReferenceDate: 800_000_000)
+        let ritual = createRitual(scheduledFor: now.addingTimeInterval(29.2))
+
+        XCTAssertEqual(ritual.formattedTimeUntilStart(now: now), "Starting in 30s")
     }
 
     func testFormattedTimeUntilStart_past() {

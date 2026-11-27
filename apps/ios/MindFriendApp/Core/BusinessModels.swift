@@ -115,7 +115,7 @@ struct SubscriptionPlan: Codable, Identifiable, Equatable, Hashable {
         billingPeriodMonths: 12,
         planType: .family,
         maxSeats: 6,
-        features: .premium,
+        features: .family,
         aiChatLimit: nil,
         exerciseLimit: nil,
         appStoreProductId: "com.mindfriend.family.annual",
@@ -169,7 +169,7 @@ struct SubscriptionPlan: Codable, Identifiable, Equatable, Hashable {
         billingPeriodMonths: 1,
         planType: .family,
         maxSeats: 6,
-        features: .premium,
+        features: .family,
         aiChatLimit: nil,
         exerciseLimit: nil,
         appStoreProductId: "com.mindfriend.family.monthly",
@@ -386,7 +386,7 @@ struct PromoCode: Codable, Identifiable, Equatable {
         case .percent:
             return "\(discountValue)% off"
         case .fixed:
-            return "$\(discountValue / 100) off"
+            return String(format: "$%.2f off", Double(discountValue) / 100)
         case .trialExtension:
             return "\(trialExtensionDays ?? 0) days free trial"
         }

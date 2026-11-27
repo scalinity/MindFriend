@@ -167,19 +167,25 @@ final class BiofeedbackTests: XCTestCase {
     func testTrendCalculation() async {
         let engine = AdaptationEngine(baseline: nil, mode: .auto)
 
-        // Simulate decreasing heart rate (improving)
-        let heartRates = [90.0, 88.0, 85.0, 82.0, 80.0, 78.0]
+        // Simulate decreasing heart rate (improving). The engine compares the latest 5 readings
+        // against the older ones and needs at least 8 readings (5 recent + 3 older) to do so.
+        let heartRates = [90.0, 88.0, 85.0, 82.0, 80.0, 78.0, 76.0, 74.0]
 
-        for hr in heartRates {
+        for (index, hr) in heartRates.enumerated() {
             let reading = LiveBiometricData(
                 heartRate: hr,
                 hrvRMSSD: nil,
                 timestamp: Date()
             )
             _ = engine.processReading(reading)
+
+            // Fewer than 8 readings is not enough to call a trend
+            if index < 7 {
+                XCTAssertEqual(engine.currentTrend, .stable)
+            }
         }
 
-        // Should detect improving trend
+        // Should detect improving trend: recent avg 78 vs older avg ~87.7
         XCTAssertEqual(engine.currentTrend, .improving)
     }
 

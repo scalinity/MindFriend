@@ -22,7 +22,7 @@ final class PredictiveServiceTests: XCTestCase {
             createdAt: Date()
         )
 
-        XCTAssertEqual(prediction.outlookLabel, "Looking Good")
+        XCTAssertEqual(prediction.outlookLabel, "Great")
         XCTAssertFalse(prediction.isLowMoodPredicted)
     }
 
@@ -43,7 +43,7 @@ final class PredictiveServiceTests: XCTestCase {
             createdAt: Date()
         )
 
-        XCTAssertEqual(prediction.outlookLabel, "Neutral")
+        XCTAssertEqual(prediction.outlookLabel, "Moderate")
         XCTAssertFalse(prediction.isLowMoodPredicted)
     }
 
@@ -64,7 +64,7 @@ final class PredictiveServiceTests: XCTestCase {
             createdAt: Date()
         )
 
-        XCTAssertEqual(prediction.outlookLabel, "May Be Challenging")
+        XCTAssertEqual(prediction.outlookLabel, "Challenging")
         XCTAssertTrue(prediction.isLowMoodPredicted)
     }
 
@@ -214,26 +214,26 @@ final class PredictiveServiceTests: XCTestCase {
             impact: 0.1,
             description: "Custom"
         )
-        XCTAssertEqual(unknownFactor.icon, "circle.fill")
+        XCTAssertEqual(unknownFactor.icon, "chart.bar.fill")
     }
 
     // MARK: - PreemptiveIntervention Tests
 
     func testPreemptiveIntervention_TypeProperties() {
         let restType = PreemptiveInterventionType.restSuggestion
-        XCTAssertEqual(restType.title, "Rest Suggested")
-        XCTAssertEqual(restType.icon, "moon.zzz.fill")
+        XCTAssertEqual(restType.title, "Rest & Recharge")
+        XCTAssertEqual(restType.icon, "moon.stars.fill")
 
         let movementType = PreemptiveInterventionType.movementSuggestion
-        XCTAssertEqual(movementType.title, "Movement Break")
+        XCTAssertEqual(movementType.title, "Get Moving")
         XCTAssertEqual(movementType.icon, "figure.walk")
 
         let patternType = PreemptiveInterventionType.patternBreak
-        XCTAssertEqual(patternType.title, "Break the Pattern")
-        XCTAssertEqual(patternType.icon, "arrow.triangle.swap")
+        XCTAssertEqual(patternType.title, "Try Something New")
+        XCTAssertEqual(patternType.icon, "sparkles")
 
         let generalType = PreemptiveInterventionType.generalSupport
-        XCTAssertEqual(generalType.title, "Support Available")
+        XCTAssertEqual(generalType.title, "We're Here for You")
         XCTAssertEqual(generalType.icon, "heart.fill")
     }
 
@@ -250,14 +250,16 @@ final class PredictiveServiceTests: XCTestCase {
     func testPredictionSettings_DefaultValues() {
         let defaults = PredictionSettings.defaults
 
+        // Predictions are opt-in; once enabled, the data sources and check-ins default on
+        // (matches the prediction_settings column defaults on the server).
         XCTAssertFalse(defaults.predictionsEnabled)
         XCTAssertTrue(defaults.useMoodData)
         XCTAssertTrue(defaults.useChatSentiment)
-        XCTAssertFalse(defaults.useBiometrics)
+        XCTAssertTrue(defaults.useBiometrics)
         XCTAssertTrue(defaults.useAppUsage)
-        XCTAssertFalse(defaults.useSleepData)
+        XCTAssertTrue(defaults.useSleepData)
         XCTAssertTrue(defaults.allowGentleNudges)
-        XCTAssertFalse(defaults.allowActiveCheckins)
+        XCTAssertTrue(defaults.allowActiveCheckins)
         XCTAssertFalse(defaults.allowFamilyAlerts)
         XCTAssertEqual(defaults.familyAlertThreshold, .high)
     }
@@ -289,12 +291,18 @@ final class PredictiveServiceTests: XCTestCase {
         }
         """.data(using: .utf8)!
 
+        // The models declare explicit snake_case CodingKeys, and PostgREST rows are decoded with the
+        // default key strategy, so convertFromSnakeCase must not be applied here.
         let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
         decoder.dateDecodingStrategy = .iso8601
 
         let prediction = try decoder.decode(MoodPrediction.self, from: json)
 
+        // predicted_for is a Postgres DATE column, so the server sends a bare calendar day
+        let day = Calendar.current.dateComponents([.year, .month, .day], from: prediction.predictedFor)
+        XCTAssertEqual(day.year, 2026)
+        XCTAssertEqual(day.month, 1)
+        XCTAssertEqual(day.day, 23)
         XCTAssertEqual(prediction.predictedMoodValue, 6.5, accuracy: 0.001)
         XCTAssertEqual(prediction.confidencePercent, 72)
         XCTAssertEqual(prediction.factors.count, 1)
@@ -320,8 +328,9 @@ final class PredictiveServiceTests: XCTestCase {
         }
         """.data(using: .utf8)!
 
+        // The models declare explicit snake_case CodingKeys, and PostgREST rows are decoded with the
+        // default key strategy, so convertFromSnakeCase must not be applied here.
         let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
         decoder.dateDecodingStrategy = .iso8601
 
         let intervention = try decoder.decode(PreemptiveIntervention.self, from: json)

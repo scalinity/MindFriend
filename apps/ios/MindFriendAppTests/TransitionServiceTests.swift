@@ -1,7 +1,13 @@
 import XCTest
+import Supabase
 @testable import MindFriendApp
 
 /// Tests for TransitionService focusing on critical security and reliability fixes
+///
+/// TransitionService takes its cache as the concrete PathwayCacheService and has no seam for a fake one, so these
+/// tests use the real cache over a throwaway UserDefaults suite and keychain namespace and read back through the
+/// cache what the service stored. The Supabase client points at an unreachable host; the journal draft paths
+/// never use it. Tests that need to fake network calls wait on the protocol-based DI described at the end of this file.
 @MainActor
 final class TransitionServiceTests: XCTestCase {
 
@@ -9,124 +15,88 @@ final class TransitionServiceTests: XCTestCase {
 
     /// Test that journal draft methods properly delegate to cache service
     func testJournalDraftDelegation() throws {
-        // Given: A mock cache service
-        let mockCache = MockPathwayCacheService()
-        let service = createTransitionService(cacheService: mockCache)
+        // Given: A service over a real cache
+        let fixture = try makeFixture()
+        defer { fixture.cleanUp() }
         let pathwayId = UUID()
         let testText = "Test journal entry"
 
         // When: Saving a journal draft via service layer
-        try service.saveJournalDraft(testText, for: pathwayId)
+        try fixture.service.saveJournalDraft(testText, for: pathwayId)
 
-        // Then: Cache service was called
-        XCTAssertTrue(mockCache.saveJournalDraftCalled)
-        XCTAssertEqual(mockCache.lastSavedDraftText, testText)
-        XCTAssertEqual(mockCache.lastSavedDraftPathwayId, pathwayId)
+        // Then: The cache holds the text under that pathway
+        XCTAssertEqual(try fixture.cache.getJournalDraft(for: pathwayId), testText)
     }
 
     func testGetJournalDraftDelegation() throws {
-        // Given: A mock cache service with a draft
-        let mockCache = MockPathwayCacheService()
+        // Given: A cache with a draft
+        let fixture = try makeFixture()
+        defer { fixture.cleanUp() }
         let pathwayId = UUID()
         let expectedDraft = "Expected draft text"
-        mockCache.mockJournalDraft = expectedDraft
-        let service = createTransitionService(cacheService: mockCache)
+        try fixture.cache.saveJournalDraft(expectedDraft, for: pathwayId)
 
         // When: Getting a journal draft via service layer
-        let result = try service.getJournalDraft(for: pathwayId)
+        let result = try fixture.service.getJournalDraft(for: pathwayId)
 
-        // Then: Cache service was called and returned the draft
-        XCTAssertTrue(mockCache.getJournalDraftCalled)
+        // Then: The service returns the cached draft
         XCTAssertEqual(result, expectedDraft)
     }
 
-    func testClearJournalDraftDelegation() {
-        // Given: A mock cache service
-        let mockCache = MockPathwayCacheService()
-        let service = createTransitionService(cacheService: mockCache)
+    func testClearJournalDraftDelegation() throws {
+        // Given: A cache with a draft
+        let fixture = try makeFixture()
+        defer { fixture.cleanUp() }
         let pathwayId = UUID()
+        try fixture.cache.saveJournalDraft("Draft to clear", for: pathwayId)
+        XCTAssertNotNil(try fixture.cache.getJournalDraft(for: pathwayId))
 
         // When: Clearing a journal draft via service layer
-        service.clearJournalDraft(for: pathwayId)
+        fixture.service.clearJournalDraft(for: pathwayId)
 
-        // Then: Cache service was called
-        XCTAssertTrue(mockCache.clearJournalDraftCalled)
-        XCTAssertEqual(mockCache.lastClearedDraftPathwayId, pathwayId)
+        // Then: The cache no longer holds it
+        XCTAssertNil(try fixture.cache.getJournalDraft(for: pathwayId))
     }
 
     // MARK: - Cache Service Encapsulation Tests
 
     /// Test that cache service is not publicly accessible
-    func testCacheServiceIsPrivate() {
+    func testCacheServiceIsPrivate() throws {
         // This test ensures the cacheService property is not accessible
         // If compilation succeeds, it means we've maintained proper encapsulation
-        // (The test itself just needs to compile to prove the point)
-        let service = createTransitionService()
+        let fixture = try makeFixture()
+        defer { fixture.cleanUp() }
 
         // The following line should NOT compile if cacheService is properly private:
-        // let _ = service.cacheService  // ❌ Should not compile
+        // let _ = fixture.service.cacheService  // ❌ Should not compile
 
         // Instead, we must use delegation methods:
-        let pathwayId = UUID()
-        _ = try? service.getJournalDraft(for: pathwayId)  // ✅ Proper delegation
-
-        XCTAssertNotNil(service)
+        XCTAssertNil(try fixture.service.getJournalDraft(for: UUID()))  // ✅ Proper delegation
     }
 
     // MARK: - Helper Methods
 
-    private func createTransitionService(
-        cacheService: PathwayCacheServiceProtocol? = nil
-    ) -> TransitionService {
-        // Note: We can't easily create a real TransitionService without Supabase mocking
-        // For now, these tests document the expected behavior
-        // Full integration tests would require protocol-based DI for SupabaseClient
-        fatalError("TransitionService requires SupabaseClient - protocol-based DI needed for proper testing")
-    }
-}
-
-// MARK: - Mock PathwayCacheService
-
-/// Mock implementation of PathwayCacheService for testing delegation
-class MockPathwayCacheService: PathwayCacheServiceProtocol {
-    var saveJournalDraftCalled = false
-    var getJournalDraftCalled = false
-    var clearJournalDraftCalled = false
-
-    var lastSavedDraftText: String?
-    var lastSavedDraftPathwayId: UUID?
-    var lastClearedDraftPathwayId: UUID?
-    var mockJournalDraft: String?
-
-    func saveJournalDraft(_ text: String, for pathwayId: UUID) throws {
-        saveJournalDraftCalled = true
-        lastSavedDraftText = text
-        lastSavedDraftPathwayId = pathwayId
+    private struct Fixture {
+        let service: TransitionService
+        let cache: PathwayCacheService
+        let cleanUp: () -> Void
     }
 
-    func getJournalDraft(for pathwayId: UUID) throws -> String? {
-        getJournalDraftCalled = true
-        return mockJournalDraft
+    private func makeFixture() throws -> Fixture {
+        let namespace = "test.transition-service.\(UUID().uuidString)"
+        let storage = SecureStorage(keychainService: namespace, keyIdentifier: "journal-drafts")
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: namespace))
+        let cache = PathwayCacheService(userDefaults: defaults, secureStorage: storage)
+        let client = SupabaseClient(supabaseURL: URL(string: "https://transition.invalid")!, supabaseKey: "synthetic-key")
+        return Fixture(
+            service: TransitionService(supabase: client, cacheService: cache),
+            cache: cache,
+            cleanUp: {
+                defaults.removePersistentDomain(forName: namespace)
+                try? storage.deleteEncryptionKey()
+            }
+        )
     }
-
-    func clearJournalDraft(for pathwayId: UUID) {
-        clearJournalDraftCalled = true
-        lastClearedDraftPathwayId = pathwayId
-    }
-
-    // MARK: - Required Protocol Stubs (not tested)
-
-    func cacheDailyContent(_ content: DailyPathwayContent, for pathwayId: UUID) throws {}
-    func getCachedDailyContent(for pathwayId: UUID) throws -> DailyPathwayContent? { nil }
-    func clearDailyContentCache(for pathwayId: UUID) {}
-    func saveCheckInDraft(_ draft: PathwayCacheService.CheckInDraft) throws {}
-    func getCheckInDraft(for pathwayId: UUID) throws -> PathwayCacheService.CheckInDraft? { nil }
-    func clearCheckInDraft(for pathwayId: UUID) {}
-    func queuePendingCheckIn(_ checkIn: PathwayCacheService.PendingCheckIn) {}
-    func getPendingCheckIns() -> [PathwayCacheService.PendingCheckIn] { [] }
-    func removePendingCheckIn(_ id: UUID) {}
-    func updateRetryCount(for id: UUID) {}
-    func clearAllCaches() {}
 }
 
 // MARK: - FIXME: Full Integration Tests Require Protocol-Based DI
@@ -145,7 +115,7 @@ class MockPathwayCacheService: PathwayCacheServiceProtocol {
     - functions.invoke(_:options:) -> T
  2. Update TransitionService to accept SupabaseClientProtocol
  3. Create MockSupabaseClient: SupabaseClientProtocol
- 4. Re-enable tests above and add comprehensive test suite
+ 4. Add the comprehensive test suite below
 
  **Tests to Add After Refactoring:**
 

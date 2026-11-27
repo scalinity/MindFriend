@@ -195,6 +195,15 @@ Deno.test("content and rewrites: monthly admission precedes quota and paid submi
         );
         return Response.json(state.mode !== "rewrite-quota-denied");
       }
+      if (url.pathname === "/rest/v1/rpc/refresh_user_entitlement") {
+        // ada41ef7: paid access comes from the entitlement RPC, not the cached
+        // profile tier, and the RPC is scoped to the verified owner.
+        assert(
+          body.p_user_id === userId,
+          "Entitlement refresh lost verified owner",
+        );
+        return Response.json(state.premium);
+      }
       if (url.pathname === "/rest/v1/profiles") {
         return Response.json({
           subscription_tier: state.premium ? "premium" : "free",

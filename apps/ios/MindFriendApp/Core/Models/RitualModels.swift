@@ -124,7 +124,13 @@ struct CircleRitual: Codable, Identifiable, Equatable {
 
     /// Formatted time until start
     var formattedTimeUntilStart: String {
-        let seconds = Int(timeUntilStart)
+        formattedTimeUntilStart(now: Date())
+    }
+
+    /// Formatted time until start, measured from `now`.
+    /// Remaining time is rounded up to a whole second so a ritual 30s away reads "30s" rather than "29s".
+    func formattedTimeUntilStart(now: Date) -> String {
+        let seconds = Int(ceil(scheduledFor.timeIntervalSince(now)))
         if seconds <= 0 {
             return "Starting now"
         } else if seconds < 60 {

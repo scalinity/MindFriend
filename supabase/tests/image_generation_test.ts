@@ -13,8 +13,82 @@ const FAKE_ENV = {
   SUPABASE_ANON_KEY: "synthetic-anon-key",
   OPENAI_API_KEY: "synthetic-openai-key",
 };
-// Synthetic JPEG marker bytes: no photograph, private prompt or real credential.
-const IMAGE = btoa(String.fromCharCode(0xff, 0xd8, 0xff, 0xd9));
+// Original 8x8 constant-gray baseline JPEG, authored from JPEG segment syntax
+// (the same fixture as generate-profile-picture/test.ts): no photograph, private
+// prompt or real credential. The avatar handler validates the whole JPEG
+// container (frame, tables, scan and end marker), so SOI and EOI bytes alone
+// are rejected as invalid_image_format.
+const JPEG = new Uint8Array([
+  0xff,
+  0xd8,
+  0xff,
+  0xdb,
+  0,
+  67,
+  0,
+  ...new Array(64).fill(1),
+  0xff,
+  0xc0,
+  0,
+  11,
+  8,
+  0,
+  8,
+  0,
+  8,
+  1,
+  1,
+  0x11,
+  0,
+  0xff,
+  0xc4,
+  0,
+  38,
+  0,
+  1,
+  ...new Array(15).fill(0),
+  0,
+  0x10,
+  1,
+  ...new Array(15).fill(0),
+  0,
+  0xff,
+  0xda,
+  0,
+  8,
+  1,
+  1,
+  0,
+  0,
+  63,
+  0,
+  0x3f,
+  0xff,
+  0xd9,
+]);
+function base64(bytes: Uint8Array): string {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+const IMAGE = base64(JPEG);
+
+/** The fixture JPEG padded with well-formed comment segments to exactly `size` bytes. */
+function paddedJPEG(size: number): string {
+  const padded = new Uint8Array(size);
+  padded.set(JPEG.subarray(0, 2));
+  let offset = 2;
+  let remaining = size - JPEG.length;
+  while (remaining) {
+    let segment = Math.min(65537, remaining);
+    if (remaining - segment > 0 && remaining - segment < 4) segment -= 4;
+    padded.set([255, 254, (segment - 2) >> 8, (segment - 2) & 255], offset);
+    offset += segment;
+    remaining -= segment;
+  }
+  padded.set(JPEG.subarray(2), offset);
+  return base64(padded);
+}
 
 function assert(value: unknown, message: string): asserts value {
   if (!value) throw new Error(message);
@@ -55,6 +129,9 @@ interface Scenario {
   uploadFails?: boolean;
   image?: string;
   stream?: "complete" | "no-final" | "hold";
+  // generate-art skips a malformed SSE event; generate-profile-picture treats it
+  // as a terminal provider_response_invalid error, so only art gets one by default.
+  malformedEvent?: boolean;
 }
 
 class MockNetwork {
@@ -125,8 +202,12 @@ class MockNetwork {
             };
           } else {
             // Split JSON and SSE delimiters across chunks to exercise real framing.
+            const malformed =
+              this.endpoint === "generate-art" || this.scenario.malformedEvent
+                ? "data: invalid-json\n\n"
+                : "";
             const bytes = encoder.encode(
-              partial + "data: invalid-json\n\n" + final + "data: [DONE]\n\n",
+              partial + malformed + final + "data: [DONE]\n\n",
             );
             for (
               const [start, end] of [[0, 7], [7, 39], [39, bytes.length - 1], [
@@ -530,7 +611,9 @@ for (const endpoint of ["generate-profile-picture", "generate-art"] as const) {
         }
         for (
           const [scenario, expected] of [
-            [{ quota: "error" }, 500],
+            // generate-profile-picture reports an unavailable quota check as 503
+            // image_quota_unavailable; generate-art keeps 500.
+            [{ quota: "error" }, endpoint === "generate-art" ? 500 : 503],
             [{ quota: "denied" }, 429],
             [{ reservation: "error" }, 503],
             [{ reservation: "denied" }, 429],
@@ -587,7 +670,11 @@ for (const endpoint of ["generate-profile-picture", "generate-art"] as const) {
                   prompt: "Calm café 🧘",
                   style: "watercolor",
                   moodScore: 8,
-                  userId: "90000000-0000-4000-8000-000000000009",
+                  // generate-art ignores a foreign owner; generate-profile-picture
+                  // rejects it (next step) and only accepts the verified owner.
+                  userId: endpoint === "generate-art"
+                    ? "90000000-0000-4000-8000-000000000009"
+                    : USER_ID,
                   model: "client-model",
                   quality: "low",
                   size: "1536x1024",
@@ -616,6 +703,38 @@ for (const endpoint of ["generate-profile-picture", "generate-art"] as const) {
           }
         },
       );
+      if (endpoint === "generate-profile-picture") {
+        await step(
+          "foreign owner override is rejected before quota, budget or provider",
+          {},
+          async (mock) => {
+            const response = await bounded(
+              handler!(
+                new Request(`http://localhost/${endpoint}`, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    Authorization: "Bearer synthetic-user-token",
+                  },
+                  body: JSON.stringify({
+                    prompt: "A calm blue mountain",
+                    userId: "90000000-0000-4000-8000-000000000009",
+                  }),
+                }),
+              ),
+            );
+            assert(response.status === 403, "Foreign owner was accepted");
+            assert(
+              (await response.json()).code === "owner_mismatch",
+              "Foreign owner did not report owner_mismatch",
+            );
+            assert(
+              mock.calls.join(",") === "auth",
+              "Foreign owner reached quota, budget or provider",
+            );
+          },
+        );
+      }
       await step(
         "provider failure and caller retry each retain a distinct monthly reservation",
         {
@@ -770,7 +889,10 @@ for (const endpoint of ["generate-profile-picture", "generate-art"] as const) {
           );
           assert(
             events.some((event) =>
-              event.type === "error" && event.error === "No image generated"
+              event.type === "error" &&
+              (endpoint === "generate-art"
+                ? event.error === "No image generated"
+                : event.code === "image_missing")
             ),
             "Missing final image did not emit terminal error",
           );
@@ -792,6 +914,32 @@ for (const endpoint of ["generate-profile-picture", "generate-art"] as const) {
           }
         },
       );
+      if (endpoint === "generate-profile-picture") {
+        await step(
+          "SSE malformed provider event is terminal and never uploads",
+          { stream: "complete", malformedEvent: true },
+          async (mock) => {
+            const events = await sseEvents(await invoke(true));
+            assert(
+              events.some((event) =>
+                event.type === "error" &&
+                event.code === "provider_response_invalid"
+              ),
+              "Malformed provider event did not emit a terminal error",
+            );
+            assert(
+              !events.some((event) =>
+                event.type === "complete" || event.success === true
+              ),
+              "Malformed provider event reported success",
+            );
+            assert(
+              !mock.calls.includes("upload"),
+              "Malformed provider event was persisted",
+            );
+          },
+        );
+      }
       await step("SSE upload failure emits error without completion", {
         stream: "complete",
         uploadFails: true,
@@ -866,7 +1014,7 @@ for (const endpoint of ["generate-profile-picture", "generate-art"] as const) {
               } enforces avatar bucket boundary at ${bytes} bytes`,
               {
                 stream: "complete",
-                image: btoa("x".repeat(bytes)),
+                image: paddedJPEG(bytes),
               },
               async (mock) => {
                 const response = await invoke(stream);

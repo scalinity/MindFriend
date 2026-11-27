@@ -113,6 +113,12 @@ class Fixture {
         reset_at: "2100-01-01T00:00:00Z",
       }]);
     }
+    if (path === "/rest/v1/rpc/refresh_user_entitlement") {
+      // ada41ef7: paid access comes from the entitlement RPC, not the cached
+      // profile tier, and the RPC is scoped to the verified owner.
+      assertEquals(call.body!.p_user_id, userId);
+      return json(this.premium);
+    }
     if (path === "/rest/v1/profiles") {
       return rows([{ subscription_tier: this.premium ? "premium" : "free" }]);
     }

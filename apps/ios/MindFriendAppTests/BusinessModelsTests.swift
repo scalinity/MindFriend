@@ -8,7 +8,7 @@ final class BusinessModelsTests: XCTestCase {
 
     func testSubscriptionPlanDisplayPrice() {
         let plan = SubscriptionPlan.premiumMonthly
-        XCTAssertEqual(plan.displayPrice, "$9.99")
+        XCTAssertEqual(plan.displayPrice, "$12.99")
     }
 
     func testSubscriptionPlanDisplayPriceAnnual() {
@@ -28,7 +28,7 @@ final class BusinessModelsTests: XCTestCase {
 
     func testSubscriptionPlanSavingsPercent() {
         let plan = SubscriptionPlan.premiumAnnual
-        XCTAssertEqual(plan.savingsPercent, 20)
+        XCTAssertEqual(plan.savingsPercent, 50)
     }
 
     func testSubscriptionPlanSavingsPercentNilForMonthly() {
@@ -341,6 +341,28 @@ final class BusinessModelsTests: XCTestCase {
         )
 
         XCTAssertEqual(promo.discountDescription, "$5.00 off")
+    }
+
+    func testPromoCodeDiscountDescriptionFixedKeepsCents() {
+        let promo = PromoCode(
+            id: UUID(),
+            code: "SAVE550",
+            discountType: .fixed,
+            discountValue: 550,
+            trialExtensionDays: nil,
+            applicablePlans: nil,
+            minBillingPeriod: nil,
+            firstTimeOnly: false,
+            maxUses: nil,
+            usesCount: 0,
+            maxUsesPerUser: nil,
+            validFrom: Date(),
+            validUntil: nil,
+            isActive: true,
+            campaignName: nil
+        )
+
+        XCTAssertEqual(promo.discountDescription, "$5.50 off")
     }
 
     func testPromoCodeDiscountDescriptionTrialExtension() {
@@ -668,7 +690,8 @@ final class BusinessModelsTests: XCTestCase {
 
     func testBillingPeriodCaseIterable() {
         let allPeriods = BillingPeriod.allCases
-        XCTAssertEqual(allPeriods.count, 4)
+        // Lifetime and custom periods were removed from the enum; the paywall only sells monthly and annual.
+        XCTAssertEqual(allPeriods.count, 2)
         XCTAssertTrue(allPeriods.contains(.monthly))
         XCTAssertTrue(allPeriods.contains(.yearly))
     }

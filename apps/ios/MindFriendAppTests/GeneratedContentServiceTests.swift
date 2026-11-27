@@ -25,7 +25,6 @@ final class GeneratedContentServiceTests: XCTestCase {
     }
 
     func testContentTypeSupportsAudio() {
-        // These types support audio
         XCTAssertTrue(GeneratedContentType.sleepStory.supportsAudio)
         XCTAssertTrue(GeneratedContentType.meditation.supportsAudio)
         XCTAssertTrue(GeneratedContentType.breathing.supportsAudio)
@@ -33,9 +32,9 @@ final class GeneratedContentServiceTests: XCTestCase {
         XCTAssertTrue(GeneratedContentType.mindfulness.supportsAudio)
         XCTAssertTrue(GeneratedContentType.affirmation.supportsAudio)
 
-        // These types do not support audio
-        XCTAssertFalse(GeneratedContentType.cbt.supportsAudio)
-        XCTAssertFalse(GeneratedContentType.journaling.supportsAudio)
+        // cbt and journaling support audio too (interactive playback style)
+        XCTAssertTrue(GeneratedContentType.cbt.supportsAudio)
+        XCTAssertTrue(GeneratedContentType.journaling.supportsAudio)
     }
 
     func testContentTypeDefaultDurations() {
@@ -98,7 +97,7 @@ final class GeneratedContentServiceTests: XCTestCase {
 
     func testDefaultVoiceAllContainsExpectedVoices() {
         let voices = DefaultVoice.all
-        XCTAssertEqual(voices.count, 5)
+        XCTAssertEqual(voices.count, 12)
 
         let voiceIds = voices.map { $0.id }
         XCTAssertTrue(voiceIds.contains(DefaultVoice.sarah.id))
@@ -106,6 +105,13 @@ final class GeneratedContentServiceTests: XCTestCase {
         XCTAssertTrue(voiceIds.contains(DefaultVoice.adam.id))
         XCTAssertTrue(voiceIds.contains(DefaultVoice.rachel.id))
         XCTAssertTrue(voiceIds.contains(DefaultVoice.elli.id))
+        XCTAssertTrue(voiceIds.contains(DefaultVoice.carla.id))
+        XCTAssertTrue(voiceIds.contains(DefaultVoice.diego.id))
+        XCTAssertTrue(voiceIds.contains(DefaultVoice.maria.id))
+        XCTAssertTrue(voiceIds.contains(DefaultVoice.pedro.id))
+        XCTAssertTrue(voiceIds.contains(DefaultVoice.amelie.id))
+        XCTAssertTrue(voiceIds.contains(DefaultVoice.greta.id))
+        XCTAssertTrue(voiceIds.contains(DefaultVoice.lukas.id))
     }
 
     func testDefaultVoiceLookup() {
