@@ -42,7 +42,7 @@ Aliases: circle, breathe, meditate, exercise/meditation, exercise with no ID, ex
 | Home QuickActionsSection | LiveSessionsView, CreativeHubView, ExerciseLibraryView, MoodHistoryView, GenerativeHomeView, BadgesView, TherapistDiscoveryView, WarningSignsDashboardView, SOS, SafetyPlanView | Explore Practices/Tools/People, You Progress/Measurements, independent Help |
 | Home sheets | RecoveryQuestView, buddy invitation, QuestArcCatalogView, PreemptiveInterventionView, PathwaySelectionView, PathwayDashboardView | Corresponding named capability |
 | Profile progress | Achievements, certificates, NarrativeListView (My Stories), LongitudinalDashboardView (Your Journey) | You → Progress/History |
-| Profile Features/Social | Circles, SleepTabView, ForYouView, mentorship, peer support, partner mode, family | Direct Explore entries |
+| Profile Features/Social | Circles, SleepTabView, ForYouView, mentorship, peer support, partner mode, family | Direct Explore entries; peer support is not shown |
 | Profile professional | TherapistApplicationView | You → Settings/professional |
 | Profile settings | Biometrics, notifications, AI preferences, interventions, vacation, shields, privacy, app lock, Private Vault, generated/curated memories, appearance, language, proactive check-ins, Wellness Agent, SOS, Recovery Mode, Our Approach | You settings/memory/measurements; Private Vault remains separate/device-only |
 | Profile data/support | Export/delete account, crisis resources, contact support, Terms/Privacy, edit profile, subscription | You |
