@@ -136,6 +136,12 @@ final class TherapyIntegrationService: ObservableObject {
             let status: String
             let completedAt: String
             let clientNotes: String?
+
+            enum CodingKeys: String, CodingKey {
+                case status
+                case completedAt = "completed_at"
+                case clientNotes = "client_notes"
+            }
         }
 
         let updateData = UpdateData(
