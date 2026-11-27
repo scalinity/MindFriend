@@ -26,6 +26,7 @@ SUITES = (
     "habit_reminders.sql",
     "local_day_boundaries.sql",
     "buddy_invites.sql",
+    "therapist_invitations.sql",
 )
 
 
