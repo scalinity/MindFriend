@@ -220,10 +220,11 @@ struct RecoveryModeState: Codable, Equatable {
         return max(0, Int(ceil(24 - hoursSinceEntry)))
     }
 
-    /// Time remaining formatted as "Xh Ym"
+    /// Time remaining formatted in whole hours rounded up ("4h"), or "< 1h" once an hour or less remains.
+    /// `hoursUntilExitAllowed` rounds up and is never 0 while locked, so 1 means "up to an hour".
     var timeUntilExitFormatted: String? {
         guard let hours = hoursUntilExitAllowed else { return nil }
-        if hours >= 1 {
+        if hours > 1 {
             return "\(hours)h"
         }
         return "< 1h"
@@ -5106,9 +5107,10 @@ struct UserQuestArc: Codable, Identifiable, Equatable {
         case arc = "quest_arcs"
     }
 
+    /// Fraction of the journey completed, clamped to 0...1 so progress bars and percent labels never overflow
     var progressPercentage: Double {
         guard snapshotDurationDays > 0 else { return 0 }
-        return Double(currentDay) / Double(snapshotDurationDays)
+        return min(1, max(0, Double(currentDay) / Double(snapshotDurationDays)))
     }
 
     var daysRemaining: Int {

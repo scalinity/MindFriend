@@ -63,7 +63,7 @@ final class ActionPlanScheduler {
         notificationCenter.removePendingNotificationRequests(withIdentifiers: [planNotificationId(planId)])
     }
 
-    func adjustForQuietHours(date: Date, quietHoursStart: String?, quietHoursEnd: String?) -> Date {
+    func adjustForQuietHours(date: Date, quietHoursStart: String?, quietHoursEnd: String?, now: Date = Date()) -> Date {
         guard let start = quietHoursStart, let end = quietHoursEnd else {
             return date
         }
@@ -94,8 +94,8 @@ final class ActionPlanScheduler {
             }
         }
 
-        if adjusted < Date() {
-            adjusted = Date().addingTimeInterval(60 * 5)
+        if adjusted < now {
+            adjusted = now.addingTimeInterval(60 * 5)
         }
 
         return adjusted
