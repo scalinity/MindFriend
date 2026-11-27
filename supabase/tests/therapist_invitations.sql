@@ -26,8 +26,25 @@ VALUES ('17600000-0000-4000-8000-000000000001', '17600000-0000-4000-8000-0000000
 ON CONFLICT (client_id, therapist_id) DO UPDATE SET status = EXCLUDED.status, invited_by = EXCLUDED.invited_by,
   invitation_token_hash = EXCLUDED.invitation_token_hash, invitation_expires_at = EXCLUDED.invitation_expires_at,
   invited_at = EXCLUDED.invited_at;
-UPDATE public.therapy_connections SET status = 'revoked', ended_at = now()
-WHERE client_id = '17600000-0000-4000-8000-000000000001';
+
+-- The released clients' own writes, through RLS: a sharing change, then revoking the invitation.
+RESET ROLE;
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE changed integer;
+BEGIN
+  PERFORM set_config('request.jwt.claims', '{"sub":"17600000-0000-4000-8000-000000000001","role":"authenticated"}', true);
+  PERFORM set_config('request.jwt.claim.sub', '17600000-0000-4000-8000-000000000001', true);
+  UPDATE public.therapy_connections SET share_mood = false WHERE client_id = '17600000-0000-4000-8000-000000000001';
+  GET DIAGNOSTICS changed = ROW_COUNT;
+  IF changed <> 1 THEN RAISE EXCEPTION 'The client sharing change updated % rows', changed; END IF;
+  UPDATE public.therapy_connections SET status = 'revoked', ended_at = now() WHERE client_id = '17600000-0000-4000-8000-000000000001';
+  GET DIAGNOSTICS changed = ROW_COUNT;
+  IF changed <> 1 THEN RAISE EXCEPTION 'The client revoke updated % rows', changed; END IF;
+END $$;
+
+RESET ROLE;
+SET LOCAL ROLE service_role;
 INSERT INTO public.therapy_connections(client_id, therapist_id, status, invited_by, invitation_token_hash, invitation_expires_at, invited_at)
 VALUES ('17600000-0000-4000-8000-000000000001', '17600000-0000-4000-8000-0000000000a1', 'pending', 'client',
         encode(sha256('synthetic-token-2'::bytea), 'hex'), now() + interval '7 days', now())
