@@ -41,7 +41,7 @@ final class InterventionServiceTests: XCTestCase {
         let context = TriggerContext(
             biometrics: TriggerContext.Biometrics(
                 heartRate: nil,
-                hrv: 25.0  // Raw PHI value (very low)
+                hrv: 15.0  // Raw PHI value (very low: < 20)
             ),
             timeOfDay: "afternoon",
             recentMood: nil,

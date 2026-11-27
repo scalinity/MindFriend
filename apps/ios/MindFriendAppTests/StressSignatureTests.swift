@@ -20,9 +20,9 @@ final class StressSignatureTestsPlaceholder: XCTestCase {
     // MARK: - Working Tests (AlertSeverity)
 
     func testAlertSeverityDisplayNames() {
-        XCTAssertEqual(AlertSeverity.mild.displayName, "Mild Warning")
-        XCTAssertEqual(AlertSeverity.moderate.displayName, "Moderate Warning")
-        XCTAssertEqual(AlertSeverity.severe.displayName, "Severe Warning")
+        XCTAssertEqual(AlertSeverity.mild.displayName, "Mild")
+        XCTAssertEqual(AlertSeverity.moderate.displayName, "Moderate")
+        XCTAssertEqual(AlertSeverity.severe.displayName, "Severe")
     }
 
     func testCategoryIcons() {
@@ -31,6 +31,6 @@ final class StressSignatureTestsPlaceholder: XCTestCase {
         XCTAssertEqual(SignatureComponentCategory.cognitive.icon, "brain.head.profile")
         XCTAssertEqual(SignatureComponentCategory.emotional.icon, "heart.fill")
         XCTAssertEqual(SignatureComponentCategory.behavioral.icon, "figure.walk")
-        XCTAssertEqual(SignatureComponentCategory.physical.icon, "figure.mixed.cardio")
+        XCTAssertEqual(SignatureComponentCategory.physical.icon, "figure.stand")
     }
 }

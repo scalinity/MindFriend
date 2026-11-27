@@ -22,14 +22,14 @@ final class ChallengeServiceTestsPlaceholder: XCTestCase {
 
     func testNotAuthenticatedError() {
         let error = ChallengeError.notAuthenticated
-        XCTAssertEqual(error.errorDescription, "User is not authenticated")
+        XCTAssertEqual(error.errorDescription, "You must be signed in to join challenges.")
     }
 
     func testExerciseTypeRequiredError() {
         let error = ChallengeError.exerciseTypeRequired
         XCTAssertEqual(
             error.errorDescription,
-            "Exercise type is required for minutes challenges"
+            "Exercise type is required for this challenge."
         )
     }
 

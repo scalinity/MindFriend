@@ -6,14 +6,16 @@ final class ModelsTests: XCTestCase {
     // MARK: - UserProfile Tests
 
     func testUserProfileDecoding() throws {
+        // Shape the app itself writes and reads back (profile cache): snake_case CodingKeys on
+        // UserProfile, UserStats and UserEntitlements, camelCase on UserSettings, UUID ids.
         let json = """
         {
-            "id": "user-123",
+            "id": "550e8400-e29b-41d4-a716-446655440000",
             "handle": "testuser",
-            "displayName": "Test User",
+            "display_name": "Test User",
             "email": "test@example.com",
             "timezone": "America/New_York",
-            "createdAt": "2024-01-01T00:00:00Z",
+            "created_at": "2024-01-01T00:00:00Z",
             "settings": {
                 "dailyQuestTimeLocal": "09:00",
                 "quietHoursStartLocal": null,
@@ -25,8 +27,8 @@ final class ModelsTests: XCTestCase {
                 "privacyMode": "standard"
             },
             "stats": {
-                "current_streak_days": 5,
-                "longest_streak_days": 10,
+                "current_streak": 5,
+                "longest_streak": 10,
                 "total_quests_completed": 25,
                 "total_exercises_completed": 12,
                 "xp_total": 500,
@@ -35,9 +37,10 @@ final class ModelsTests: XCTestCase {
                 "level_title": "Enthusiast"
             },
             "entitlements": {
-                "tier": "free",
-                "dailyAiQuota": 20,
-                "dailyAiUsed": 0
+                "subscription_tier": "free",
+                "features": {},
+                "daily_ai_quota": 30,
+                "daily_ai_used": 0
             },
             "badges": []
         }
@@ -48,8 +51,7 @@ final class ModelsTests: XCTestCase {
 
         let profile = try decoder.decode(UserProfile.self, from: jsonData(from: json))
 
-        // Note: id is now UUID, not String
-        XCTAssertEqual(profile.id.uuidString, "user-123")
+        XCTAssertEqual(profile.id, UUID(uuidString: "550e8400-e29b-41d4-a716-446655440000"))
         XCTAssertEqual(profile.handle, "testuser")
         XCTAssertEqual(profile.displayName, "Test User")
         XCTAssertEqual(profile.email, "test@example.com")
@@ -57,8 +59,8 @@ final class ModelsTests: XCTestCase {
         // Note: settings, stats, entitlements are now optional
         XCTAssertEqual(profile.settings?.aiTone, .friendly)
         XCTAssertEqual(profile.stats?.currentStreakDays, 5)
-        // Note: Entitlements renamed to UserEntitlements and structure changed
-        // XCTAssertEqual(profile.entitlements?.tier, .free) // tier property may not exist
+        XCTAssertEqual(profile.entitlements?.subscriptionTier, "free")
+        XCTAssertEqual(profile.entitlements?.dailyAiQuota, 30)
     }
 
     func testUserSettingsDefaults() {
@@ -177,7 +179,7 @@ final class ModelsTests: XCTestCase {
 
     func testEntitlementsStaticValues() {
         XCTAssertEqual(Entitlements.free.tier, .free)
-        XCTAssertEqual(Entitlements.free.dailyAiQuota, 20)
+        XCTAssertEqual(Entitlements.free.dailyAiQuota, 30)
         XCTAssertEqual(Entitlements.free.dailyAiUsed, 0)
 
         XCTAssertEqual(Entitlements.premium.tier, .premium)

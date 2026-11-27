@@ -162,15 +162,16 @@ final class AdherenceCalculatorTests: XCTestCase {
 
     func testMoodCorrelationWithAdherentDays() {
         // Given
+        // Mood correlation is counted per calendar day, so each log gets its own day
         let medicationLogs = [
-            createLog(status: .taken),
-            createLog(status: .taken),
-            createLog(status: .late)
+            createLog(status: .taken, scheduledAt: day(0)),
+            createLog(status: .taken, scheduledAt: day(1)),
+            createLog(status: .late, scheduledAt: day(2))
         ]
         let moodLogs = [
-            createMood(score: 7),
-            createMood(score: 8),
-            createMood(score: 8)
+            createMood(score: 7, createdAt: day(0)),
+            createMood(score: 8, createdAt: day(1)),
+            createMood(score: 8, createdAt: day(2))
         ]
 
         // When
@@ -184,13 +185,14 @@ final class AdherenceCalculatorTests: XCTestCase {
 
     func testMoodCorrelationWithNonAdherentDays() {
         // Given
+        // Mood correlation is counted per calendar day, so each log gets its own day
         let medicationLogs = [
-            createLog(status: .skipped),
-            createLog(status: .pending)
+            createLog(status: .skipped, scheduledAt: day(0)),
+            createLog(status: .pending, scheduledAt: day(1))
         ]
         let moodLogs = [
-            createMood(score: 3),
-            createMood(score: 4)
+            createMood(score: 3, createdAt: day(0)),
+            createMood(score: 4, createdAt: day(1))
         ]
 
         // When
@@ -204,15 +206,16 @@ final class AdherenceCalculatorTests: XCTestCase {
 
     func testMoodCorrelationWithMixedData() {
         // Given
+        // Mood correlation is counted per calendar day, so each log gets its own day
         let medicationLogs = [
-            createLog(status: .taken),
-            createLog(status: .skipped),
-            createLog(status: .late)
+            createLog(status: .taken, scheduledAt: day(0)),
+            createLog(status: .skipped, scheduledAt: day(1)),
+            createLog(status: .late, scheduledAt: day(2))
         ]
         let moodLogs = [
-            createMood(score: 8),  // Adherent day
-            createMood(score: 4),  // Non-adherent day
-            createMood(score: 7)   // Adherent day
+            createMood(score: 8, createdAt: day(0)),  // Adherent day
+            createMood(score: 4, createdAt: day(1)),  // Non-adherent day
+            createMood(score: 7, createdAt: day(2))   // Adherent day
         ]
 
         // When
@@ -220,8 +223,11 @@ final class AdherenceCalculatorTests: XCTestCase {
 
         // Then
         XCTAssertGreaterThan(correlation.averageMoodWhenAdherent, correlation.averageMoodWhenNotAdherent)
+        XCTAssertEqual(correlation.averageMoodWhenAdherent, 7.5, accuracy: 0.001)
+        XCTAssertEqual(correlation.averageMoodWhenNotAdherent, 4.0, accuracy: 0.001)
         XCTAssertEqual(correlation.moodDifference, correlation.averageMoodWhenAdherent - correlation.averageMoodWhenNotAdherent)
-        XCTAssert(correlation.insight.contains("higher"))
+        // The positive-difference insight reads "better on days you take your medication"
+        XCTAssert(correlation.insight.contains("better on days you take your medication"))
     }
 
     func testMoodCorrelationWithEmptyMoodLogs() {
@@ -294,16 +300,23 @@ final class AdherenceCalculatorTests: XCTestCase {
         )
     }
 
-    private func createMood(score: Int) -> MoodEntry {
+    private func createMood(score: Int, createdAt: Date = Date()) -> MoodEntry {
         MoodEntry(
             id: UUID().uuidString,
-            localDate: ISO8601DateFormatter().string(from: Date()),
+            localDate: ISO8601DateFormatter().string(from: createdAt),
             moodScore: score,
             anxietyScore: nil,
             energyScore: nil,
             note: nil,
             source: .manual,
-            createdAt: Date()
+            createdAt: createdAt
         )
+    }
+
+    /// Noon, `offset` days before a fixed reference date, so each day is unambiguous and independent of the wall clock
+    private func day(_ offset: Int) -> Date {
+        let calendar = Calendar.current
+        let reference = calendar.date(from: DateComponents(year: 2026, month: 6, day: 15, hour: 12))!
+        return calendar.date(byAdding: .day, value: -offset, to: reference)!
     }
 }

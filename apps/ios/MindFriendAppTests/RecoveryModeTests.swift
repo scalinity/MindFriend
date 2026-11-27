@@ -68,6 +68,14 @@ final class RecoveryModeTests: XCTestCase {
         )
         XCTAssertEqual(state23h.timeUntilExitFormatted, "< 1h")
 
+        // 22.5 hours ago - 1.5h remaining rounds up to "2h", not down to "1h"
+        let state22h = RecoveryModeState(
+            isActive: true,
+            enteredAt: Date().addingTimeInterval(-22.5 * 3600),
+            reason: .manual
+        )
+        XCTAssertEqual(state22h.timeUntilExitFormatted, "2h")
+
         // 25 hours ago - should be nil (can exit)
         let state25h = RecoveryModeState(
             isActive: true,

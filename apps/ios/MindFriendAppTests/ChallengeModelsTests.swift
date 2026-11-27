@@ -22,14 +22,14 @@ final class ChallengeModelsTestsPlaceholder: XCTestCase {
     func testChallengeTypeDisplayNames() {
         XCTAssertEqual(SocialChallengeType.streak.displayName, "Daily Streak")
         XCTAssertEqual(SocialChallengeType.minutes.displayName, "Exercise Minutes")
-        XCTAssertEqual(SocialChallengeType.mood.displayName, "Mood Tracking")
-        XCTAssertEqual(SocialChallengeType.quest.displayName, "Quest Challenge")
+        XCTAssertEqual(SocialChallengeType.mood.displayName, "Mood Check-ins")
+        XCTAssertEqual(SocialChallengeType.quest.displayName, "Quest Completion")
     }
 
     func testChallengeTypeIconNames() {
         XCTAssertEqual(SocialChallengeType.streak.iconName, "flame.fill")
         XCTAssertEqual(SocialChallengeType.minutes.iconName, "clock.fill")
-        XCTAssertEqual(SocialChallengeType.mood.iconName, "smiley.fill")
+        XCTAssertEqual(SocialChallengeType.mood.iconName, "heart.fill")
         XCTAssertEqual(SocialChallengeType.quest.iconName, "checkmark.circle.fill")
     }
 
