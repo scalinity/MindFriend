@@ -180,3 +180,142 @@ Four implementation lanes ran in parallel on disjoint files, each in its own wor
 
 ## Phase 5: Re-capture
 - The "after" set was captured from `main` at `800da60` on the same simulator, account and content: `docs/ux/2.0-vs-1.0.5/after.md`, 18 screens in four variants each.
+
+## Review follow-ups (PR #111, merged `545b9e7`)
+The automated review on #102 and #103, which arrived after both had merged, raised eight findings. All eight were valid and fixed:
+- Streaks treat a last date on or after local today as today, so the switch from the UTC default never resets one.
+- `get_home_context` converts activity timestamps to local time before taking the date.
+- `predict-mood` stores the local date the briefing asks for.
+- The app compares its zone with the profile's current value, so two devices on one account can't leave the wrong zone.
+- `local_day_boundaries.sql` picks its fixture zone by date, so it no longer fails from 11:00 to 11:59 UTC.
+- The contact lookup escapes LIKE wildcards.
+- Invite emails go only to the stored address, at most 10 a day through `check_rate_limit`.
+- The buddy hub reloads after the sheet closes.
+
+Tests and checks:
+- Production-copy dry run on a schema-only dump taken after the first deploy (ledger head `20261113212000`): 1 of 1 applied, and both SQL suites pass on the copy.
+- Fresh chain: 17 of 17. The new streak assertion fails without the migration.
+- Deno 5 of 5; iOS 74 tests.
+- Replies posted and all eight review threads resolved.
+
+Deployed 11:59 PM EST: migration `20261114000000_local_day_follow_ups` (ledger head verified), `predict-mood` v22 → v23 and `send-buddy-invite` v27 → v28 (`verify_jwt` unchanged, `OPTIONS` 200). Read-only check: the journal, micro-moment and home-context definitions carry the changes.
+- Review of #111 found that a future streak date counted as today but stayed stored, so the next local day's entry could not extend the streak. PR #112 (merged `ffc5b1e`) sets the stored date to `LEAST(stored, local today)` in that branch. The test now checks that the next day takes the streak from 5 to 6; it fails without the fix, and 17 of 17 suites pass with it. The production-copy dry run (ledger head `20261114000000`) applied 1 of 1 and passed. Migration `20261114010000_normalize_streak_dates` was applied to production at 12:23 AM EST on 14 November, and the ledger head and both definitions were verified.
+
+## Phase 6: Release checks (26 November 2026, from 8:24 PM EST)
+The run resumed from the Phase 5 stop with the go-ahead for Phases 6 and 7. `main` was at `ffc5b1e` (PR #112). The local checkout was 27 commits behind; its untracked copies of `docs/ux/` matched `main` byte for byte, and this file held the PR #111 and #112 section above, which existed only locally. The temporary audit navigator (an uncommitted UI test helper) was removed from the checkout and kept as `artifacts/release-2.0.0/handover/uitest-capture-helper.patch`.
+
+### Environment
+- The test simulator used through Phase 5 (`73EBCB3C…`) had lost its data folder, so every test ran on a new iPhone 17 Pro simulator, iOS 27.0 (`16F4BF13…`). `build/` was gone, so builds started cold.
+- Docker: colima profile `mfci` restarted.
+
+### Server parity (read-only)
+- **Migrations.** Production's ledger has 269 versions, head `20261114010000`. Every `.sql` migration on `main` is in it. The four other files under `supabase/migrations` end in `.disabled` and are never applied.
+- **Edge functions.** Of the 213 functions on `main`, 133 are referenced by the app. All 133 are deployed. `chat` (v56), `verify-purchase` (v37), `voice-token` (v51), `test-auth-diagnostic` (v25), `support-session` and `analyze-voice-journal` were deployed after their last change. 88 were deployed before their last change on `main`.
+- **Why 88 were behind.** 1.0.6 deployed "functions changed since `ee886e1`" (65 functions). The 5 November restoration commits (`ed5e6ee9` `Deno.serve` and supabase-js 2.118.0, `ce839d51`, `c8f15953`, `201e4cb2`, `968d57fa`, `758a321d`, `04fa4bb7`) predate `ee886e1`, so the functions they touched were never deployed. 1.0.4 (`8564715f`) and 1.0.5 (`ee886e1`) both contain those commits, so every supported client was built against this function code.
+- **Review of the 88.**
+  - Each production copy was downloaded (`supabase functions download --use-api`) and diffed against `main`.
+  - 4 are identical in production and on `main`: `manage-safety-plan`, `flag-content`, `generate-weekly-story` and `voice-session-end`.
+  - In about 41, the function's own code differs only by the `serve` to `Deno.serve` switch and supabase-js 2.49.1 to 2.118.0; many of those also bundle a changed shared file.
+  - The rest add types, use the shared CORS helper, drop `debug` fields from error bodies, or pick up shared changes: `auth.ts` validates tokens with the admin client, `isAuthorizedCronRequest` is async (every caller awaits it), and `rate-limit.ts` takes an optional window.
+  - `ratelimit.ts` already failed closed on an RPC error in production. Only its empty-result branch changed, and that branch cannot be reached because `check_rate_limit(uuid, text, timestamptz, integer, integer)` always returns one row. Production has that RPC, executable by `service_role` only, and every caller passes the service-role client.
+  - All 82 type-check (`deno check`) from a clean export of `ffc5b1e`. `config.toml` agrees with production's `verify_jwt` for all of them.
+- **Not deployed, on purpose:**
+  - `therapist-invite`: `main` writes `therapy_connections.invitation_token_hash`, which no migration creates, and requires `JWT_SECRET`, which production does not set. The deployed copy signs invitation tokens with the literal fallback `"your-secret-key"`. Recorded as open.
+  - `get-session-history`: the app does not call it.
+  - `match-support-session`: held by the owner's decision. It fails to start in production today, so peer support matching, including the `crisis_bridge` session type, has never run. Deploying it would turn matching on for every released client; that gets its own review and test first.
+
+### Review of the deploy plan
+- The cross-vendor review could not run: Codex was out of quota until 29 November, 9:04 AM EST, the Antigravity account needed verification, and Grok was not signed in. By the owner's decision, an independent Claude reviewer (fresh context, read-only, Sonnet; an Opus attempt was stopped by a safety filter) reviewed the exact plan, diffs, production schema, secret names and iOS call sites.
+- Verdict: deploy with changes. It found no new table, column, RPC, bucket or secret dependency and no change that breaks a released client (every function folder is byte-identical at `8564715f`, `ee886e1` and `main`, apart from `check-badge-progress`). Changes adopted:
+  - The post-deploy check compares each function with its own pre-deploy responses instead of a fixed status, because 17 functions answer `OPTIONS` with 401, 405, 500 or 503 today.
+  - The rollback copies were completed (two type-only files were missing), each deploy first checks that production still runs the downloaded bundle, and the rollback was rehearsed on `public-config` (redeploying its production copy, v10 to v11, same responses).
+  - Server-side bundling (`--use-api`) for deploy and rollback, since colima does not mount the scratch folder.
+  - `send-notification-batch` deployed last, by the owner's decision: production compared Swift's uppercase ids with lowercase database ids, so circle and challenge pushes never went out. They start now.
+
+### Function deploy (26 November 2026, 10:18 to 10:25 PM EST)
+- Source: a clean worktree at `ffc5b1e`, one function per command, `--project-ref zfaucivtzfwnrijsbfug --use-api`, `--no-verify-jwt` for the 27 whose production setting is `false`. Order: least change first, a three-function canary, then the rest, then `send-notification-batch`.
+- Checks per function: version advanced, `verify_jwt` unchanged, the bundle matched the downloaded copy before deploy, an `OPTIONS` request (and, for the 55 behind the JWT gateway, a signed-out `POST`) answered as before or became healthy. Functions without the gateway were not sent a `POST`, since several run scheduled work.
+- Result: 81 of 81 deployed, none rolled back. Downloading the canaries and `send-notification-batch` back from production showed every file identical to `ffc5b1e`.
+- Repaired by the deploy: `get-localized-strings`, `get-captions` (both failed to start: their copies imported `checkRateLimit` from a `cors.ts` that no longer exported it) now answer.
+- Logs from 10:18 PM EST: no new errors, and no signed-in traffic yet by 10:45 PM EST, so the first real requests are worth a look the next day. The only errors are the two that existed before and are recorded as open: `submit-content` throws on a request without an `Authorization` header, and `contribute-wisdom` cannot start because `WISDOM_HASH_SALT` is not set in production.
+- Audit afterwards: every function the app calls now runs `main`'s code, apart from `therapist-invite`, `get-session-history` and `match-support-session` (above). The four identical functions keep their older deploy dates.
+
+### Security fix in production
+- The deployed `b2b-stripe-webhook` (v27, `verify_jwt = false`) skipped Stripe signature verification when `TEST_WEBHOOK_BYPASS_AUTH` was `"true"`, and the secret's digest matched `"true"`. Anyone could post a forged event to change any of the 18 organizations' billing status or churn one, which revokes sponsored Premium (1 member had it). `main` had removed the bypass, but the function was never redeployed.
+- By the owner's decision, the secret was removed at 10:16 PM EST (`supabase secrets unset TEST_WEBHOOK_BYPASS_AUTH`). An unsigned test event of an unhandled type now gets `400 Invalid signature`. Production has no Stripe secrets, so nothing legitimate used the endpoint. Removing a secret starts a new version of every function; bundle hashes and deploy times were checked unchanged.
+
+### Sentry
+`CrashReporter.initialize` names the release `com.mindfriend.app@<CFBundleShortVersionString>+<CFBundleVersion>` and reads the DSN from `SENTRY_DSN`, which `Release.xcconfig` sets through Info.plist. The environment comes from the install, on purpose: App Store installs report `production`, TestFlight `testflight`, and builds installed from Xcode, devicectl or an ad hoc export `development`. A device test from Xcode therefore appears under `development`.
+
+### Tests (PR #113, merged `d000f77`)
+- **SQL:** CI's runner, 17 of 17 suites (on `ffc5b1e`, and again on merged `main` `d000f77`).
+- **Deno:** CI's two commands pass (80, and 18 for `verify-purchase`), on `ffc5b1e` and again on merged `main` (`d000f77`), where 49 of the 50 other test files pass. Of the 50 other test files, 45 passed on `main`; four were repaired in #113 (stale fixtures for `refresh_user_entitlement`, a placeholder image, wrong arithmetic). `_shared/distortion-detection.test.ts` stays failing on purpose (7 of 23, as since it was written): passing it means retuning the detector inside `chat`, which changes coach behavior for every user and redeploys the function that carries the crisis check.
+- **iOS:** the 68 failures outside CI's fixed list were all addressed. Six were app defects and are fixed: mood predictions never decoded (`predicted_for` is a DATE), quest progress could exceed 100%, ritual countdowns floored ("1h" for 2 h), a skipped dose did not end a medication streak, recovery mode's "< 1h" never showed, and fixed promos dropped cents (family plans also gain family sharing). The rest were stale expectations, unrealistic fixtures and clock-dependent tests.
+- Final run of the archived content (`main` plus the build number, 10:43 PM EST): 1,646 unit tests and 6 UI tests, 0 failures, with the five StoreKit purchase probes left out because this simulator routes them to an Apple Account sign-in.
+- Full unit suite with the fixes, first run: 1,648 tests, 2 failures. Both are `StoreKitPurchaseRegressionTests` purchase probes: on the new simulator StoreKit routes their purchases to an Apple Account sign-in instead of the local test session, and the cancelled sign-in surfaces as `cancelled`. `BillingService` and its tests are unchanged since they last passed. `MindFriendAppUITests`: 6 of 6 on a rerun (the first run's failure came from the freshly erased simulator).
+
+### What's New in 2.0.0 (App Store text)
+MindFriend 2.0 is a fresh start, built around four places: Today, Chat, Explore and You.
+
+• Color is back. Sleep, journaling, exercises, quests, circles and more each have their own colors again, and the voice orb, celebrations and milestones glow.
+• Today greets you by name and gives you one easy way to begin.
+• Voice and text continue in the same conversation, and you decide what MindFriend remembers.
+• Invite a buddy right from Messages or Mail, or enter a code a friend sent you.
+• Habit reminders now save and arrive at the time you chose.
+• Badges like Night Owl and Early Bird now follow your own time zone.
+• Free plan: 30 chat messages a day. If you're having a hard time, you can still reach out for support after they're used up.
+• Easier to read, with better contrast in dark mode and at large text sizes.
+• Plus fixes for subscriptions, sleep, journaling and sign-in.
+
+## Phase 7: The build
+- PR #114 set `CURRENT_PROJECT_VERSION` to 202611262226 (26 November 2026, 10:26 PM EST) in both app-target configurations; `MARKETING_VERSION` stays 2.0.0. Merged as `8aebfb4`.
+- A trial archive from the PR branch confirmed signing first: team provisioning profiles for the app, widgets and the Watch app and its complications.
+- Release archive from `main` at `8aebfb4`: `~/Library/Developer/Xcode/Archives/2026-11-26/MindFriend 2.0.0 (202611262226).xcarchive` (archived 10:51 to 10:57 PM EST, 314 MB; app, widgets and Watch app signed for team 25H5DDPKAC). The archived app reports version 2.0.0 and build 202611262226, and its `SENTRY_DSN` is set. `Release.xcconfig` points at `zfaucivtzfwnrijsbfug.supabase.co`.
+- Not uploaded and not submitted.
+
+### Physical iPhone test checklist
+To install the archive: Xcode, Window, Organizer, select 2.0.0 (202611262226), Distribute App, then either Debugging (install the exported app from the Devices window; Sentry reports it as `development`) or TestFlight (Sentry reports `testflight`).
+
+1. **First launch.** A fresh install opens on sign-in. After signing in, Today greets you by name. At most one older celebration appears.
+2. **Sign-in.** Email and Sign in with Apple both reach Today; sign out and back in.
+3. **A chat message.** A reply arrives, and Chat shows how many free messages are left.
+4. **A crisis phrase.** A message about wanting to hurt yourself brings up the crisis resources, with working call and text actions (do not place the call).
+5. **The SOS sheet.** The lifepreserver opens SOS from Today and from Chat; every action is present and readable.
+6. **Voice mode.** The orb shows color and motion; a spoken question gets a spoken reply; ending the call leaves its text in the conversation.
+7. **Coping kit to completion.** Known: no screen links to coping kits in this build (or in 1.0.5). Skip, and note it.
+8. **A celebration.** Finishing a quest or exercise shows a colorful celebration; with Reduce Motion on, nothing loops.
+9. **Habit with a reminder.** Create one a few minutes ahead, close and reopen the app, confirm it kept the time, and wait for the notification at that local time.
+10. **Buddy invite by text and by email.** Messages and Mail open prefilled with the code and link; "Invite sent" appears only after sending; cancelling offers to share the code. Entering a friend's code links both of you. The `/buddy/<code>` page is not live until the site deploy.
+11. **No Night Owl in the evening.** After launch (which saves the phone's time zone), an activity before midnight does not award Night Owl.
+12. **Sandbox purchase and restore.** With a sandbox Apple Account, buy a plan; Premium unlocks. Delete and reinstall, then Restore Purchases; Premium returns.
+13. **Paywall.** Opening a Premium feature shows the paywall with the plans and prices; closing it returns to where you were.
+14. **Dark mode and large text.** In dark mode at the largest accessibility text size, check Today and Explore: nothing is cut off and every area keeps its color.
+15. **Circle pushes (new since tonight's deploy).** A post or completed challenge in a circle notifies the other members.
+
+## Close-out (26 November 2026)
+
+### Merged in this run
+PRs #100 to #112 (Phases 1 to 5, above), #113 (test fixes and six app defects), #114 (build number) and #115 (this record). No pull requests are open.
+
+### Production changes in Phases 6 and 7
+- 10:16 PM EST: `TEST_WEBHOOK_BYPASS_AUTH` removed.
+- 10:18 to 10:25 PM EST: 81 edge functions deployed from `ffc5b1e`, one by one, none rolled back.
+- No migrations were needed; no other secret or setting changed.
+
+### Still open
+- **Peer support matching** (`match-support-session`): held; it fails to start in production and has never run. Review and test it, including `crisis_bridge`, before deploying.
+- **`therapist-invite`**: production signs invitation tokens with the literal `"your-secret-key"`. `main`'s version needs a migration adding `therapy_connections.invitation_token_hash` and a real `JWT_SECRET`.
+- **`contribute-wisdom`** cannot start: `WISDOM_HASH_SALT` (and `WISDOM_HASH_PEPPER`) are not set. **`submit-content`** returns 500 instead of 401 without an `Authorization` header.
+- **Missing tables and columns** referenced by deployed functions, identical before and after the deploy (from the review): `rewrite_history`, `sleep_logs`, `chat_action_cards`, `card_analytics`, `circadian_rhythm_data`, `healthkit_sleep_data`, `hsa_fsa_records`, `analytics_events`, `device_tokens`; columns such as `subscriptions.tier`, `vacation_mode.streak_on_activation`, `profiles.xp`, `messages.is_rewritten`, `family_alerts.family_group_id`. Each needs confirming before a fix.
+- **33 functions the app does not call** are older in production than on `main` (including `log-crisis-event`, `b2b-stripe-webhook`, `email-webhook`, `validate-invite-code`); a separate audit.
+- **Cross-vendor review of the deploy**: blocked tonight (Codex quota resets 29 November, 9:04 AM EST). Run it on the deployed set.
+- **Website**: the `/buddy/<code>` page (package `artifacts/release-2.0.0/website-20261113.tar.gz`).
+- **From Phase 5**: coping kits have no entry point; the welcome-back sheet is not shown in the 2.0 tabs; `wip/bound-pending-celebrations` is unmerged (production has 3 unseen old celebrations, one each for three people, so 2.0's first launch shows at most one).
+- **Tests**: `_shared/distortion-detection.test.ts` (detector calibration inside `chat`); `DailySignals.signalDate` would fail on a Postgres DATE the same way `MoodPrediction` did, but `fetchDailySignals` has no caller; the purchase tests need a simulator whose StoreKit routes to the local test session; four repaired Deno files and most iOS classes are still outside CI's fixed list.
+- **Defaults to decide**: prediction settings allow biometrics, sleep data and check-ins by default once someone turns predictions on (server and app agree).
+
+### Workspace
+- Removed: worktrees `p6`, `fndeploy`, `p7`, `archive`, `device`, `release-doc` (its commits are on GitHub as tag `archive/docs/release-2.0.0`), `final` and `v105`; their only uncommitted changes, the screenshot helpers, are kept in `artifacts/release-2.0.0/handover/`. Merged branches deleted locally and on GitHub. The `build/` caches from this run (about 12 GiB, rebuildable) were removed after the archive.
+- Kept, because they exist only on this Mac: worktree `lanes-all` (branch `local/lanes-all`, 388 uncommitted files) and `p4-int` (branch `integrate/phase4`, not on GitHub). The four NativePeers worktrees are left to NativePeers.
+- Simulators: `MF Test iPhone 17 Pro` is the test simulator for this run. `iPhone 17 Pro` (`73EBCB3C…`) has lost its data folder and cannot boot.
+- Docker: colima profile `mfci` is stopped and the default context is `colima` again; the `default` colima VM still does not start.
