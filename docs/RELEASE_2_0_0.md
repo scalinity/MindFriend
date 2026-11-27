@@ -273,6 +273,11 @@ MindFriend 2.0 is a fresh start, built around four places: Today, Chat, Explore 
 - Release archive from `main` at `8aebfb4`: `~/Library/Developer/Xcode/Archives/2026-11-26/MindFriend 2.0.0 (202611262226).xcarchive` (archived 10:51 to 10:57 PM EST, 314 MB; app, widgets and Watch app signed for team 25H5DDPKAC). The archived app reports version 2.0.0 and build 202611262226, and its `SENTRY_DSN` is set. `Release.xcconfig` points at `zfaucivtzfwnrijsbfug.supabase.co`.
 - Not uploaded and not submitted.
 
+### Rebuild for the Peer Support entry (27 November 2026)
+- The review of peer support matching found 0 listeners and 0 sessions in production and no way in any client to become a listener, so a person who opened Peer Support would wait for no one. PR #117 hides the entry from Explore, search, Today pins and the rollback shell's More, and `match-support-session` stays undeployed.
+- Build 202611262226 predates #117, so it is superseded. This PR sets `CURRENT_PROJECT_VERSION` to 202611270015 (27 November 2026, 12:15 AM EST); `MARKETING_VERSION` stays 2.0.0.
+- The 2.0.0 archive is cut from `main` after #117 and this PR merge, to `~/Library/Developer/Xcode/Archives/2026-11-27/MindFriend 2.0.0 (202611270015).xcarchive`. The checklist below applies to it.
+
 ### Physical iPhone test checklist
 To install the archive: Xcode, Window, Organizer, select 2.0.0 (202611262226), Distribute App, then either Debugging (install the exported app from the Devices window; Sentry reports it as `development`) or TestFlight (Sentry reports `testflight`).
 
@@ -303,7 +308,7 @@ PRs #100 to #112 (Phases 1 to 5, above), #113 (test fixes and six app defects), 
 - No migrations were needed; no other secret or setting changed.
 
 ### Still open
-- **Peer support matching** (`match-support-session`): held; it fails to start in production and has never run. Review and test it, including `crisis_bridge`, before deploying.
+- **Peer support matching** (`match-support-session`): held, and its entry point is hidden in 2.0 (#117). It fails to start in production; production has no listeners and no way to become one. Turning it on needs listener onboarding and vetting, and a review of `crisis_bridge`, first.
 - **`therapist-invite`**: production signs invitation tokens with the literal `"your-secret-key"`. `main`'s version needs a migration adding `therapy_connections.invitation_token_hash` and a real `JWT_SECRET`.
 - **`contribute-wisdom`** cannot start: `WISDOM_HASH_SALT` (and `WISDOM_HASH_PEPPER`) are not set. **`submit-content`** returns 500 instead of 401 without an `Authorization` header.
 - **Missing tables and columns** referenced by deployed functions, identical before and after the deploy (from the review): `rewrite_history`, `sleep_logs`, `chat_action_cards`, `card_analytics`, `circadian_rhythm_data`, `healthkit_sleep_data`, `hsa_fsa_records`, `analytics_events`, `device_tokens`; columns such as `subscriptions.tier`, `vacation_mode.streak_on_activation`, `profiles.xp`, `messages.is_rewritten`, `family_alerts.family_group_id`. Each needs confirming before a fix.
